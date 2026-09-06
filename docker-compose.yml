@@ -15,7 +15,7 @@ services:
     volumes:
       - ./api:/var/www
     ports:
-      - "8200:8000"
+      - "8200:80"
     depends_on:
       - db
 

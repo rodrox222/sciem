@@ -12,13 +12,8 @@ RUN apt-get update && apt-get -qq -y install curl --no-install-recommends \
     libfreetype6-dev \
     libjpeg62-turbo-dev \
     libpng-dev \
-    autoconf \
-    pkg-config \
-    libssl-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) zip pdo pdo_pgsql bcmath gd sockets
-
-RUN pecl install grpc && docker-php-ext-enable grpc
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -26,11 +21,14 @@ RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 # Install composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/bin/ --filename=composer
 
+# Configurar Apache para que apunte a /var/www/public
+ENV APACHE_DOCUMENT_ROOT=/var/www/public
+RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
+RUN sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
+
 RUN a2enmod rewrite
 WORKDIR /var/www
 COPY ./ /var/www
-RUN rm -rf /var/www/html \
-    && mv /var/www/public /var/www/html \
-    && chmod -R 0777 /var/www/storage/ /var/www/bootstrap/cache/
+RUN chmod -R 0777 /var/www/storage/ /var/www/bootstrap/cache/
 
-RUN composer install 
+RUN composer config policy.advisories.block false && composer install --no-interaction
