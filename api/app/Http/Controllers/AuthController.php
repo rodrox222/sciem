@@ -25,10 +25,7 @@ class AuthController extends Controller
             DB::table('logs_auditoria')->insert([
                 'user_id' => $user ? $user->id : null,
                 'accion' => 'LOGIN_FALLIDO',
-                'tabla_afectada' => 'users',
-                'registro_id' => $user ? $user->id : null,
                 'ip_origen' => $request->ip(),
-                'user_agent' => $request->userAgent(),
                 'detalles' => json_encode(['email_intentado' => $request->email, 'motivo' => 'Credenciales inválidas']),
                 'created_at' => now(),
             ]);
@@ -46,7 +43,8 @@ class AuthController extends Controller
         }
 
         // actualizar fecha de último acceso
-        $user->update(['ultimo_acceso' => now()]);
+        $user->ultimo_acceso = now();
+        $user->save();
 
         // generar token con Sanctum
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -55,10 +53,7 @@ class AuthController extends Controller
         DB::table('logs_auditoria')->insert([
             'user_id' => $user->id,
             'accion' => 'LOGIN_EXITOSO',
-            'tabla_afectada' => 'users',
-            'registro_id' => $user->id,
             'ip_origen' => $request->ip(),
-            'user_agent' => $request->userAgent(),
             'detalles' => json_encode(['rol' => $user->role->nombre]),
             'created_at' => now(),
         ]);
@@ -68,7 +63,7 @@ class AuthController extends Controller
             'token' => $token,
             'user' => [
                 'id' => $user->id,
-                'name' => $user->name,
+                'nombre' => $user->nombre,
                 'apellido' => $user->apellido,
                 'email' => $user->email,
                 'rol' => $user->role->nombre,
@@ -87,10 +82,7 @@ class AuthController extends Controller
         DB::table('logs_auditoria')->insert([
             'user_id' => $user->id,
             'accion' => 'LOGOUT',
-            'tabla_afectada' => 'personal_access_tokens',
-            'registro_id' => null,
             'ip_origen' => $request->ip(),
-            'user_agent' => $request->userAgent(),
             'detalles' => json_encode(['motivo' => 'Cierre de sesión voluntario']),
             'created_at' => now(),
         ]);
