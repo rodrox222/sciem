@@ -57,10 +57,7 @@ class ForgotPasswordController extends Controller
         DB::table('logs_auditoria')->insert([
             'user_id'        => $user->id,
             'accion'         => 'PASSWORD_RESET_SOLICITADO',
-            'tabla_afectada' => 'password_reset_tokens',
-            'registro_id'    => null,
             'ip_origen'      => $request->ip() ?? '127.0.0.1',
-            'user_agent'     => $request->userAgent(),
             'detalles'       => json_encode(['email' => $user->email]),
             'created_at'     => now(),
         ]);
@@ -103,10 +100,7 @@ class ForgotPasswordController extends Controller
         DB::table('logs_auditoria')->insert([
             'user_id'        => $user->id,
             'accion'         => 'PASSWORD_RESET_EXITOSO',
-            'tabla_afectada' => 'users',
-            'registro_id'    => $user->id,
             'ip_origen'      => $request->ip() ?? '127.0.0.1',
-            'user_agent'     => $request->userAgent(),
             'detalles'       => json_encode(['mensaje' => 'Contraseña actualizada y tokens revocados']),
             'created_at'     => now(),
         ]);

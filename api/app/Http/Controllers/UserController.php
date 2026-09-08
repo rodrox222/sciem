@@ -115,27 +115,54 @@ class UserController extends Controller
      */
     public function destroy(Request $request, int $id): JsonResponse
     {
-        $user = User::find($id);
+        $user = User::with('role')->find($id);
 
         if (!$user) {
             return response()->json(['message' => 'Usuario no encontrado.'], 404);
         }
 
-        if ($user->id === $request->user()->id) {
-            return response()->json(['message' => 'No puedes desactivar tu propia cuenta.'], 400);
+        if ($error = $this->validarDesactivacion($request, $user)) {
+            return $error;
         }
 
         $user->activo = false;
         $user->save();
 
         LogAuditoria::create([
-            'user_id'        => $request->user()->id,
-            'accion'         => 'USUARIO_DESACTIVADO',
-            'ip_origen'      => $request->ip(),
-            'user_agent'     => $request->userAgent(),
-            'detalles'       => ['motivo' => 'Baja lógica desde módulo de usuarios'],
+            'user_id'   => $request->user()->id,
+            'accion'    => 'USUARIO_DESACTIVADO',
+            'ip_origen' => $request->ip(),
+            'detalles'  => ['motivo' => 'Baja lógica desde módulo de usuarios'],
         ]);
 
         return response()->json(['message' => 'Usuario desactivado exitosamente.']);
+    }
+
+    /**
+     * Valida las restricciones de negocio para la desactivación.
+     */
+    private function validarDesactivacion(Request $request, User $user): ?JsonResponse
+    {
+        if ($user->id === $request->user()->id) {
+            return response()->json(['message' => 'No puedes desactivar tu propia cuenta.'], 400);
+        }
+
+        $esAdmin = ($user->role && $user->role->nombre === 'Administrador') || $user->rol_id === 1;
+        if ($user->activo && $esAdmin) {
+            $adminsActivos = User::where(function ($q) {
+                $q->where('rol_id', 1)
+                  ->orWhereHas('role', function ($r) {
+                      $r->where('nombre', 'Administrador');
+                  });
+            })->where('activo', true)->count();
+
+            if ($adminsActivos <= 1) {
+                return response()->json([
+                    'message' => 'No se puede desactivar al único usuario con rol Administrador activo.'
+                ], 422);
+            }
+        }
+
+        return null;
     }
 }

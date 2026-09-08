@@ -16,7 +16,6 @@ return new class extends Migration
             $table->foreignId('user_id')->nullable()->constrained('users')->onDelete('set null');
             $table->string('accion', 100);
             $table->string('ip_origen', 45);
-            $table->text('user_agent')->nullable();
             $table->jsonb('detalles')->nullable(); // Soporte JSONB nativo de PostgreSQL
             $table->timestamp('created_at')->useCurrent();
         });
