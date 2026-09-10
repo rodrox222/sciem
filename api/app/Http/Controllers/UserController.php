@@ -53,7 +53,6 @@ class UserController extends Controller
             'user_id'        => $request->user()->id,
             'accion'         => 'USUARIO_CREADO',
             'ip_origen'      => $request->ip(),
-            'user_agent'     => $request->userAgent(),
             'detalles'       => ['email' => $user->email, 'rol_id' => $user->rol_id],
         ]);
 
@@ -100,7 +99,6 @@ class UserController extends Controller
             'user_id'        => $request->user()->id,
             'accion'         => 'USUARIO_ACTUALIZADO',
             'ip_origen'      => $request->ip(),
-            'user_agent'     => $request->userAgent(),
             'detalles'       => ['campos_actualizados' => array_keys($data)],
         ]);
 
@@ -147,18 +145,18 @@ class UserController extends Controller
             return response()->json(['message' => 'No puedes desactivar tu propia cuenta.'], 400);
         }
 
-        $esAdmin = ($user->role && $user->role->nombre === 'Administrador') || $user->rol_id === 1;
+        $esAdmin = ($user->role && $user->role->nombre === 'administrador') || $user->rol_id === 1;
         if ($user->activo && $esAdmin) {
             $adminsActivos = User::where(function ($q) {
                 $q->where('rol_id', 1)
                   ->orWhereHas('role', function ($r) {
-                      $r->where('nombre', 'Administrador');
+                      $r->where('nombre', 'administrador');
                   });
             })->where('activo', true)->count();
 
             if ($adminsActivos <= 1) {
                 return response()->json([
-                    'message' => 'No se puede desactivar al único usuario con rol Administrador activo.'
+                    'message' => 'No se puede desactivar al único usuario con rol administrador activo.'
                 ], 422);
             }
         }
