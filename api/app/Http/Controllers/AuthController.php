@@ -15,13 +15,12 @@ class AuthController extends Controller
         $request->validate([
             'email' => 'required|email',
             'password' => 'required|string',
+            'role' => 'nullable|string',
         ]);
 
         $user = User::with('role')->where('email', $request->email)->first();
 
-        // si no existe o la contraseña no coincide
         if (!$user || !Hash::check($request->password, $user->password)) {
-            // Registrar intento fallido en logs_auditoria (HU3)
             DB::table('logs_auditoria')->insert([
                 'user_id' => $user ? $user->id : null,
                 'accion' => 'LOGIN_FALLIDO',
@@ -35,21 +34,38 @@ class AuthController extends Controller
             ]);
         }
 
-        // validar si el usuario está activo
+        if ($request->filled('role') && strcasecmp($user->role->nombre, $request->role) !== 0) {
+            DB::table('logs_auditoria')->insert([
+                'user_id' => $user->id,
+                'accion' => 'LOGIN_FALLIDO',
+                'ip_origen' => $request->ip(),
+                'detalles' => json_encode([
+                    'email_intentado' => $request->email,
+                    'motivo' => "Intento de acceso denegado"
+                ]),
+                'created_at' => now(),
+            ]);
+
+            throw ValidationException::withMessages([
+                'email' => ["Esta cuenta pertenece al perfil '{$user->role->nombre}' y no tiene permisos para ingresar como '{$request->role}'."],
+            ]);
+        }
+
+        // 3. Validar si el usuario está activo
         if (!$user->activo) {
             return response()->json([
                 'message' => 'Su cuenta se encuentra desactivada.'
             ], 403);
         }
 
-        // actualizar fecha de último acceso
+        // Actualizar fecha de último acceso
         $user->ultimo_acceso = now();
         $user->save();
 
-        // generar token con Sanctum
+        // Generar token con Sanctum
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        // registrar login exitoso en logs_auditoria
+        // Registrar login exitoso en logs_auditoria
         DB::table('logs_auditoria')->insert([
             'user_id' => $user->id,
             'accion' => 'LOGIN_EXITOSO',
@@ -75,10 +91,10 @@ class AuthController extends Controller
     {
         $user = $request->user();
 
-        // revocar el token actual
+        // Revocar el token actual
         $request->user()->currentAccessToken()->delete();
 
-        // registrar salida de la auditoria
+        // Registrar salida en la auditoría
         DB::table('logs_auditoria')->insert([
             'user_id' => $user->id,
             'accion' => 'LOGOUT',

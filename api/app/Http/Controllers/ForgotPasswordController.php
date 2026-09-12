@@ -43,9 +43,9 @@ class ForgotPasswordController extends Controller
         );
 
 
-        //cambiar eso a futuro a la url de frontend
-        $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173');
-        $resetUrl = "{$frontendUrl}/reset-password?token={$plainToken}&email=" . urlencode($user->email);
+        // Usa el puerto 4173 por defecto y la ruta exacta definida en react-router
+        $frontendUrl = env('FRONTEND_URL', 'http://localhost:4173');
+        $resetUrl = "{$frontendUrl}/recuperar-contrasena?token={$plainToken}&email=" . urlencode($user->email);
 
         // Enviar correo real por Gmail SMTP
         Mail::send('emails.reset-password', ['user' => $user, 'resetUrl' => $resetUrl], function ($message) use ($user) {
