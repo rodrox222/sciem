@@ -43,24 +43,53 @@ class UserController extends Controller
      * Crear un nuevo usuario.
      */
     public function store(StoreUserRequest $request): JsonResponse
-    {
-        $data = $request->validated();
-        $data['activo'] = $data['activo'] ?? true;
+{
+    $data = $request->validated();
+    $data['activo'] = $data['activo'] ?? true;
+    $data['password'] = Hash::make($data['password']);
 
-        $user = User::create($data);
+    // Identificar qué modelo instanciar según el tipo recibido en el request
+    $tipo = strtolower($request->input('tipo')); // 'admin', 'docente' o 'auxiliar'
 
-        LogAuditoria::create([
-            'user_id'        => $request->user()->id,
-            'accion'         => 'USUARIO_CREADO',
-            'ip_origen'      => $request->ip(),
-            'detalles'       => ['email' => $user->email, 'rol_id' => $user->rol_id],
+    $modelClass = match ($tipo) {
+        'admin'    => Admin::class,
+        'docente'  => Docente::class,
+        'auxiliar' => Auxiliar::class,
+        default    => abort(422, 'Tipo de usuario no válido.'),
+    };
+
+    // Usar transacción para asegurar que usuario y log se creen juntos
+    $user = DB::transaction(function () use ($modelClass, $data, $request, $tipo) {
+        $nuevoUsuario = $modelClass::create($data);
+
+        $authUser = $request->user();
+
+        // Crear el log usando la relación polimórfica de Eloquent
+        $log = new LogAuditoria([
+            'accion'    => strtoupper("{$tipo}_CREADO"),
+            'ip_origen' => $request->ip(),
+            'detalles'  => [
+                'ci'     => $nuevoUsuario->ci,
+                'email'  => $nuevoUsuario->email ?? null,
+                'tipo'   => $tipo,
+            ],
         ]);
 
-        return response()->json([
-            'message' => 'Usuario creado exitosamente.',
-            'user'    => $user->load('role')
-        ], 201);
-    }
+        // associate() asigna user_id y user_type automáticamente
+        if ($authUser) {
+            $log->user()->associate($authUser);
+        }
+
+        $log->save();
+
+        return $nuevoUsuario;
+    });
+
+    return response()->json([
+        'message' => 'Usuario creado exitosamente.',
+        'user'    => $user,
+    ], 201);
+}
 
     /**
      * Ver el detalle de un usuario específico.

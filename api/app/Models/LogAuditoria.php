@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class LogAuditoria extends Model
 {
@@ -11,23 +12,27 @@ class LogAuditoria extends Model
 
     protected $table = 'logs_auditoria';
 
-    // Desactivar updated_at porque tu tabla solo tiene created_at
+    // Desactiva updated_at ya que la migración solo usa created_at
     const UPDATED_AT = null;
 
     protected $fillable = [
+        'user_type', // Requerido para el polimorfismo
         'user_id',
         'accion',
         'ip_origen',
-        'user_agent',
         'detalles',
+        // 'user_agent', // Agrega esto solo si lo incluiste en la migración
     ];
 
     protected $casts = [
-        'detalles' => 'array',
+        'detalles' => 'array', // Mapea automáticamente el JSONB de PostgreSQL a array PHP
     ];
 
-    public function user()
+    /**
+     * Obtiene el modelo propietario (Admin, Docente o Auxiliar).
+     */
+    public function user(): MorphTo
     {
-        return $this->belongsTo(User::class, 'user_id');
+        return $this->morphTo();
     }
 }
