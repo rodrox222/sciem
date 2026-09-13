@@ -1,6 +1,7 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LoginView } from '../components/LoginView'
+import { AuthLayout } from '../layouts/AuthLayout'
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate()
@@ -11,9 +12,13 @@ export const LoginPage: React.FC = () => {
   }
 
   return (
-    <LoginView
-      onLoginSuccess={handleLoginSuccess}
-      onForgotPassword={() => navigate('/recuperar-contrasena')}
-    />
+    <AuthLayout>
+      <LoginView
+        onLoginSuccess={handleLoginSuccess}
+        onForgotPassword={() => navigate('/recuperar-contrasena')}
+      />
+    </AuthLayout>
   )
 }
+
+export default LoginPage

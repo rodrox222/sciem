@@ -13,7 +13,8 @@ return new class extends Migration
     {
         Schema::create('logs_auditoria', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->nullable()->constrained('users')->onDelete('set null');
+            //Polimorfismo para id para docente, auxiliar y admin
+            $table->nullableUuidMorphs('user');
             $table->string('accion', 100);
             $table->string('ip_origen', 45);
             $table->jsonb('detalles')->nullable(); // Soporte JSONB nativo de PostgreSQL

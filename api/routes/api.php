@@ -15,13 +15,40 @@ Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword'
 // Rutas protegidas (requieren token Bearer)
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
+    
     Route::get('/me', function (Request $request) {
-        return $request->user()->load('role');
+        $user = $request->user();
+
+        $rol = match (get_class($user)) {
+            Admin::class    => 'admin',
+            Docente::class  => 'docente',
+            Auxiliar::class => 'auxiliar',
+            default         => null,
+        };
+
+        return response()->json([
+            'id'               => $user->id,
+            'ci'               => $user->ci,
+            'ci_extension'     => $user->ci_extension,
+            'nombre'           => $user->nombre,
+            'apellido_paterno' => $user->apellido_paterno,
+            'apellido_materno' => $user->apellido_materno,
+            'email'            => $user->email ?? null,
+            'rol'              => $rol,
+            'activo'           => $user->activo,
+            'ultimo_acceso'    => $user->ultimo_acceso,
+        ]);
     });
-    Route::middleware('role:Administrador')->group(function () {
+
+    Route::middleware('role:admin,administrador')->group(function () {
         Route::apiResource('users', UserController::class);
 
-        //index para listar roles activos para selectores en el frontend
-        Route::get('roles', [RoleController::class, 'index']);
+        Route::get('roles', function () {
+            return response()->json([
+                ['id' => 'admin', 'nombre' => 'Administrador'],
+                ['id' => 'docente', 'nombre' => 'Docente'],
+                ['id' => 'auxiliar', 'nombre' => 'Auxiliar'],
+            ]);
+        });
     });
 });
