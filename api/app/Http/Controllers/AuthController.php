@@ -3,8 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Models\LogAuditoria;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
@@ -21,12 +21,16 @@ class AuthController extends Controller
         $user = User::with('role')->where('email', $request->email)->first();
 
         if (!$user || !Hash::check($request->password, $user->password)) {
-            DB::table('logs_auditoria')->insert([
-                'user_id' => $user ? $user->id : null,
+            LogAuditoria::create([
+                'user_id' => $user?->id,
+                'rol_en_el_momento' => $user?->role?->nombre,
+                'usuario_nombre' => $user ? trim($user->nombre.' '.$user->apellido) : null,
+                'usuario_email' => $user?->email,
                 'accion' => 'LOGIN_FALLIDO',
+                'modulo' => 'Autenticacion',
                 'ip_origen' => $request->ip(),
-                'detalles' => json_encode(['email_intentado' => $request->email, 'motivo' => 'Credenciales inválidas']),
-                'created_at' => now(),
+                'user_agent' => $request->userAgent(),
+                'detalles' => ['email_intenado' => $request->email, 'motivo' => 'Credenciales invalidas'],
             ]);
 
             throw ValidationException::withMessages([
@@ -35,15 +39,16 @@ class AuthController extends Controller
         }
 
         if ($request->filled('role') && strcasecmp($user->role->nombre, $request->role) !== 0) {
-            DB::table('logs_auditoria')->insert([
-                'user_id' => $user->id,
+            LogAuditoria::create([
+                'user_id' => $user?->id,
+                'rol_en_el_momento' => $user?->role?->nombre,
+                'usuario_nombre' => $user ? trim($user->nombre.' '.$user->apellido),
+                'usuario_email' => $user?->email,
                 'accion' => 'LOGIN_FALLIDO',
+                'modulo' => 'Autenticacion',
                 'ip_origen' => $request->ip(),
-                'detalles' => json_encode([
-                    'email_intentado' => $request->email,
-                    'motivo' => "Intento de acceso denegado"
-                ]),
-                'created_at' => now(),
+                'user_agent' => $request->userAgent(),
+                'detalles' => ['email_intenado' => $request->email, 'motivo' => 'Intento de acceso denegado'],
             ]);
 
             throw ValidationException::withMessages([
@@ -66,13 +71,17 @@ class AuthController extends Controller
         $token = $user->createToken('auth_token')->plainTextToken;
 
         // Registrar login exitoso en logs_auditoria
-        DB::table('logs_auditoria')->insert([
-            'user_id' => $user->id,
-            'accion' => 'LOGIN_EXITOSO',
-            'ip_origen' => $request->ip(),
-            'detalles' => json_encode(['rol' => $user->role->nombre]),
-            'created_at' => now(),
-        ]);
+        LogAuditoria::create([
+                'user_id' => $user?->id,
+                'rol_en_el_momento' => $user?->role?->nombre,
+                'usuario_nombre' => $user ? trim($user->nombre.' '.$user->apellido),
+                'usuario_email' => $user?->email,
+                'accion' => 'LOGIN_EXITOSO',
+                'modulo' => 'Autenticacion',
+                'ip_origen' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'detalles' => ['rol' => $user->role->nombre],
+            ]);
 
         return response()->json([
             'message' => 'Inicio de sesión exitoso',
@@ -95,13 +104,17 @@ class AuthController extends Controller
         $request->user()->currentAccessToken()->delete();
 
         // Registrar salida en la auditoría
-        DB::table('logs_auditoria')->insert([
-            'user_id' => $user->id,
-            'accion' => 'LOGOUT',
-            'ip_origen' => $request->ip(),
-            'detalles' => json_encode(['motivo' => 'Cierre de sesión voluntario']),
-            'created_at' => now(),
-        ]);
+        LogAuditoria::create([
+                'user_id' => $user?->id,
+                'rol_en_el_momento' => $user?->role?->nombre,
+                'usuario_nombre' => $user ? trim($user->nombre.' '.$user->apellido),
+                'usuario_email' => $user?->email,
+                'accion' => 'LOGOUT',
+                'modulo' => 'Autenticacion',
+                'ip_origen' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'detalles' => ['motivo' => 'Cierre de sesion voluntario'],
+            ]);
 
         return response()->json([
             'message' => 'Sesión cerrada correctamente'

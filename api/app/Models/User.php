@@ -30,6 +30,8 @@ class User extends Authenticatable
         'ultimo_acceso',
     ];
 
+    protected array $auditExcept = ['ultimo_acceso'];
+
     /**
      * The attributes that should be hidden for serialization.
      *

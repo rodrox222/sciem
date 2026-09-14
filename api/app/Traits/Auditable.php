@@ -15,7 +15,14 @@ trait Auditable
         });
 
         static::updated(function ($model) {
-            $model->registrarAuditoria('editar', $model->getChanges());
+            $ignorar = $model->auditExcept ?? [];
+            $cambios = array_diff_key($model->getChanges(), array_flip($ignorar));
+
+            if (empty($cambios)) {
+                return; // Solo cambiaron campos ignorados (ej. ultimo_acceso) — no se audita
+            }
+
+            $model->registrarAuditoria('editar', $cambios);
         });
 
         static::deleted(function ($model) {
