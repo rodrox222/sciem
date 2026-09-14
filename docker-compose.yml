@@ -14,8 +14,10 @@ services:
     working_dir: /var/www
     volumes:
       - ./api:/var/www
+      - /var/www/vendor
     ports:
       - "8200:80"
+    command: sh -c "composer install && apache2-foreground"
     depends_on:
       - db
 
