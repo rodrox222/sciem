@@ -10,7 +10,7 @@ export default {
         sans: ['Poppins', 'sans-serif'],
       },
       colors: {
-        sciem: {
+        sci: {
           blue: '#003770',
           red: '#E30613',
           bg: '#F8FAFC',
