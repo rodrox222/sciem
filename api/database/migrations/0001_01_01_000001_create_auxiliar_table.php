@@ -15,6 +15,8 @@ return new class extends Migration
             $table->string('nombre', 100);
             $table->string('apellido_paterno', 100);
             $table->string('apellido_materno', 100)->nullable();
+            $table->string('email', 150)->unique();
+            $table->timestamp('email_verified_at')->nullable();
             $table->string('password', 255);
             $table->boolean('activo')->default(true);
             $table->timestamp('ultimo_acceso')->nullable();

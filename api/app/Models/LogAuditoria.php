@@ -12,24 +12,28 @@ class LogAuditoria extends Model
 
     protected $table = 'logs_auditoria';
 
-    // Desactiva updated_at ya que la migración solo usa created_at
+    // Como la migración solo tiene created_at (sin updated_at)
     const UPDATED_AT = null;
 
     protected $fillable = [
-        'user_type', // Requerido para el polimorfismo
+        'user_type',
         'user_id',
         'accion',
         'ip_origen',
         'detalles',
-        // 'user_agent', // Agrega esto solo si lo incluiste en la migración
+        'created_at',
     ];
 
-    protected $casts = [
-        'detalles' => 'array', // Mapea automáticamente el JSONB de PostgreSQL a array PHP
-    ];
+    protected function casts(): array
+    {
+        return [
+            'detalles' => 'array', // Convierte automáticamente el JSONB a array asociativo en PHP
+            'created_at' => 'datetime',
+        ];
+    }
 
     /**
-     * Obtiene el modelo propietario (Admin, Docente o Auxiliar).
+     * Relación polimórfica que resolverá automáticamente a Admin, Docente o Auxiliar.
      */
     public function user(): MorphTo
     {
