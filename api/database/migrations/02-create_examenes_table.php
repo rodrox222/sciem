@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('examenes', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('nombre', 150);
-            $table->uuid('id_asignatura'); // Relación a la tabla asignaturas
+            $table->foreignUuid('id_materia')->constrained('materias')->onDelete('restrict');
             $table->enum('estado', ['Programado', 'En proceso', 'Terminado'])->default('Programado');
             $table->date('fecha');
             $table->time('hora_ini');
