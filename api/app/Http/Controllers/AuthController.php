@@ -24,13 +24,13 @@ class AuthController extends Controller
             LogAuditoria::create([
                 'user_id' => $user?->id,
                 'rol_en_el_momento' => $user?->role?->nombre,
-                'usuario_nombre' => $user ? trim($user->nombre.' '.$user->apellido) : null,
+                'usuario_nombre' => trim($user->nombre.' '.$user->apellido),
                 'usuario_email' => $user?->email,
                 'accion' => 'LOGIN_FALLIDO',
                 'modulo' => 'Autenticacion',
                 'ip_origen' => $request->ip(),
                 'user_agent' => $request->userAgent(),
-                'detalles' => ['email_intenado' => $request->email, 'motivo' => 'Credenciales invalidas'],
+                'detalles' => ['email_intentado' => $request->email, 'motivo' => 'Credenciales invalidas'],
             ]);
 
             throw ValidationException::withMessages([
@@ -42,13 +42,13 @@ class AuthController extends Controller
             LogAuditoria::create([
                 'user_id' => $user?->id,
                 'rol_en_el_momento' => $user?->role?->nombre,
-                'usuario_nombre' => $user ? trim($user->nombre.' '.$user->apellido),
+                'usuario_nombre' => trim($user->nombre.' '.$user->apellido),
                 'usuario_email' => $user?->email,
                 'accion' => 'LOGIN_FALLIDO',
                 'modulo' => 'Autenticacion',
                 'ip_origen' => $request->ip(),
                 'user_agent' => $request->userAgent(),
-                'detalles' => ['email_intenado' => $request->email, 'motivo' => 'Intento de acceso denegado'],
+                'detalles' => ['email_intentado' => $request->email, 'motivo' => 'Intento de acceso denegado'],
             ]);
 
             throw ValidationException::withMessages([
@@ -74,7 +74,7 @@ class AuthController extends Controller
         LogAuditoria::create([
                 'user_id' => $user?->id,
                 'rol_en_el_momento' => $user?->role?->nombre,
-                'usuario_nombre' => $user ? trim($user->nombre.' '.$user->apellido),
+                'usuario_nombre' => trim($user->nombre.' '.$user->apellido),
                 'usuario_email' => $user?->email,
                 'accion' => 'LOGIN_EXITOSO',
                 'modulo' => 'Autenticacion',
@@ -107,7 +107,7 @@ class AuthController extends Controller
         LogAuditoria::create([
                 'user_id' => $user?->id,
                 'rol_en_el_momento' => $user?->role?->nombre,
-                'usuario_nombre' => $user ? trim($user->nombre.' '.$user->apellido),
+                'usuario_nombre' => trim($user->nombre.' '.$user->apellido),
                 'usuario_email' => $user?->email,
                 'accion' => 'LOGOUT',
                 'modulo' => 'Autenticacion',
