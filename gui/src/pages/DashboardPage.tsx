@@ -1,7 +1,31 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { MainLayout } from '../layouts/MainLayout'
 
 export const DashboardPage: React.FC = () => {
+  useEffect(() => {
+    // Título de la pestaña
+    document.title = 'Dashboard | SCIEM'
+
+    // Colocar un estado en el historial para detectar el botón volver
+    window.history.pushState({ dashboard: true }, '', window.location.href)
+
+    const handleBackNavigation = () => {
+      // Limpiar credenciales y expulsar al login
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('user_role')
+      localStorage.removeItem('sciem_last_activity')
+
+      window.location.replace('/login')
+    }
+
+    // aldar volver
+    window.addEventListener('popstate', handleBackNavigation)
+
+    return () => {
+      window.removeEventListener('popstate', handleBackNavigation)
+    }
+  }, [])
+
   const role = localStorage.getItem('user_role') || 'Docente'
 
   return (
