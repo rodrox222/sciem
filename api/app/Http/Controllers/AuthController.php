@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+//use App\Models\User;
+//use App\Models\LogAuditoria;
 use App\Models\Admin;
 use App\Models\Auxiliar;
 use App\Models\Docente;
@@ -38,6 +40,16 @@ class AuthController extends Controller
         // Validar existencia y contraseña
         if (!$user || !Hash::check($request->password, $user->password)) {
             LogAuditoria::create([
+                /*'user_id' => $user?->id,
+                'rol_en_el_momento' => $user?->role?->nombre,
+                'usuario_nombre' => trim($user->nombre.' '.$user->apellido),
+                'usuario_email' => $user?->email,
+                'accion' => 'LOGIN_FALLIDO',
+                'modulo' => 'Autenticacion',
+                'ip_origen' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'detalles' => ['email_intentado' => $request->email, 'motivo' => 'Credenciales invalidas'],
+                */
                 'user_type' => $user ? get_class($user) : null,
                 'user_id'   => $user?->id,
                 'accion' => 'LOGIN_FALLIDO',
@@ -54,6 +66,25 @@ class AuthController extends Controller
             ]);
         }
 
+        /*if ($request->filled('role') && strcasecmp($user->role->nombre, $request->role) !== 0) {
+            LogAuditoria::create([
+                'user_id' => $user?->id,
+                'rol_en_el_momento' => $user?->role?->nombre,
+                'usuario_nombre' => trim($user->nombre.' '.$user->apellido),
+                'usuario_email' => $user?->email,
+                'accion' => 'LOGIN_FALLIDO',
+                'modulo' => 'Autenticacion',
+                'ip_origen' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'detalles' => ['email_intentado' => $request->email, 'motivo' => 'Intento de acceso denegado'],
+            ]);
+
+            throw ValidationException::withMessages([
+                'email' => ["Esta cuenta pertenece al perfil '{$user->role->nombre}' y no tiene permisos para ingresar como '{$request->role}'."],
+            ]);
+        }
+
+        // 3. Validar si el usuario está activo */
         // Validar estado de la cuenta
         if (!$user->activo) {
             return response()->json([
@@ -67,6 +98,18 @@ class AuthController extends Controller
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
+        /*// Registrar login exitoso en logs_auditoria
+        LogAuditoria::create([
+                'user_id' => $user?->id,
+                'rol_en_el_momento' => $user?->role?->nombre,
+                'usuario_nombre' => trim($user->nombre.' '.$user->apellido),
+                'usuario_email' => $user?->email,
+                'accion' => 'LOGIN_EXITOSO',
+                'modulo' => 'Autenticacion',
+                'ip_origen' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'detalles' => ['rol' => $user->role->nombre],
+            ]);*/
         // Registro en logs_auditoria
         LogAuditoria::create([
             'user_type' => get_class($user),
@@ -100,6 +143,18 @@ class AuthController extends Controller
         if ($user) {
             $user->currentAccessToken()->delete();
 
+        /*// Registrar salida en la auditoría
+        LogAuditoria::create([
+                'user_id' => $user?->id,
+                'rol_en_el_momento' => $user?->role?->nombre,
+                'usuario_nombre' => trim($user->nombre.' '.$user->apellido),
+                'usuario_email' => $user?->email,
+                'accion' => 'LOGOUT',
+                'modulo' => 'Autenticacion',
+                'ip_origen' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'detalles' => ['motivo' => 'Cierre de sesion voluntario'],
+            ]); */
             LogAuditoria::create([
                 'user_type' => get_class($user),
                 'user_id'   => $user->id,

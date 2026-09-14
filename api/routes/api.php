@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ForgotPasswordController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\AuditoriaController;
 use App\Http\Controllers\AulaController;
 use App\Http\Controllers\ExamenController;
 use App\Http\Controllers\MateriaController;
@@ -49,6 +50,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:admin,administrador')->group(function () {
         Route::apiResource('users', UserController::class);
 
+        //index para listar roles activos para selectores en el frontend
+        Route::get('roles', [RoleController::class, 'index']);
+	Route::get('auditoria',[AuditoriaController::class,'index']);
+    });
+    
         Route::get('roles', function () {
             return response()->json([
                 ['id' => 'admin', 'nombre' => 'Administrador'],

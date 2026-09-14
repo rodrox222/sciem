@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use RuntimeException;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class LogAuditoria extends Model
@@ -18,7 +19,11 @@ class LogAuditoria extends Model
     protected $fillable = [
         'user_type',
         'user_id',
+        'rol_en_el_momento',
+        'usuario_nombre',
+        'usuario_email',
         'accion',
+        'modulo',
         'ip_origen',
         'detalles',
         'created_at',
@@ -39,4 +44,16 @@ class LogAuditoria extends Model
     {
         return $this->morphTo();
     }
+/*
+    protected static function booted(): void
+    {
+        static::updating(function () {
+            throw new RuntimeException('Los registros de auditoría son inmutables: no se permite actualizar.');
+        });
+
+        static::deleting(function () {
+            throw new RuntimeException('Los registros de auditoría son inmutables: no se permite eliminar.');
+        });
+    }
+}*/
 }
