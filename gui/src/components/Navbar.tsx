@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import logoSSO from '../assets/logo SSO.svg'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8200/api'
 
@@ -73,10 +74,10 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="border-b border-slate-200 px-8">
         <div className="flex items-center justify-between h-20">
           
-          {/* Logo SCIEM */}
+          {/* Logo SCI */}
           <div className="flex items-center gap-3">
             <img 
-              src="/logo%20SSO.svg" 
+              src={logoSSO} 
               alt="Logo Institucional" 
               className="h-12 w-auto object-contain"
             />

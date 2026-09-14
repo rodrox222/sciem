@@ -2,6 +2,9 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Admin;
+use App\Models\Auxiliar;
+use App\Models\Docente;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -12,20 +15,30 @@ class CheckRole
     {
         $user = $request->user();
 
-        // Verificar si el usuario existe y activo
+        // Verificar si existe y está activo
         if (!$user || !$user->activo) {
             return response()->json(['message' => 'Acceso denegado o cuenta inactiva.'], 403);
         }
 
-        $userRole = strtolower($user->role->nombre ?? '');
+        // Determinar el rol a partir de la clase del modelo
+        $userRole = match (get_class($user)) {
+            Admin::class    => 'admin',
+            Docente::class  => 'docente',
+            Auxiliar::class => 'auxiliar',
+            default         => '',
+        };
 
-        $allowedRoles = array_map('strtolower', $roles);
+        // Normalizar los roles permitidos recibidos en la ruta
+        $allowedRoles = array_map(function ($rol) {
+            $r = strtolower($rol);
+            return $r === 'administrador' ? 'admin' : $r;
+        }, $roles);
 
         // Validar si el rol del usuario está permitido
         if (!in_array($userRole, $allowedRoles, true)) {
             return response()->json([
-                'message' => 'Acceso denegado o cuenta inactiva.',
-                'rol_actual' => $user->role->nombre ?? null
+                'message'    => 'Acceso denegado o cuenta inactiva.',
+                'rol_actual' => $userRole,
             ], 403);
         }
 

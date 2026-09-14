@@ -4,122 +4,165 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
+use App\Models\Admin;
+use App\Models\Auxiliar;
+use App\Models\Docente;
 use App\Models\LogAuditoria;
-use App\Models\User;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 
 class UserController extends Controller
 {
     /**
-     * Listar usuarios con paginación, filtros y relación de rol.
+     * Listar usuarios consultando las 3 tablas de forma unificada.
      */
     public function index(Request $request): JsonResponse
     {
-        $query = User::with('role');
+        $tipo = $request->query('tipo_usuario');
+        $search = $request->query('search');
+        $activo = $request->filled('activo') ? filter_var($request->query('activo'), FILTER_VALIDATE_BOOLEAN) : null;
 
-        if ($request->filled('search')) {
-            $search = $request->query('search');
-            $query->where(function ($q) use ($search) {
-                $q->where('nombre', 'ilike', "%{$search}%")
-                  ->orWhere('apellido', 'ilike', "%{$search}%")
-                  ->orWhere('email', 'ilike', "%{$search}%")
-                  ->orWhere('ci', 'ilike', "%{$search}%");
-            });
+        $coleccion = collect();
+
+        // Admin (no tiene columna email)
+        if (!$tipo || $tipo === 'admin') {
+            $query = Admin::query();
+            $this->aplicarFiltros($query, $search, $activo, false);
+            $coleccion = $coleccion->concat($query->get()->map(fn ($u) => $this->formatearUsuario($u, 'admin')));
         }
 
-        if ($request->filled('rol_id')) {
-            $query->where('rol_id', $request->query('rol_id'));
+        // Docente
+        if (!$tipo || $tipo === 'docente') {
+            $query = Docente::query();
+            $this->aplicarFiltros($query, $search, $activo, true);
+            $coleccion = $coleccion->concat($query->get()->map(fn ($u) => $this->formatearUsuario($u, 'docente')));
         }
 
-        if ($request->filled('activo')) {
-            $query->where('activo', filter_var($request->query('activo'), FILTER_VALIDATE_BOOLEAN));
+        // Auxiliar
+        if (!$tipo || $tipo === 'auxiliar') {
+            $query = Auxiliar::query();
+            $this->aplicarFiltros($query, $search, $activo, true);
+            $coleccion = $coleccion->concat($query->get()->map(fn ($u) => $this->formatearUsuario($u, 'auxiliar')));
         }
 
-        return response()->json($query->orderBy('id', 'desc')->paginate(10));
+        // Ordenar por fecha de creación más reciente
+        $coleccion = $coleccion->sortByDesc('created_at')->values();
+
+        // Paginación manual para mantener el formato original de Laravel paginate()
+        $page = LengthAwarePaginator::resolveCurrentPage();
+        $perPage = 10;
+        $items = $coleccion->slice(($page - 1) * $perPage, $perPage)->values();
+        $paginado = new LengthAwarePaginator($items, $coleccion->count(), $perPage, $page, [
+            'path' => LengthAwarePaginator::resolveCurrentPath(),
+            'query' => $request->query(),
+        ]);
+
+        return response()->json($paginado);
     }
 
     /**
-     * Crear un nuevo usuario.
+     * Crear un nuevo usuario
      */
     public function store(StoreUserRequest $request): JsonResponse
     {
         $data = $request->validated();
         $data['activo'] = $data['activo'] ?? true;
+        $tipo = $data['tipo_usuario'];
+        unset($data['tipo_usuario']);
 
-        $user = User::create($data);
+        $modelClass = $this->obtenerClaseModelo($tipo);
+        $user = $modelClass::create($data);
 
         LogAuditoria::create([
-            'user_id'        => $request->user()->id,
-            'accion'         => 'USUARIO_CREADO',
-            'ip_origen'      => $request->ip(),
-            'detalles'       => ['email' => $user->email, 'rol_id' => $user->rol_id],
+            'user_type' => get_class($request->user()),
+            'user_id'   => $request->user()->id,
+            'accion'    => 'USUARIO_CREADO',
+            'ip_origen' => $request->ip(),
+            'detalles'  => [
+                'tipo_usuario' => $tipo,
+                'target_id'    => $user->id,
+                'ci'           => $user->ci,
+                'email'        => $user->email ?? null,
+            ],
         ]);
 
         return response()->json([
             'message' => 'Usuario creado exitosamente.',
-            'user'    => $user->load('role')
+            'user'    => $this->formatearUsuario($user, $tipo),
         ], 201);
     }
 
     /**
-     * Ver el detalle de un usuario específico.
+     * Ver el detalle de un usuario específico por su UUID
      */
-    public function show(int $id): JsonResponse
+    public function show(string $id): JsonResponse
     {
-        $user = User::with('role')->find($id);
+        $res = $this->buscarPorId($id);
 
-        if (!$user) {
-            return response()->json(['message' => 'Usuario no encontrado'], 404);
-        }
-
-        return response()->json($user);
-    }
-
-    /**
-     * Actualizar datos de un usuario.
-     */
-    public function update(UpdateUserRequest $request, int $id): JsonResponse
-    {
-        $user = User::find($id);
-
-        if (!$user) {
+        if (!$res) {
             return response()->json(['message' => 'Usuario no encontrado.'], 404);
         }
 
+        return response()->json($this->formatearUsuario($res['user'], $res['tipo']));
+    }
+
+    /**
+     * Actualizar datos de un usuario por su UUID
+     */
+    public function update(UpdateUserRequest $request, string $id): JsonResponse
+    {
+        $res = $this->buscarPorId($id);
+
+        if (!$res) {
+            return response()->json(['message' => 'Usuario no encontrado.'], 404);
+        }
+
+        $user = $res['user'];
+        $tipo = $res['tipo'];
         $data = $request->validated();
 
         if (empty($data['password'])) {
             unset($data['password']);
         }
+        unset($data['tipo_usuario']);
 
         $user->update($data);
 
         LogAuditoria::create([
-            'user_id'        => $request->user()->id,
-            'accion'         => 'USUARIO_ACTUALIZADO',
-            'ip_origen'      => $request->ip(),
-            'detalles'       => ['campos_actualizados' => array_keys($data)],
+            'user_type' => get_class($request->user()),
+            'user_id'   => $request->user()->id,
+            'accion'    => 'USUARIO_ACTUALIZADO',
+            'ip_origen' => $request->ip(),
+            'detalles'  => [
+                'tipo_usuario'        => $tipo,
+                'target_id'           => $user->id,
+                'campos_actualizados' => array_keys($data),
+            ],
         ]);
 
         return response()->json([
             'message' => 'Usuario actualizado exitosamente.',
-            'user'    => $user->load('role')
+            'user'    => $this->formatearUsuario($user, $tipo),
         ]);
     }
 
     /**
-     * Desactivar usuario
+     * Desactivar usuario por su UUID
      */
-    public function destroy(Request $request, int $id): JsonResponse
+    public function destroy(Request $request, string $id): JsonResponse
     {
-        $user = User::with('role')->find($id);
+        $res = $this->buscarPorId($id);
 
-        if (!$user) {
+        if (!$res) {
             return response()->json(['message' => 'Usuario no encontrado.'], 404);
         }
 
-        if ($error = $this->validarDesactivacion($request, $user)) {
+        $user = $res['user'];
+        $tipo = $res['tipo'];
+
+        if ($error = $this->validarDesactivacion($request, $user, $tipo)) {
             return $error;
         }
 
@@ -127,36 +170,101 @@ class UserController extends Controller
         $user->save();
 
         LogAuditoria::create([
+            'user_type' => get_class($request->user()),
             'user_id'   => $request->user()->id,
             'accion'    => 'USUARIO_DESACTIVADO',
             'ip_origen' => $request->ip(),
-            'detalles'  => ['motivo' => 'Baja lógica desde módulo de usuarios'],
+            'detalles'  => [
+                'tipo_usuario' => $tipo,
+                'target_id'    => $user->id,
+                'motivo'       => 'Baja lógica desde módulo de usuarios',
+            ],
         ]);
 
         return response()->json(['message' => 'Usuario desactivado exitosamente.']);
     }
 
-    /**
-     * Valida las restricciones de negocio para la desactivación.
-     */
-    private function validarDesactivacion(Request $request, User $user): ?JsonResponse
+    // --- MÉTODOS AUXILIARES ---
+
+    private function obtenerClaseModelo(string $tipo): string
+    {
+        return match ($tipo) {
+            'docente'  => Docente::class,
+            'auxiliar' => Auxiliar::class,
+            default    => Admin::class,
+        };
+    }
+
+    private function buscarPorId(string $id): ?array
+    {
+        $mapaModelos = [
+            'admin'    => Admin::class,
+            'docente'  => Docente::class,
+            'auxiliar' => Auxiliar::class,
+        ];
+
+        $resultado = null;
+
+        foreach ($mapaModelos as $tipo => $modelo) {
+            $user = $modelo::find($id);
+            if ($user) {
+                $resultado = ['user' => $user, 'tipo' => $tipo];
+                break;
+            }
+        }
+
+        return $resultado;
+    }
+
+    private function formatearUsuario(Model $u, string $tipo): array
+    {
+        return [
+            'id'               => $u->id,
+            'ci'               => $u->ci,
+            'ci_extension'     => $u->ci_extension,
+            'nombre'           => $u->nombre,
+            'apellido_paterno' => $u->apellido_paterno,
+            'apellido_materno' => $u->apellido_materno,
+            'email'            => $u->email ?? null,
+            'activo'           => $u->activo,
+            'tipo_usuario'     => $tipo,
+            'ultimo_acceso'    => $u->ultimo_acceso,
+            'created_at'       => $u->created_at,
+            'updated_at'       => $u->updated_at,
+        ];
+    }
+
+    private function aplicarFiltros($query, ?string $search, ?bool $activo, bool $tieneEmail): void
+    {
+        if ($search) {
+            $query->where(function ($q) use ($search, $tieneEmail) {
+                $q->where('nombre', 'ilike', "%{$search}%")
+                  ->orWhere('apellido_paterno', 'ilike', "%{$search}%")
+                  ->orWhere('apellido_materno', 'ilike', "%{$search}%")
+                  ->orWhere('ci', 'ilike', "%{$search}%");
+
+                if ($tieneEmail) {
+                    $q->orWhere('email', 'ilike', "%{$search}%");
+                }
+            });
+        }
+
+        if ($activo !== null) {
+            $query->where('activo', $activo);
+        }
+    }
+
+    private function validarDesactivacion(Request $request, Model $user, string $tipo): ?JsonResponse
     {
         if ($user->id === $request->user()->id) {
             return response()->json(['message' => 'No puedes desactivar tu propia cuenta.'], 400);
         }
 
-        $esAdmin = ($user->role && $user->role->nombre === 'administrador') || $user->rol_id === 1;
-        if ($user->activo && $esAdmin) {
-            $adminsActivos = User::where(function ($q) {
-                $q->where('rol_id', 1)
-                  ->orWhereHas('role', function ($r) {
-                      $r->where('nombre', 'administrador');
-                  });
-            })->where('activo', true)->count();
-
+        if ($tipo === 'admin' && $user->activo) {
+            $adminsActivos = Admin::where('activo', true)->count();
             if ($adminsActivos <= 1) {
                 return response()->json([
-                    'message' => 'No se puede desactivar al único usuario con rol administrador activo.'
+                    'message' => 'No se puede desactivar al único administrador activo.'
                 ], 422);
             }
         }
