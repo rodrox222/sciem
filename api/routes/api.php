@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ForgotPasswordController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\AuditoriaController;
 
 // Rutas públicas
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
@@ -23,5 +24,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         //index para listar roles activos para selectores en el frontend
         Route::get('roles', [RoleController::class, 'index']);
+	Route::get('auditoria',[AuditoriaController::class,'index']);
     });
+    
 });

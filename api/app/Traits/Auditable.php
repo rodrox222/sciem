@@ -15,7 +15,7 @@ trait Auditable
         });
 
         static::updated(function ($model) {
-            $ignorar = $model->auditExcept ?? [];
+            $ignorar = array_merge($model->auditExcept ?? [], ['updated_at']);
             $cambios = array_diff_key($model->getChanges(), array_flip($ignorar));
 
             if (empty($cambios)) {
