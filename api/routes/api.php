@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ForgotPasswordController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\AulaController;
 
 // Rutas públicas
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
@@ -51,4 +52,18 @@ Route::middleware('auth:sanctum')->group(function () {
             ]);
         });
     });
+
+    // Lectura de aulas (admin, docente, auxiliar)
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::get('aulas', [AulaController::class, 'index']);
+        Route::get('aulas/{id}', [AulaController::class, 'show']);
+    });
+
+    // Modificación de aulas (ahora admin y docente)
+    Route::middleware('role:admin,administrador,docente')->group(function () {
+        Route::post('aulas', [AulaController::class, 'store']);
+        Route::put('aulas/{id}', [AulaController::class, 'update']);
+        Route::delete('aulas/{id}', [AulaController::class, 'destroy']);
+    });
+
 });
