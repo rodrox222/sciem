@@ -9,6 +9,8 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\AulaController;
 use App\Http\Controllers\ExamenController;
 use App\Http\Controllers\MateriaController;
+use App\Http\Controllers\NormaController;
+
 
 
 // Rutas públicas
@@ -94,5 +96,24 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('materias/{id}', [MateriaController::class, 'update']);
         Route::delete('materias/{id}', [MateriaController::class, 'destroy']);
     });
+
+    // Lectura de normas (admin, docente y auxiliar)
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::get('normas', [NormaController::class, 'index']);
+        Route::get('normas/{id}', [NormaController::class, 'show']);
+    });
+
+    // Gestión de normas y asignación a exámenes (admin y docente)
+    Route::middleware('role:admin,administrador,docente')->group(function () {
+        Route::post('normas', [NormaController::class, 'store']);
+        Route::put('normas/{id}', [NormaController::class, 'update']);
+        Route::delete('normas/{id}', [NormaController::class, 'destroy']);
+        
+        // Endpoint para sincronizar las normas de un examen
+        Route::post('examenes/{id}/normas', [NormaController::class, 'syncExamenNormas']);
+    });
+
+
+
 
 });

@@ -27,6 +27,13 @@ class ExamenController extends Controller
             $query->where('fecha', $fecha);
         }
 
+        $query = Examen::with([
+            'materia:id,nombre',
+            'aula:id,nombre',
+            'docente:id,nombre,apellido_paterno',
+            'normas:id,titulo,tipo',
+        ]);
+
         $perPage = (int) $request->query('per_page', 10);
         $examenes = $query->orderBy('fecha', 'desc')->orderBy('hora_ini', 'asc')->paginate($perPage);
 
@@ -64,6 +71,8 @@ class ExamenController extends Controller
         if (!$examen) {
             return response()->json(['message' => 'Examen no encontrado.'], 404);
         }
+
+        $examen = Examen::with(['materia', 'aula', 'docente', 'normas'])->find($id);
 
         return response()->json($examen);
     }

@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+
 
 class Examen extends Model
 {
@@ -46,5 +48,10 @@ class Examen extends Model
     public function docente(): BelongsTo
     {
         return $this->belongsTo(Docente::class, 'id_docente');
+    }
+
+    public function normas(): BelongsToMany
+    {
+    return $this->belongsToMany(Norma::class, 'examen_norma', 'id_examen', 'id_norma');
     }
 }
