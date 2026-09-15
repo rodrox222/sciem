@@ -3,19 +3,20 @@ import { LoginPage } from './pages/LoginPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute'
+import { HomePage } from './pages/HomePage'
 import { IdleTimer } from './components/IdleTimer'
 
 export const App = () => {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Rutas Públicas (si está logueado, redirige a /dashboard) */}
+        <Route path="/" element={<HomePage />} />
+
         <Route element={<PublicRoute />}>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/recuperar-contrasena" element={<ForgotPasswordPage />} />
         </Route>
 
-        {/* Rutas Protegidas (si no hay token, rebota a /login) */}
         <Route element={<ProtectedRoute />}>
           <Route
             path="/dashboard"
@@ -28,8 +29,7 @@ export const App = () => {
           />
         </Route>
 
-        {/* Ruta por defecto */}
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   )
