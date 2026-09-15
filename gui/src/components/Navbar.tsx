@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import logoSSO from '../assets/logo SSO.svg'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8200/api'
@@ -14,10 +15,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   usuario = 'Docente',
   onLogout,
 }) => {
-  const [activeTab, setActiveTab] = useState('Estudiantes')
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [activeTab, setActiveTab] = useState(
+    location.pathname === '/dashboard/auditoria' ? 'Auditoría' : 'Estudiantes'
+  )
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
-  const navItems = [
+  const baseNavItems = [
     { name: 'Inicio', href: '#' },
     { name: 'Mis exámenes', href: '#' },
     { name: 'Estudiantes', href: '#' },
@@ -25,6 +30,11 @@ export const Navbar: React.FC<NavbarProps> = ({
     { name: 'Normativas', href: '#' },
     { name: 'Perfil', href: '#' },
   ]
+
+  const navItems =
+    rol?.toLowerCase() === 'admin'
+      ? [...baseNavItems, { name: 'Auditoría', href: '#', path: '/dashboard/auditoria' }]
+      : baseNavItems
 
   const handleLogoutClick = async () => {
     setIsLoggingOut(true)
@@ -97,7 +107,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   key={item.name}
                   type="button"
-                  onClick={() => setActiveTab(item.name)}
+                  onClick={() => {
+                    setActiveTab(item.name)
+                    if (item.path) navigate(item.path)
+                  }}
                   className={`relative h-full flex items-center px-6 text-sm transition-colors ${
                     isActive
                       ? 'bg-slate-50 text-[#003770] font-semibold'
