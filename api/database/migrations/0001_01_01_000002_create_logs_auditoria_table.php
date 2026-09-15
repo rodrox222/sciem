@@ -6,18 +6,36 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('logs_auditoria', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->nullable()->constrained('users')->onDelete('set null');
-            $table->string('accion', 100);
-            $table->string('ip_origen', 45);
-            $table->jsonb('detalles')->nullable(); // Soporte JSONB nativo de PostgreSQL
+
+            // Polimorfismo compatible con UUID (crea user_type y user_id UUID indexados)
+            $table->nullableUuidMorphs('user');
+
+            // Snapshot del usuario en el instante del evento
+            $table->string('rol_en_el_momento')->nullable();
+            $table->string('usuario_nombre')->nullable();
+            $table->string('usuario_email')->nullable();
+
+            // Contexto técnico y de navegación
+            $table->string('modulo')->nullable();
+            $table->string('accion');
+            $table->string('ip_origen', 45)->nullable();
+            $table->text('user_agent')->nullable();
+
+            // Columna requerida para almacenar la metadata de AuthController y UserController
+            $table->jsonb('detalles')->nullable();
+
+            // Marca de tiempo
             $table->timestamp('created_at')->useCurrent();
+
+            // Índices para consultas y filtros de auditoría
+            $table->index('created_at');
+            $table->index('rol_en_el_momento');
+            $table->index('accion');
+            $table->index('modulo');
         });
     }
 
