@@ -50,7 +50,7 @@ class UserController extends Controller
         // Ordenar por fecha de creación más reciente
         $coleccion = $coleccion->sortByDesc('created_at')->values();
 
-        // Paginación manual para mantener el formato original de Laravel paginate()
+        // Paginación manual para mantener el formato de Laravel paginate()
         $page = LengthAwarePaginator::resolveCurrentPage();
         $perPage = 10;
         $items = $coleccion->slice(($page - 1) * $perPage, $perPage)->values();
@@ -75,17 +75,11 @@ class UserController extends Controller
         $modelClass = $this->obtenerClaseModelo($tipo);
         $user = $modelClass::create($data);
 
-        LogAuditoria::create([
-            'user_type' => get_class($request->user()),
-            'user_id'   => $request->user()->id,
-            'accion'    => 'USUARIO_CREADO',
-            'ip_origen' => $request->ip(),
-            'detalles'  => [
-                'tipo_usuario' => $tipo,
-                'target_id'    => $user->id,
-                'ci'           => $user->ci,
-                'email'        => $user->email ?? null,
-            ],
+        $this->registrarLog($request, 'USUARIO_CREADO', [
+            'tipo_usuario' => $tipo,
+            'target_id'    => $user->id,
+            'ci'           => $user->ci,
+            'email'        => $user->email ?? null,
         ]);
 
         return response()->json([
@@ -130,16 +124,10 @@ class UserController extends Controller
 
         $user->update($data);
 
-        LogAuditoria::create([
-            'user_type' => get_class($request->user()),
-            'user_id'   => $request->user()->id,
-            'accion'    => 'USUARIO_ACTUALIZADO',
-            'ip_origen' => $request->ip(),
-            'detalles'  => [
-                'tipo_usuario'        => $tipo,
-                'target_id'           => $user->id,
-                'campos_actualizados' => array_keys($data),
-            ],
+        $this->registrarLog($request, 'USUARIO_ACTUALIZADO', [
+            'tipo_usuario'        => $tipo,
+            'target_id'           => $user->id,
+            'campos_actualizados' => array_keys($data),
         ]);
 
         return response()->json([
@@ -169,22 +157,50 @@ class UserController extends Controller
         $user->activo = false;
         $user->save();
 
-        LogAuditoria::create([
-            'user_type' => get_class($request->user()),
-            'user_id'   => $request->user()->id,
-            'accion'    => 'USUARIO_DESACTIVADO',
-            'ip_origen' => $request->ip(),
-            'detalles'  => [
-                'tipo_usuario' => $tipo,
-                'target_id'    => $user->id,
-                'motivo'       => 'Baja lógica desde módulo de usuarios',
-            ],
+        $this->registrarLog($request, 'USUARIO_DESACTIVADO', [
+            'tipo_usuario' => $tipo,
+            'target_id'    => $user->id,
+            'motivo'       => 'Baja lógica desde módulo de usuarios',
         ]);
 
         return response()->json(['message' => 'Usuario desactivado exitosamente.']);
     }
 
     // --- MÉTODOS AUXILIARES ---
+
+    /**
+     * Centraliza la persistencia en logs_auditoria con el nuevo esquema
+     */
+    private function registrarLog(Request $request, string $accion, ?array $detalles = null): void
+    {
+        $actor = $request->user();
+
+        $nombreCompleto = null;
+        if ($actor) {
+            $partes = array_filter([
+                $actor->nombre ?? null,
+                $actor->apellido_paterno ?? null,
+                $actor->apellido_materno ?? null,
+            ]);
+            $nombreCompleto = !empty($partes) ? implode(' ', $partes) : null;
+        }
+
+        $rol = $actor ? strtolower(class_basename($actor)) : 'sistema';
+        $emailOIdentificador = $actor?->email ?? ($actor ? $actor->ci : null);
+
+        LogAuditoria::create([
+            'user_type'         => $actor ? get_class($actor) : null,
+            'user_id'           => $actor?->id,
+            'rol_en_el_momento' => $rol,
+            'usuario_nombre'    => $nombreCompleto,
+            'usuario_email'     => $emailOIdentificador,
+            'modulo'            => 'Usuarios',
+            'accion'            => $accion,
+            'ip_origen'         => $request->ip(),
+            'user_agent'        => $request->userAgent(),
+            'detalles'          => $detalles,
+        ]);
+    }
 
     private function obtenerClaseModelo(string $tipo): string
     {
