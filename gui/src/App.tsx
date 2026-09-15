@@ -10,6 +10,7 @@ import ProgramarExamenPage from './pages/ProgramarExamenPage'
 import ExamenesPage from './pages/ExamenesPage'
 import ProgramarExamenAdminPage from './pages/ProgramarExamenAdminPage'
 import MisExamenesPage from './pages/MisExamenesPage'
+import EstudiantesPage from './pages/EstudiantesPage'
 export default function App() {
   return (
     <BrowserRouter>
@@ -59,6 +60,7 @@ export default function App() {
   path="/programar-examen-admin"
   element={<ProgramarExamenAdminPage />}
 />
+<Route path="/estudiantes" element={<EstudiantesPage />} />
         <Route
         
 

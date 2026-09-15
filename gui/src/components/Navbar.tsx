@@ -22,7 +22,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const navItems = [
   { name: 'Inicio', href: '#' },
   { name: 'Mis exámenes', href: '/mis-examenes' },
-  { name: 'Estudiantes', href: '#' },
+  { name: 'Estudiantes', href: '/estudiantes?rol=docente' },
   { name: 'Cronograma', href: '#' },
   { name: 'Normativas', href: '#' },
   { name: 'Perfil', href: '#' },
