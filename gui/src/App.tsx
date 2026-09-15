@@ -6,7 +6,10 @@ import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute'
 import { IdleTimer } from './components/IdleTimer'
 import AulasPage from './pages/AulasPage'
 import NormasPage from './pages/NormasPage'
-
+import ProgramarExamenPage from './pages/ProgramarExamenPage'
+import ExamenesPage from './pages/ExamenesPage'
+import ProgramarExamenAdminPage from './pages/ProgramarExamenAdminPage'
+import MisExamenesPage from './pages/MisExamenesPage'
 export default function App() {
   return (
     <BrowserRouter>
@@ -22,26 +25,44 @@ export default function App() {
 
         {/* Rutas Protegidas */}
         <Route element={<ProtectedRoute />}>
-        <Route
-          path="/dashboard"
-          element={
-            <>
-              <IdleTimer />
-              <DashboardPage />
-            </>
-          }
-        />
+          <Route
+            path="/dashboard"
+            element={
+              <>
+                <IdleTimer />
+                <DashboardPage />
+              </>
+            }
+          />
 
-        <Route
-          path="/aulas"
-          element={<AulasPage />}
-        />
+          <Route
+            path="/aulas"
+            element={<AulasPage />}
+          />
 
-        <Route
-          path="/normas"
-          element={<NormasPage />}
-        />
+          <Route
+            path="/normas"
+            element={<NormasPage />}
+          />
+          <Route path="/examenes" element={<ExamenesPage />} />
+          <Route
+  path="/mis-examenes"
+  element={<MisExamenesPage />}
+/>
+
+          <Route
+            path="/programar-examen"
+            element={<ProgramarExamenPage />}
+          />
         </Route>
+        <Route
+  path="/programar-examen-admin"
+  element={<ProgramarExamenAdminPage />}
+/>
+        <Route
+        
+
+/>
 
         {/* Redirección por defecto */}
         <Route path="/" element={<Navigate to="/login" replace />} />

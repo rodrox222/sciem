@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import logoSSO from '../assets/logo SSO.svg'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8200/api'
@@ -14,17 +15,18 @@ export const Navbar: React.FC<NavbarProps> = ({
   usuario = 'Docente',
   onLogout,
 }) => {
-  const [activeTab, setActiveTab] = useState('Estudiantes')
+  const navigate = useNavigate()
+  const location = useLocation()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   const navItems = [
-    { name: 'Inicio', href: '#' },
-    { name: 'Mis exámenes', href: '#' },
-    { name: 'Estudiantes', href: '#' },
-    { name: 'Cronograma', href: '#' },
-    { name: 'Normativas', href: '#' },
-    { name: 'Perfil', href: '#' },
-  ]
+  { name: 'Inicio', href: '#' },
+  { name: 'Mis exámenes', href: '/mis-examenes' },
+  { name: 'Estudiantes', href: '#' },
+  { name: 'Cronograma', href: '#' },
+  { name: 'Normativas', href: '#' },
+  { name: 'Perfil', href: '#' },
+]
 
   const handleLogoutClick = async () => {
     setIsLoggingOut(true)
@@ -37,8 +39,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${token}`,
+            Accept: 'application/json',
+            Authorization: `Bearer ${token}`,
           },
         })
       }
@@ -73,17 +75,16 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Barra Principal */}
       <div className="border-b border-slate-200 px-8">
         <div className="flex items-center justify-between h-20">
-          
           {/* Logo SCI */}
           <div className="flex items-center gap-3">
-            <img 
-              src={logoSSO} 
-              alt="Logo Institucional" 
+            <img
+              src={logoSSO}
+              alt="Logo Institucional"
               className="h-12 w-auto object-contain"
             />
             <div className="flex items-center">
               <span className="font-bold text-2xl text-[#003770] tracking-tight">
-                SCI<span className="text-[#E30613]">EM</span>
+                SCI<span className="text-[#E30613]"></span>
               </span>
             </div>
           </div>
@@ -91,13 +92,17 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Menú de Navegación */}
           <nav className="flex h-full items-center gap-1">
             {navItems.map((item) => {
-              const isActive = activeTab === item.name
+              const isActive = location.pathname === item.href
 
               return (
                 <button
                   key={item.name}
                   type="button"
-                  onClick={() => setActiveTab(item.name)}
+                  onClick={() => {
+                    if (item.href !== '#') {
+                      navigate(item.href)
+                    }
+                  }}
                   className={`relative h-full flex items-center px-6 text-sm transition-colors ${
                     isActive
                       ? 'bg-slate-50 text-[#003770] font-semibold'
@@ -118,14 +123,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#003770] border border-blue-200 flex items-center justify-center font-bold text-base shadow-sm select-none">
               {usuario.charAt(0).toUpperCase()}
             </div>
-            
+
             <div className="flex flex-col text-left">
               <span className="text-sm font-semibold text-slate-800 leading-tight">
                 {usuario}
               </span>
-              <span className="text-xs text-slate-500">
-                {rol}
-              </span>
+              <span className="text-xs text-slate-500">{rol}</span>
               <button
                 type="button"
                 disabled={isLoggingOut}
@@ -136,7 +139,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             </div>
           </div>
-
         </div>
       </div>
     </header>

@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import logoSSO from '../assets/logo SSO.svg'
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8200/api'
 
 interface AdminNavbarProps {
@@ -18,15 +19,16 @@ export function AdminNavbar({
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   const navItems = [
-    { name: 'Inicio', href: '/dashboard' },
-    { name: 'Usuarios', href: '/usuarios' },
-    { name: 'Ambientes', href: '/aulas' },
-    { name: 'Normas', href: '/normas' },
-    { name: 'Auditoría', href: '/auditoria' },
-    { name: 'Logs', href: '/logs' },
-    { name: 'Configuración', href: '/configuracion' },
-    { name: 'Perfil', href: '/perfil' },
-  ]
+  { name: 'Inicio', href: '/dashboard' },
+  { name: 'Usuarios', href: '/usuarios' },
+  { name: 'Ambientes', href: '/aulas' },
+  { name: 'Normas', href: '/normas' },
+  { name: 'Exámenes', href: '/examenes' },
+  { name: 'Auditoría', href: '/auditoria' },
+  { name: 'Logs', href: '/logs' },
+  { name: 'Configuración', href: '/configuracion' },
+  { name: 'Perfil', href: '/perfil' },
+]
 
   const handleLogoutClick = async () => {
     setIsLoggingOut(true)
@@ -79,10 +81,10 @@ export function AdminNavbar({
           {/* Logo SCI con su icono */}
           <div className="flex items-center gap-3">
             <img
-              src="/logo%20SSO.svg"
-              alt="Logo Institucional"
-              className="h-11 w-auto object-contain"
-            />
+                src={logoSSO}
+                alt="Logo Institucional"
+                className="h-11 w-auto object-contain"
+                />
             <div className="flex items-center">
               <span className="font-extrabold text-2xl text-[#002b5b] tracking-tight">
                 SCI
@@ -127,10 +129,15 @@ export function AdminNavbar({
               </div>
 
               <div className="flex flex-col text-left">
-                <span className="text-xs font-bold text-slate-900 leading-tight">
-                  {usuario}
-                </span>
-                <button
+  <span className="text-xs font-bold text-slate-900 leading-tight">
+    {usuario}
+  </span>
+
+  <span className="text-[11px] text-slate-500 leading-tight">
+    {rol}
+  </span>
+
+  <button
                   type="button"
                   disabled={isLoggingOut}
                   onClick={handleLogoutClick}

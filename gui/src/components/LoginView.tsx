@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Check, Info } from 'lucide-react'
 import logoSSO from '../assets/logo SSO.svg'
-import { useLogin, type Role } from '../hooks/useLogin'
+import { useLogin } from '../hooks/useLogin'
 
 interface LoginViewProps {
   onLoginSuccess: (role: string) => void
