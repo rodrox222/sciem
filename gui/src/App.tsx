@@ -5,11 +5,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute'
 import { HomePage } from './pages/HomePage'
 import { IdleTimer } from './components/IdleTimer'
-import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute'
 import { AuditoriaPage } from './pages/AuditoriaPage'
-import { DashboardPage } from './pages/DashboardPage'
-import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
-import { LoginPage } from './pages/LoginPage'
 
 export const App = () => {
   return (
