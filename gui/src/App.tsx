@@ -1,9 +1,10 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { LoginPage } from './pages/LoginPage'
-import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
-import { DashboardPage } from './pages/DashboardPage'
-import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { IdleTimer } from './components/IdleTimer'
+import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute'
+import { AuditoriaPage } from './pages/AuditoriaPage'
+import { DashboardPage } from './pages/DashboardPage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
+import { LoginPage } from './pages/LoginPage'
 
 export const App = () => {
   return (
@@ -23,6 +24,18 @@ export const App = () => {
               <>
                 <IdleTimer />
                 <DashboardPage />
+              </>
+            }
+          />
+        </Route>
+
+        <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+          <Route
+            path="/dashboard/auditoria"
+            element={
+              <>
+                <IdleTimer />
+                <AuditoriaPage />
               </>
             }
           />
