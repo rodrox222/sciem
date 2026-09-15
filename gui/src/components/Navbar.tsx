@@ -24,7 +24,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   { name: 'Mis exámenes', href: '/mis-examenes' },
   { name: 'Estudiantes', href: '/estudiantes?rol=docente' },
   { name: 'Cronograma', href: '#' },
-  { name: 'Normativas', href: '#' },
+
   { name: 'Perfil', href: '#' },
 ]
 
@@ -92,7 +92,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Menú de Navegación */}
           <nav className="flex h-full items-center gap-1">
             {navItems.map((item) => {
-              const isActive = location.pathname === item.href
+              const isActive = location.pathname === item.href.split('?')[0]
 
               return (
                 <button

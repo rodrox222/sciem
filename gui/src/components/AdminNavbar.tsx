@@ -96,7 +96,7 @@ export function AdminNavbar({
           {/* Menú de Navegación Centrado (Con el fondo y borde inferior de la pestaña activa) */}
           <nav className="flex h-full items-center">
             {navItems.map((item) => {
-              const isActive = location.pathname === item.href
+              const isActive = location.pathname === item.href.split('?')[0]
 
               return (
                 <button

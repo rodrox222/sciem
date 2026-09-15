@@ -180,11 +180,11 @@ const esAdmin =
         <section className="mb-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-semibold text-[#E30613] uppercase tracking-wide">
+              <p className="text-sm font-semibold text-[#003770] uppercase tracking-wide">
                 Gestión académica
               </p>
 
-              <h1 className="text-2xl sm:text-3xl font-bold text-[#003770] mt-1">
+              <h1 className="mt-1 text-2xl font-bold text-slate-900 sm:text-3xl">
                 Estudiantes
               </h1>
 
