@@ -5,6 +5,11 @@ import { DashboardPage } from './pages/DashboardPage'
 import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute'
 import { HomePage } from './pages/HomePage'
 import { IdleTimer } from './components/IdleTimer'
+import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute'
+import { AuditoriaPage } from './pages/AuditoriaPage'
+import { DashboardPage } from './pages/DashboardPage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
+import { LoginPage } from './pages/LoginPage'
 
 export const App = () => {
   return (
@@ -29,7 +34,20 @@ export const App = () => {
           />
         </Route>
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+          <Route
+            path="/dashboard/auditoria"
+            element={
+              <>
+                <IdleTimer />
+                <AuditoriaPage />
+              </>
+            }
+          />
+        </Route>
+
+        {/* Ruta por defecto */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   )

@@ -88,6 +88,7 @@ export const useLogin = ({ onSuccess }: UseLoginOptions) => {
 
       localStorage.setItem('auth_token', token)
       localStorage.setItem('user_role', userRole)
+      localStorage.setItem('user_data', JSON.stringify(data.user || {}))
 
       onSuccess(userRole, token)
     } catch (err: unknown) {
