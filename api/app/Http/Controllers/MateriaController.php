@@ -4,6 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreMateriaRequest;
 use App\Http\Requests\UpdateMateriaRequest;
+use App\Models\Admin;
+use App\Models\Auxiliar;
+use App\Models\Docente;
 use App\Models\LogAuditoria;
 use App\Models\Materia;
 use Illuminate\Http\JsonResponse;
@@ -22,7 +25,7 @@ class MateriaController extends Controller
             $query->where('nombre', 'ilike', "%{$search}%");
         }
 
-        // Si mandan ?all=true devuelve la lista completa sin paginar (ideal para selects/comboboxes en React)
+        // Si mandan ?all=true devuelve la lista completa sin paginar
         if ($request->boolean('all')) {
             return response()->json($query->orderBy('nombre', 'asc')->get());
         }
@@ -41,15 +44,9 @@ class MateriaController extends Controller
         $data = $request->validated();
         $materia = Materia::create($data);
 
-        LogAuditoria::create([
-            'user_type' => get_class($request->user()),
-            'user_id'   => $request->user()->id,
-            'accion'    => 'MATERIA_CREADA',
-            'ip_origen' => $request->ip(),
-            'detalles'  => [
-                'materia_id' => $materia->id,
-                'nombre'     => $materia->nombre,
-            ],
+        $this->registrarAuditoria($request, 'MATERIA_CREADA', [
+            'materia_id' => $materia->id,
+            'nombre'     => $materia->nombre,
         ]);
 
         return response()->json([
@@ -86,15 +83,9 @@ class MateriaController extends Controller
         $data = $request->validated();
         $materia->update($data);
 
-        LogAuditoria::create([
-            'user_type' => get_class($request->user()),
-            'user_id'   => $request->user()->id,
-            'accion'    => 'MATERIA_ACTUALIZADA',
-            'ip_origen' => $request->ip(),
-            'detalles'  => [
-                'materia_id'          => $materia->id,
-                'campos_actualizados' => array_keys($data),
-            ],
+        $this->registrarAuditoria($request, 'MATERIA_ACTUALIZADA', [
+            'materia_id'          => $materia->id,
+            'campos_actualizados' => array_keys($data),
         ]);
 
         return response()->json([
@@ -127,14 +118,38 @@ class MateriaController extends Controller
 
         $materia->delete();
 
-        LogAuditoria::create([
-            'user_type' => get_class($request->user()),
-            'user_id'   => $request->user()->id,
-            'accion'    => 'MATERIA_ELIMINADA',
-            'ip_origen' => $request->ip(),
-            'detalles'  => $detalles,
-        ]);
+        $this->registrarAuditoria($request, 'MATERIA_ELIMINADA', $detalles);
 
         return response()->json(['message' => 'Materia eliminada exitosamente.']);
+    }
+
+    /**
+     * Registra el evento en logs_auditoria con el nuevo esquema centralizado.
+     */
+    private function registrarAuditoria(Request $request, string $accion, array $detalles = []): void
+    {
+        $user = $request->user();
+
+        $rol = match (get_class($user)) {
+            Admin::class    => 'admin',
+            Docente::class  => 'docente',
+            Auxiliar::class => 'auxiliar',
+            default         => 'desconocido',
+        };
+
+        $nombreCompleto = trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}");
+
+        LogAuditoria::create([
+            'user_type'         => get_class($user),
+            'user_id'           => $user->id,
+            'rol_en_el_momento' => $rol,
+            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : $user->nombre,
+            'usuario_email'     => $user->email ?? null,
+            'modulo'            => 'MATERIAS',
+            'accion'            => $accion,
+            'ip_origen'         => $request->ip() ?? '127.0.0.1',
+            'user_agent'        => $request->userAgent(),
+            'detalles'          => $detalles,
+        ]);
     }
 }

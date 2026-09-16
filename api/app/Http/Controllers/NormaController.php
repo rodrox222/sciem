@@ -6,6 +6,8 @@ use App\Http\Requests\StoreNormaRequest;
 use App\Http\Requests\SyncNormasExamenRequest;
 use App\Http\Requests\UpdateNormaRequest;
 use App\Models\Admin;
+use App\Models\Auxiliar;
+use App\Models\Docente;
 use App\Models\Examen;
 use App\Models\LogAuditoria;
 use App\Models\Norma;
@@ -47,16 +49,10 @@ class NormaController extends Controller
         $data = $request->validated();
         $norma = Norma::create($data);
 
-        LogAuditoria::create([
-            'user_type' => get_class($request->user()),
-            'user_id'   => $request->user()->id,
-            'accion'    => 'NORMA_CREADA',
-            'ip_origen' => $request->ip(),
-            'detalles'  => [
-                'norma_id' => $norma->id,
-                'titulo'   => $norma->titulo,
-                'tipo'     => $norma->tipo,
-            ],
+        $this->registrarAuditoria($request, 'NORMA_CREADA', [
+            'norma_id' => $norma->id,
+            'titulo'   => $norma->titulo,
+            'tipo'     => $norma->tipo,
         ]);
 
         return response()->json([
@@ -101,15 +97,9 @@ class NormaController extends Controller
         $data = $request->validated();
         $norma->update($data);
 
-        LogAuditoria::create([
-            'user_type' => get_class($request->user()),
-            'user_id'   => $request->user()->id,
-            'accion'    => 'NORMA_ACTUALIZADA',
-            'ip_origen' => $request->ip(),
-            'detalles'  => [
-                'norma_id'            => $norma->id,
-                'campos_actualizados' => array_keys($data),
-            ],
+        $this->registrarAuditoria($request, 'NORMA_ACTUALIZADA', [
+            'norma_id'            => $norma->id,
+            'campos_actualizados' => array_keys($data),
         ]);
 
         return response()->json([
@@ -144,13 +134,7 @@ class NormaController extends Controller
 
         $norma->delete();
 
-        LogAuditoria::create([
-            'user_type' => get_class($request->user()),
-            'user_id'   => $request->user()->id,
-            'accion'    => 'NORMA_ELIMINADA',
-            'ip_origen' => $request->ip(),
-            'detalles'  => $detalles,
-        ]);
+        $this->registrarAuditoria($request, 'NORMA_ELIMINADA', $detalles);
 
         return response()->json(['message' => 'Norma eliminada exitosamente.']);
     }
@@ -166,23 +150,46 @@ class NormaController extends Controller
             return response()->json(['message' => 'Examen no encontrado.'], 404);
         }
 
-        // Sincroniza los UUIDs en la tabla examen_norma (añade los nuevos y desvincula los que no estén en la lista)
         $examen->normas()->sync($request->validated('normas'));
 
-        LogAuditoria::create([
-            'user_type' => get_class($request->user()),
-            'user_id'   => $request->user()->id,
-            'accion'    => 'NORMAS_ASIGNADAS_EXAMEN',
-            'ip_origen' => $request->ip(),
-            'detalles'  => [
-                'examen_id' => $examen->id,
-                'normas_ids' => $request->validated('normas'),
-            ],
+        $this->registrarAuditoria($request, 'NORMAS_ASIGNADAS_EXAMEN', [
+            'examen_id'  => $examen->id,
+            'normas_ids' => $request->validated('normas'),
         ]);
 
         return response()->json([
             'message' => 'Normas asignadas al examen correctamente.',
             'normas'  => $examen->normas()->get(),
+        ]);
+    }
+
+    /**
+     * Registra el evento en logs_auditoria con el nuevo esquema centralizado.
+     */
+    private function registrarAuditoria(Request $request, string $accion, array $detalles = []): void
+    {
+        $user = $request->user();
+
+        $rol = match (get_class($user)) {
+            Admin::class    => 'admin',
+            Docente::class  => 'docente',
+            Auxiliar::class => 'auxiliar',
+            default         => 'desconocido',
+        };
+
+        $nombreCompleto = trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}");
+
+        LogAuditoria::create([
+            'user_type'         => get_class($user),
+            'user_id'           => $user->id,
+            'rol_en_el_momento' => $rol,
+            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : $user->nombre,
+            'usuario_email'     => $user->email ?? null,
+            'modulo'            => 'NORMAS',
+            'accion'            => $accion,
+            'ip_origen'         => $request->ip() ?? '127.0.0.1',
+            'user_agent'        => $request->userAgent(),
+            'detalles'          => $detalles,
         ]);
     }
 }
