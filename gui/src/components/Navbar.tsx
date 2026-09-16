@@ -17,23 +17,20 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const navigate = useNavigate()
   const location = useLocation()
-  const [activeTab, setActiveTab] = useState(
-    location.pathname === '/dashboard/auditoria' ? 'Auditoría' : 'Estudiantes'
-  )
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   const baseNavItems = [
-    { name: 'Inicio', href: '#' },
-    { name: 'Mis exámenes', href: '#' },
-    { name: 'Estudiantes', href: '#' },
+    { name: 'Inicio', href: '/dashboard' },
+    { name: 'Mis exámenes', href: '/mis-examenes' },
+    { name: 'Estudiantes', href: '/estudiantes?rol=docente' },
     { name: 'Cronograma', href: '#' },
-    { name: 'Normativas', href: '#' },
+    { name: 'Normativas', href: '/normas' },
     { name: 'Perfil', href: '#' },
   ]
 
   const navItems =
     rol?.toLowerCase() === 'admin'
-      ? [...baseNavItems, { name: 'Auditoría', href: '#', path: '/dashboard/auditoria' }]
+      ? [...baseNavItems, { name: 'Auditoría', href: '/dashboard/auditoria' }]
       : baseNavItems
 
   const handleLogoutClick = async () => {
@@ -42,20 +39,18 @@ export const Navbar: React.FC<NavbarProps> = ({
 
     try {
       if (token) {
-        // Petición al endpoint protegido en api.php
         await fetch(`${API_BASE_URL}/logout`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${token}`,
+            Accept: 'application/json',
+            Authorization: `Bearer ${token}`,
           },
         })
       }
     } catch (err) {
       console.error('Error al revocar token en servidor:', err)
     } finally {
-      // Limpiar almacenamiento local sin importar si falló la red
       localStorage.removeItem('auth_token')
       localStorage.removeItem('user_role')
       localStorage.removeItem('user_data')
@@ -83,17 +78,16 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Barra Principal */}
       <div className="border-b border-slate-200 px-8">
         <div className="flex items-center justify-between h-20">
-          
           {/* Logo SCI */}
           <div className="flex items-center gap-3">
-            <img 
-              src={logoSSO} 
-              alt="Logo Institucional" 
+            <img
+              src={logoSSO}
+              alt="Logo Institucional"
               className="h-12 w-auto object-contain"
             />
             <div className="flex items-center">
               <span className="font-bold text-2xl text-[#003770] tracking-tight">
-                SCI<span className="text-[#E30613]">EM</span>
+                SCI<span className="text-[#E30613]"></span>
               </span>
             </div>
           </div>
@@ -101,15 +95,17 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Menú de Navegación */}
           <nav className="flex h-full items-center gap-1">
             {navItems.map((item) => {
-              const isActive = activeTab === item.name
+              const isActive =
+                item.href !== '#' && location.pathname === item.href.split('?')[0]
 
               return (
                 <button
                   key={item.name}
                   type="button"
                   onClick={() => {
-                    setActiveTab(item.name)
-                    if (item.path) navigate(item.path)
+                    if (item.href !== '#') {
+                      navigate(item.href)
+                    }
                   }}
                   className={`relative h-full flex items-center px-6 text-sm transition-colors ${
                     isActive
@@ -131,14 +127,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#003770] border border-blue-200 flex items-center justify-center font-bold text-base shadow-sm select-none">
               {usuario.charAt(0).toUpperCase()}
             </div>
-            
+
             <div className="flex flex-col text-left">
               <span className="text-sm font-semibold text-slate-800 leading-tight">
                 {usuario}
               </span>
-              <span className="text-xs text-slate-500">
-                {rol}
-              </span>
+              <span className="text-xs text-slate-500">{rol}</span>
               <button
                 type="button"
                 disabled={isLoggingOut}
@@ -149,7 +143,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             </div>
           </div>
-
         </div>
       </div>
     </header>

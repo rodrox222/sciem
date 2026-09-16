@@ -25,42 +25,53 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       displayName = `${userData.nombre} ${userData.apellido || ''}`.trim()
     }
   } catch {
-    // Si el JSON guardado no es válido, nos quedamos con el rol como respaldo
+    // Si el JSON guardado no es válido, se mantiene el rol como respaldo
   }
 
-  // Listener de inactividad (5 minutos) con advertencia 1 minuto antes de cerrar sesión
-  const { isPrompted, remainingTime, stayLoggedIn } = useIdleTimer({
-    timeout: 5 * 60 * 1000,      // 5 minutos totales
-    promptBefore: 1 * 60 * 1000, // Se abre el modal faltando 1 minuto 
+  // Listener de inactividad (5 min total, modal 1 min antes)
+  // Se mapean los nombres retornados hacia los esperados por el JSX
+  const idleHook = useIdleTimer({
+    timeout: 5 * 60 * 1000,
+    promptBefore: 1 * 60 * 1000,
     onIdle: handleLogout,
-  })
+  } as any)
+
+  const showModal = idleHook?.showModal ?? idleHook?.isPrompted ?? false
+  const secondsRemaining =
+    idleHook?.secondsRemaining ??
+    (idleHook?.remainingTime ? Math.ceil(idleHook.remainingTime / 1000) : 60)
+  const handleStayActive = idleHook?.handleStayActive ?? idleHook?.stayLoggedIn ?? (() => {})
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
       {/* Barra de navegación superior */}
       <Navbar rol={role} usuario={displayName} onLogout={handleLogout} />
 
-      {/* Área principal de contenido (empuja el footer hacia abajo) */}
+      {/* Área principal de contenido */}
       <main className="flex-1 w-full max-w-7xl mx-auto p-6">
         {children}
       </main>
 
-      {/* Footer institucional con el texto y color exactos */}
+      {/* Footer institucional */}
       <Footer />
 
-      {/* Modal reutilizable de advertencia por inactividad */}
+      {/* Modal de advertencia por inactividad */}
       <ConfirmModal
-        open={isPrompted}
+        open={showModal}
         title="Advertencia de Inactividad"
         description={
           <span>
-            Tu sesión está a punto de cerrarse por inactividad. El sistema se cerrará en{' '}
-            <strong className="text-[#E30613] font-bold">{remainingTime} segundos</strong>. ¿Deseas continuar trabajando?
+            Tu sesión está a punto de cerrarse por inactividad. El sistema se
+            cerrará en{' '}
+            <strong className="text-[#E30613] font-bold">
+              {secondsRemaining} segundos
+            </strong>
+            . ¿Deseas continuar trabajando?
           </span>
         }
         confirmText="Mantener sesión iniciada"
         cancelText="Cerrar sesión ahora"
-        onConfirm={stayLoggedIn}
+        onConfirm={handleStayActive}
         onCancel={handleLogout}
       />
     </div>
