@@ -4,7 +4,7 @@ import { MainLayout } from '../layouts/MainLayout'
 export const DashboardPage: React.FC = () => {
   useEffect(() => {
     // Título de la pestaña
-    document.title = 'Dashboard | SCIEM'
+    document.title = 'Dashboard | SCI'
 
     // Colocar un estado en el historial para detectar el botón volver
     window.history.pushState({ dashboard: true }, '', window.location.href)

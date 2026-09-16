@@ -1,27 +1,29 @@
 <?php
 
 use Illuminate\Http\Request;
-use App\Http\Controllers\AuthController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ForgotPasswordController;
 use App\Http\Controllers\UserController;
-use App\Http\Controllers\RoleController;
+use App\Http\Controllers\AuditoriaController;
 use App\Http\Controllers\AulaController;
 use App\Http\Controllers\ExamenController;
 use App\Http\Controllers\MateriaController;
 use App\Http\Controllers\NormaController;
+use App\Models\Admin;
+use App\Models\Docente;
+use App\Models\Auxiliar;
 
-
-
-// Rutas públicas
+// --- RUTAS PÚBLICAS ---
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLink']);
 Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword']);
 
-// Rutas protegidas (requieren token Bearer)
+// --- RUTAS PROTEGIDAS (Sanctum) ---
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
-    
+
+    // Perfil del usuario autenticado
     Route::get('/me', function (Request $request) {
         $user = $request->user();
 
@@ -46,74 +48,67 @@ Route::middleware('auth:sanctum')->group(function () {
         ]);
     });
 
-    Route::middleware('role:admin,administrador')->group(function () {
-        Route::apiResource('users', UserController::class);
-
-        Route::get('roles', function () {
-            return response()->json([
-                ['id' => 'admin', 'nombre' => 'Administrador'],
-                ['id' => 'docente', 'nombre' => 'Docente'],
-                ['id' => 'auxiliar', 'nombre' => 'Auxiliar'],
-            ]);
-        });
+    // Endpoint de roles para selectores en frontend
+    Route::get('roles', function () {
+        return response()->json([
+            ['id' => 'admin', 'nombre' => 'Administrador'],
+            ['id' => 'docente', 'nombre' => 'Docente'],
+            ['id' => 'auxiliar', 'nombre' => 'Auxiliar'],
+        ]);
     });
 
-    // Lectura de aulas (admin, docente, auxiliar)
+    // --- ADMINISTRACIÓN ---
+    Route::middleware('role:admin,administrador')->group(function () {
+        Route::apiResource('users', UserController::class);
+        Route::get('auditoria', [AuditoriaController::class, 'index']);
+    });
+
+    // --- AULAS ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('aulas', [AulaController::class, 'index']);
         Route::get('aulas/{id}', [AulaController::class, 'show']);
     });
 
-    // Modificación de aulas (admin y docente)
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::post('aulas', [AulaController::class, 'store']);
         Route::put('aulas/{id}', [AulaController::class, 'update']);
         Route::delete('aulas/{id}', [AulaController::class, 'destroy']);
     });
 
-    // Lectura de exámenes (admin, docente y auxiliar)
+    // --- EXÁMENES ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('examenes', [ExamenController::class, 'index']);
         Route::get('examenes/{id}', [ExamenController::class, 'show']);
     });
 
-    // Escritura de exámenes (solo admin y docente)
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::post('examenes', [ExamenController::class, 'store']);
         Route::put('examenes/{id}', [ExamenController::class, 'update']);
         Route::delete('examenes/{id}', [ExamenController::class, 'destroy']);
     });
 
-    // Lectura de materias (admin, docente, auxiliar)
+    // --- MATERIAS ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('materias', [MateriaController::class, 'index']);
         Route::get('materias/{id}', [MateriaController::class, 'show']);
     });
 
-    // Escritura de materias (admin y docente)
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::post('materias', [MateriaController::class, 'store']);
         Route::put('materias/{id}', [MateriaController::class, 'update']);
         Route::delete('materias/{id}', [MateriaController::class, 'destroy']);
     });
 
-    // Lectura de normas (admin, docente y auxiliar)
+    // --- NORMAS ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('normas', [NormaController::class, 'index']);
         Route::get('normas/{id}', [NormaController::class, 'show']);
     });
 
-    // Gestión de normas y asignación a exámenes (admin y docente)
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::post('normas', [NormaController::class, 'store']);
         Route::put('normas/{id}', [NormaController::class, 'update']);
         Route::delete('normas/{id}', [NormaController::class, 'destroy']);
-        
-        // Endpoint para sincronizar las normas de un examen
         Route::post('examenes/{id}/normas', [NormaController::class, 'syncExamenNormas']);
     });
-
-
-
-
 });

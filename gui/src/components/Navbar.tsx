@@ -19,14 +19,19 @@ export const Navbar: React.FC<NavbarProps> = ({
   const location = useLocation()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
-  const navItems = [
-  { name: 'Inicio', href: '#' },
-  { name: 'Mis exámenes', href: '/mis-examenes' },
-  { name: 'Estudiantes', href: '/estudiantes?rol=docente' },
-  { name: 'Cronograma', href: '#' },
+  const baseNavItems = [
+    { name: 'Inicio', href: '/dashboard' },
+    { name: 'Mis exámenes', href: '/mis-examenes' },
+    { name: 'Estudiantes', href: '/estudiantes?rol=docente' },
+    { name: 'Cronograma', href: '#' },
+    { name: 'Normativas', href: '/normas' },
+    { name: 'Perfil', href: '#' },
+  ]
 
-  { name: 'Perfil', href: '#' },
-]
+  const navItems =
+    rol?.toLowerCase() === 'admin'
+      ? [...baseNavItems, { name: 'Auditoría', href: '/dashboard/auditoria' }]
+      : baseNavItems
 
   const handleLogoutClick = async () => {
     setIsLoggingOut(true)
@@ -34,7 +39,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
     try {
       if (token) {
-        // Petición al endpoint protegido en api.php
         await fetch(`${API_BASE_URL}/logout`, {
           method: 'POST',
           headers: {
@@ -47,7 +51,6 @@ export const Navbar: React.FC<NavbarProps> = ({
     } catch (err) {
       console.error('Error al revocar token en servidor:', err)
     } finally {
-      // Limpiar almacenamiento local sin importar si falló la red
       localStorage.removeItem('auth_token')
       localStorage.removeItem('user_role')
       localStorage.removeItem('user_data')
@@ -92,7 +95,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Menú de Navegación */}
           <nav className="flex h-full items-center gap-1">
             {navItems.map((item) => {
-              const isActive = location.pathname === item.href.split('?')[0]
+              const isActive =
+                item.href !== '#' && location.pathname === item.href.split('?')[0]
 
               return (
                 <button

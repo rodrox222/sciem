@@ -15,7 +15,6 @@ use Illuminate\Support\Str;
 
 class ForgotPasswordController extends Controller
 {
-
     /**
      * Solicitar enlace de recuperación vía email.
      */
@@ -29,10 +28,13 @@ class ForgotPasswordController extends Controller
 
         // Previene la enumeración de usuarios
         if (!$cuenta) {
-            return response()->json(['message' => 'Si el correo electrónico existe en el sistema, recibirá un enlace de recuperación.'], 200);
+            return response()->json([
+                'message' => 'Si el correo electrónico existe en el sistema, recibirá un enlace de recuperación.'
+            ], 200);
         }
 
         $user = $cuenta['user'];
+        $tipo = $cuenta['tipo'];
 
         // Generar token criptográfico
         $plainToken = Str::random(64);
@@ -55,16 +57,28 @@ class ForgotPasswordController extends Controller
                     ->subject('Restablecimiento de Contraseña - SCI');
         });
 
-        // Registrar auditoría polimórfica
+        // Registrar auditoría compatible con la migración
+        $nombreCompleto = trim("{$user->nombre} {$user->apellido_paterno} " . ($user->apellido_materno ?? ''));
+
         LogAuditoria::create([
-            'user_type' => get_class($user),
-            'user_id'   => $user->id,
-            'accion'    => 'PASSWORD_RESET_SOLICITADO',
-            'ip_origen' => $request->ip() ?? '127.0.0.1',
-            'detalles'  => ['email' => $user->email, 'rol' => $cuenta['tipo']],
+            'user_type'          => get_class($user),
+            'user_id'            => $user->id,
+            'rol_en_el_momento'  => $tipo,
+            'usuario_nombre'     => $nombreCompleto,
+            'usuario_email'      => $user->email,
+            'modulo'             => 'Autenticacion',
+            'accion'             => 'PASSWORD_RESET_SOLICITADO',
+            'ip_origen'          => $request->ip() ?? '127.0.0.1',
+            'user_agent'         => $request->userAgent(),
+            'detalles'           => [
+                'email' => $user->email,
+                'rol'   => $tipo,
+            ],
         ]);
 
-        return response()->json(['message' => 'Si el correo electrónico existe en el sistema, recibirá un enlace de recuperación.'], 200);
+        return response()->json([
+            'message' => 'Si el correo electrónico existe en el sistema, recibirá un enlace de recuperación.'
+        ], 200);
     }
 
     /**
@@ -86,6 +100,7 @@ class ForgotPasswordController extends Controller
         }
 
         $user = $cuenta['user'];
+        $tipo = $cuenta['tipo'];
 
         // Actualizar clave hasheada
         $user->forceFill([
@@ -98,15 +113,22 @@ class ForgotPasswordController extends Controller
         // Eliminar token para garantizar un solo uso
         DB::table('password_reset_tokens')->where('email', $request->email)->delete();
 
-        // Registrar auditoria
+        // Registrar auditoría de éxito
+        $nombreCompleto = trim("{$user->nombre} {$user->apellido_paterno} " . ($user->apellido_materno ?? ''));
+
         LogAuditoria::create([
-            'user_type' => get_class($user),
-            'user_id'   => $user->id,
-            'accion'    => 'PASSWORD_RESET_EXITOSO',
-            'ip_origen' => $request->ip() ?? '127.0.0.1',
-            'detalles'  => [
-                'rol'     => $cuenta['tipo'],
-                'mensaje' => 'Contraseña actualizada y sesiones revocadas',
+            'user_type'          => get_class($user),
+            'user_id'            => $user->id,
+            'rol_en_el_momento'  => $tipo,
+            'usuario_nombre'     => $nombreCompleto,
+            'usuario_email'      => $user->email,
+            'modulo'             => 'Autenticacion',
+            'accion'             => 'PASSWORD_RESET_EXITOSO',
+            'ip_origen'          => $request->ip() ?? '127.0.0.1',
+            'user_agent'         => $request->userAgent(),
+            'detalles'           => [
+                'rol'     => $tipo,
+                'mensaje' => 'Contraseña actualizada y sesiones previas revocadas',
             ],
         ]);
 
@@ -138,7 +160,7 @@ class ForgotPasswordController extends Controller
     }
 
     /**
-     * Busca la cuenta tanto en docente como en auxiliar
+     * Busca la cuenta tanto en docente como en auxiliar.
      */
     private function buscarPorEmail(string $email): ?array
     {

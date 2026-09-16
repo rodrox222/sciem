@@ -1,8 +1,8 @@
-import React from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Check, Info } from 'lucide-react'
+import React from 'react'
 import logoSSO from '../assets/logo SSO.svg'
 import { useLogin } from '../hooks/useLogin'
 
@@ -182,8 +182,9 @@ export const LoginView: React.FC<LoginViewProps> = ({
             </Label>
             <Input
               id="login-email"
-              type="email"
+              type="text"
               required
+              placeholder={selectedRole === 'Administrador' ? 'Ej. 1234567' : 'correo@umss.edu'}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="h-12 text-xs text-sci-dark bg-white border-sci-border rounded-xl focus-visible:ring-sci-blue"

@@ -1,7 +1,7 @@
 import React from 'react'
-import { Navbar } from '../components/Navbar'
-import { Footer } from '../components/Footer'
 import { ConfirmModal } from '../components/ConfirmModal'
+import { Footer } from '../components/Footer'
+import { Navbar } from '../components/Navbar'
 import { useIdleTimer } from '../hooks/useIdleTimer'
 
 interface MainLayoutProps {
@@ -9,13 +9,43 @@ interface MainLayoutProps {
 }
 
 export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
-  const { showModal, secondsRemaining, handleLogout, handleStayActive } =
-    useIdleTimer()
+  const handleLogout = () => {
+    localStorage.removeItem('auth_token')
+    localStorage.removeItem('user_role')
+    localStorage.removeItem('user_data')
+    window.location.href = '/login'
+  }
+
+  const role = localStorage.getItem('user_role') || 'Docente'
+  let displayName = role
+  try {
+    const userDataRaw = localStorage.getItem('user_data')
+    const userData = userDataRaw ? JSON.parse(userDataRaw) : null
+    if (userData?.nombre) {
+      displayName = `${userData.nombre} ${userData.apellido || ''}`.trim()
+    }
+  } catch {
+    // Si el JSON guardado no es válido, se mantiene el rol como respaldo
+  }
+
+  // Listener de inactividad (5 min total, modal 1 min antes)
+  // Se mapean los nombres retornados hacia los esperados por el JSX
+  const idleHook = useIdleTimer({
+    timeout: 5 * 60 * 1000,
+    promptBefore: 1 * 60 * 1000,
+    onIdle: handleLogout,
+  } as any)
+
+  const showModal = idleHook?.showModal ?? idleHook?.isPrompted ?? false
+  const secondsRemaining =
+    idleHook?.secondsRemaining ??
+    (idleHook?.remainingTime ? Math.ceil(idleHook.remainingTime / 1000) : 60)
+  const handleStayActive = idleHook?.handleStayActive ?? idleHook?.stayLoggedIn ?? (() => {})
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
       {/* Barra de navegación superior */}
-      <Navbar onLogout={handleLogout} />
+      <Navbar rol={role} usuario={displayName} onLogout={handleLogout} />
 
       {/* Área principal de contenido */}
       <main className="flex-1 w-full max-w-7xl mx-auto p-6">
