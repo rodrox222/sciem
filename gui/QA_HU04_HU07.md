@@ -146,6 +146,10 @@ Comprobar que no exista scroll horizontal, textos superpuestos ni botones cortad
 
 En `EXAMEN-QA-DOCENTE`, la lista de Ana y Luis se presenta como tarjetas con SIS, CI, correo y acción de edición visibles. El modal Registrar estudiante cabe en el ancho móvil, permite desplazarse dentro del formulario y, al llegar al final, muestra completo el aviso informativo y las acciones Registrar estudiante y Cancelar. En las capturas revisadas no se observaron campos ni botones recortados horizontalmente.
 
+### Evidencia responsive a 768 px (2026-09-17)
+
+El formulario Programar examen mantiene visibles las secciones de datos, horario, aula y normas, y las acciones del pie son accesibles al desplazarse. En el listado Exámenes, el filtro de seis columnas comprimía el texto de búsqueda, estado y fecha. Se ajustó a dos columnas a ancho de tableta, con búsqueda a todo el ancho, estado y fecha en la segunda fila y Buscar y Limpiar en la tercera. La captura después de aplicar el cambio muestra los cinco controles completos, sin corte horizontal visible.
+
 ## 8. Antes de solicitar integración
 
 ```bash
