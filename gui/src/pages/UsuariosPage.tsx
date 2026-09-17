@@ -913,24 +913,38 @@ export default function UsuariosPage() {
             'auth_token'
           )
 
-        // Actualmente el backend utiliza
-        // DELETE para desactivar.
-        // La activación será ajustada
-        // cuando backend agregue ese soporte.
-
+        /*
+         * El backend maneja:
+         * - DELETE /users/{id} -> desactivar
+         * - PUT /users/{id} -> activar enviando activo: true
+         */
         const respuesta =
           await fetch(
             `${API_BASE_URL}/users/${usuarioEstado.id}`,
             {
-              method: 'DELETE',
+              method:
+                usuarioEstado.activo
+                  ? 'DELETE'
+                  : 'PUT',
 
               headers: {
                 Accept:
                   'application/json',
 
+                'Content-Type':
+                  'application/json',
+
                 Authorization:
                   `Bearer ${token}`,
               },
+
+              ...(usuarioEstado.activo
+                ? {}
+                : {
+                    body: JSON.stringify({
+                      activo: true,
+                    }),
+                  }),
             }
           )
 
