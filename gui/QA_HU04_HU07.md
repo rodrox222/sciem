@@ -142,6 +142,10 @@ Comprobar que no exista scroll horizontal, textos superpuestos ni botones cortad
 5. registro persistente después de recargar;
 6. la misma operación en móvil.
 
+### Evidencia responsive a 390 px (2026-09-17)
+
+En `EXAMEN-QA-DOCENTE`, la lista de Ana y Luis se presenta como tarjetas con SIS, CI, correo y acción de edición visibles. El modal Registrar estudiante cabe en el ancho móvil, permite desplazarse dentro del formulario y, al llegar al final, muestra completo el aviso informativo y las acciones Registrar estudiante y Cancelar. En las capturas revisadas no se observaron campos ni botones recortados horizontalmente.
+
 ## 8. Antes de solicitar integración
 
 ```bash
