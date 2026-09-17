@@ -121,6 +121,10 @@ En `EXAMEN-QA-DOCENTE`, con Ana López (SIS `202104590`, CI `8234568A`) registra
 
 Al registrar a Luis Vargas con SIS `202104591`, CI `8234569A` y correo `202104591@est.umss.edu`, el listado mostró dos estudiantes habilitados, Ana y Luis. Tras recargar la página, Ana y Luis continúan visibles y el total sigue en dos. Al buscar el SIS `202104591`, solo aparece Luis; el contador de habilitados visibles indica uno por efecto del filtro y el total registrado permanece en dos.
 
+### Evidencia HU-07: estudiantes por examen (2026-09-17)
+
+Al abrir Estudiantes desde `EXAMEN-QA-001`, el listado mostró únicamente a Carlos Vargas Flores (SIS `202104589`, CI `8234567A`), con un estudiante registrado y cero habilitados porque había sido marcado Inhabilitado. Ana y Luis, registrados en `EXAMEN-QA-DOCENTE`, no aparecen en ese examen.
+
 ## 7. Responsive y evidencias
 
 Repetir los flujos principales con las herramientas de desarrollador del navegador:
