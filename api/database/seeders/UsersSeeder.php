@@ -29,7 +29,7 @@ class UsersSeeder extends Seeder
 
         // Docente
         DB::table('docente')->updateOrInsert(
-            ['email' => 'diegoherrera4900@gmail.com'],
+            ['email' => 'docente@fcyt.umss.edu.bo'],
             [
                 'id' => (string) Str::uuid(),
                 'ci' => '7654321',
