@@ -119,7 +119,7 @@ En la sesión docente, al inscribir a Ana López (SIS `202104590`, CI `8234568A`
 
 En `EXAMEN-QA-DOCENTE`, con Ana López (SIS `202104590`, CI `8234568A`) registrada, el intento de agregar a Luis con el mismo SIS mostró «El código SIS ya está registrado.» junto al campo. Al usar SIS `202104591` y repetir CI `8234568A` sin complemento, el formulario mostró «El CI y complemento ya están registrados.» junto al CI. El listado continuó mostrando un solo estudiante tras ambos rechazos.
 
-Al registrar a Luis Vargas con SIS `202104591`, CI `8234569A` y correo `202104591@est.umss.edu`, el listado mostró dos estudiantes habilitados, Ana y Luis. La persistencia de Luis tras recargar la página está pendiente de comprobación.
+Al registrar a Luis Vargas con SIS `202104591`, CI `8234569A` y correo `202104591@est.umss.edu`, el listado mostró dos estudiantes habilitados, Ana y Luis. Tras recargar la página, Ana y Luis continúan visibles y el total sigue en dos. Al buscar el SIS `202104591`, solo aparece Luis; el contador de habilitados visibles indica uno por efecto del filtro y el total registrado permanece en dos.
 
 ## 7. Responsive y evidencias
 
