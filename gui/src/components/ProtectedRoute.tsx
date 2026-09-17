@@ -42,7 +42,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) 
   }
 
   if (allowedRoles && userRole && !allowedRoles.includes(userRole.toLowerCase())) {
-    return <Navigate to="/login" replace />
+    return <Navigate to="/dashboard" replace />
   }
 
   return <Outlet />

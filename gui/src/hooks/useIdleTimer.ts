@@ -12,10 +12,18 @@ export const useIdleTimer = () => {
 
   const handleLogout = useCallback(() => {
     setShowModal(false)
+
+    // Guarda la URL si nos botan por inactividad
+    const currentPath = window.location.pathname + window.location.search
+    if (currentPath && currentPath !== '/login') {
+      localStorage.setItem('sciem_idle_redirect', currentPath)
+    }
+
     localStorage.removeItem('auth_token')
     localStorage.removeItem('user_role')
     localStorage.removeItem(STORAGE_KEY)
-    // Redirección dura inmediata: evita que pinte el dashboard
+    
+    // Redirige a la página de login
     window.location.replace('/login')
   }, [])
 

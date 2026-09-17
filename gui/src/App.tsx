@@ -15,26 +15,23 @@ import ProgramarExamenAdminPage from './pages/ProgramarExamenAdminPage'
 import MisExamenesPage from './pages/MisExamenesPage'
 import EstudiantesPage from './pages/EstudiantesPage'
 
-// Páginas de integracion-front-back
+// Páginas de auditoría
 import { AuditoriaPage } from './pages/AuditoriaPage'
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Ruta principal */}
+        {/* Landing Público general */}
         <Route path="/" element={<HomePage />} />
 
-        {/* Rutas Públicas */}
+        {/* Rutas Públicas (solo si NO has iniciado sesión) */}
         <Route element={<PublicRoute />}>
           <Route path="/login" element={<LoginPage />} />
-          <Route
-            path="/recuperar-contrasena"
-            element={<ForgotPasswordPage />}
-          />
+          <Route path="/recuperar-contrasena" element={<ForgotPasswordPage />} />
         </Route>
 
-        {/* Rutas Protegidas Generales */}
+        {/* 1. Rutas compartidas por cualquier usuario logueado (Admin, Docente, Auxiliar) */}
         <Route element={<ProtectedRoute />}>
           <Route
             path="/dashboard"
@@ -45,20 +42,16 @@ export default function App() {
               </>
             }
           />
-          <Route path="/aulas" element={<AulasPage />} />
-          <Route path="/normas" element={<NormasPage />} />
           <Route path="/examenes" element={<ExamenesPage />} />
           <Route path="/mis-examenes" element={<MisExamenesPage />} />
-          <Route path="/programar-examen" element={<ProgramarExamenPage />} />
-          <Route
-            path="/programar-examen-admin"
-            element={<ProgramarExamenAdminPage />}
-          />
           <Route path="/estudiantes" element={<EstudiantesPage />} />
         </Route>
 
-        {/* Rutas Protegidas por Rol (Admin) */}
+        {/* 2. Rutas EXCLUSIVAS de ADMINISTRADOR */}
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+          <Route path="/normas" element={<NormasPage />} />
+          <Route path="/aulas" element={<AulasPage />} />
+          <Route path="/programar-examen-admin" element={<ProgramarExamenAdminPage />} />
           <Route
             path="/dashboard/auditoria"
             element={
@@ -70,8 +63,13 @@ export default function App() {
           />
         </Route>
 
-        {/* Ruta comodín por defecto */}
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        {/* 3. Rutas exclusivas para DOCENTE y ADMINISTRADOR */}
+        <Route element={<ProtectedRoute allowedRoles={['admin', 'docente']} />}>
+          <Route path="/programar-examen" element={<ProgramarExamenPage />} />
+        </Route>
+
+        {/* Redirección por defecto */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   )

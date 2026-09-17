@@ -17,23 +17,25 @@ class AuthController extends Controller
     private const IP_FALLBACK = '127.0.0.1';
 
     /**
-     * Inicio de sesión
+     * Inicio de sesión sin selector de rol previo
      */
     public function login(Request $request): JsonResponse
     {
         $request->validate([
-            'email'    => 'required|string',
+            'email' => [
+                'required',
+                'string',
+                'regex:/^([a-zA-Z0-9._%+-]+@(est\.umss\.edu|fcyt\.umss\.edu\.bo)|[0-9]+)$/'
+            ],
             'password' => 'required|string',
-            'role'     => 'required|string|in:admin,docente,auxiliar,administrador',
+        ], [
+            'email.regex' => 'Debe ingresar un correo institucional válido.'
         ]);
 
-        $rolNormalizado = strtolower($request->role);
-        if ($rolNormalizado === 'administrador') {
-            $rolNormalizado = 'admin';
-        }
-
-        $identificador = trim($request->email);
-        $user = $this->buscarUsuarioPorRol($rolNormalizado, $identificador);
+        $identificador = trim(strtolower($request->email));
+        
+        // Determinar tabla y buscar usuario automáticamente
+        [$user, $rolDetectado] = $this->identificarYBuscarUsuario($identificador);
 
         // Validar existencia y contraseña
         if (!$user || !Hash::check($request->password, $user->password)) {
@@ -41,10 +43,9 @@ class AuthController extends Controller
                 request: $request,
                 accion: 'LOGIN_FALLIDO',
                 user: $user,
-                rolFallback: $rolNormalizado,
+                rolFallback: $rolDetectado ?? 'desconocido',
                 detalles: [
                     'identificador_intentado' => $identificador,
-                    'rol_seleccionado'        => $rolNormalizado,
                     'motivo'                  => 'Credenciales inválidas',
                 ]
             );
@@ -60,14 +61,14 @@ class AuthController extends Controller
                 request: $request,
                 accion: 'LOGIN_BLOQUEADO',
                 user: $user,
-                rolFallback: $rolNormalizado,
+                rolFallback: $rolDetectado,
                 detalles: [
                     'motivo' => 'Intento de acceso con cuenta inactiva',
                 ]
             );
 
             return response()->json([
-                'message' => 'Su cuenta se encuentra desactivada.',
+                'message' => 'Su cuenta se encuentra desactivada. Comuníquese con administración.',
             ], 403);
         }
 
@@ -82,20 +83,21 @@ class AuthController extends Controller
             request: $request,
             accion: 'LOGIN_EXITOSO',
             user: $user,
-            rolFallback: $rolNormalizado,
-            detalles: ['rol' => $rolNormalizado]
+            rolFallback: $rolDetectado,
+            detalles: ['rol' => $rolDetectado]
         );
 
         return response()->json([
             'message' => 'Inicio de sesión exitoso',
             'token'   => $token,
             'user'    => [
-                'id'       => $user->id,
-                'ci'       => $user->ci,
-                'nombre'   => $user->nombre,
-                'apellido' => trim("{$user->apellido_paterno} {$user->apellido_materno}"),
-                'email'    => $user->email ?? null,
-                'rol'      => $rolNormalizado,
+                'id'           => $user->id,
+                'ci'           => $user->ci,
+                'nombre'       => $user->nombre,
+                'apellido'     => trim("{$user->apellido_paterno} {$user->apellido_materno}"),
+                'email'        => $user->email ?? null,
+                'rol'          => $rolDetectado,
+                'tipo_usuario' => $rolDetectado,
             ],
         ], 200);
     }
@@ -124,6 +126,32 @@ class AuthController extends Controller
     }
 
     // --- MÉTODOS AUXILIARES ---
+
+    /**
+     * Localiza el usuario en su tabla correspondiente según su correo o identificador numérico
+     */
+    private function identificarYBuscarUsuario(string $identificador): array
+    {
+        // 1. Docente (@fcyt.umss.edu.bo)
+        if (str_ends_with($identificador, '@fcyt.umss.edu.bo')) {
+            $docente = Docente::where('email', $identificador)->first();
+            return [$docente, 'docente'];
+        }
+
+        // 2. Auxiliar / Estudiante (@est.umss.edu)
+        if (str_ends_with($identificador, '@est.umss.edu')) {
+            $auxiliar = Auxiliar::where('email', $identificador)->first();
+            return [$auxiliar, 'auxiliar'];
+        }
+
+        // 3. Admin (por CI numérico)
+        if (ctype_digit($identificador)) {
+            $admin = Admin::where('ci', $identificador)->first();
+            return [$admin, 'admin'];
+        }
+
+        return [null, null];
+    }
 
     /**
      * Centraliza la persistencia de auditoría para eventos de autenticación
@@ -160,25 +188,5 @@ class AuthController extends Controller
             'user_agent'        => $request->userAgent(),
             'detalles'          => $detalles,
         ]);
-    }
-
-    /**
-     * Localiza el usuario en su tabla correspondiente
-     */
-    private function buscarUsuarioPorRol(string $rol, string $identificador): ?Model
-    {
-        return match ($rol) {
-            'docente' => Docente::where('email', $identificador)
-                ->orWhere('ci', $identificador)
-                ->first(),
-
-            'auxiliar' => Auxiliar::where('email', $identificador)
-                ->orWhere('ci', $identificador)
-                ->first(),
-
-            'admin' => Admin::where('ci', $identificador)->first(),
-
-            default => null,
-        };
     }
 }
