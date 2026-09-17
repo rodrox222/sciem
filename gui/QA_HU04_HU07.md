@@ -113,7 +113,13 @@ Abrir **Estudiantes** o usar **Estudiantes** desde la tarjeta de un examen.
 
 En la sesión docente, al inscribir a Ana López (SIS `202104590`, CI `8234568A`) en `EXAMEN-QA-DOCENTE`, el correo `ana@gmail.com` fue aceptado y el registro apareció en la lista. El formulario indicaba «Correo institucional». La validación del frontend ahora exige el dominio estudiantil `@est.umss.edu` al crear o editar estudiantes.
 
-**Pendiente del equipo de backend:** las solicitudes `POST /api/estudiantes` y `POST /api/examenes/{id}/estudiantes` validan el formato del correo, pero no su dominio. Una petición directa al API puede registrar correos externos. Este hallazgo no se corrige en la API desde la rama de frontend. El dato de prueba de Ana ya quedó registrado con `ana@gmail.com` antes de la corrección; actualizarlo a `202104590@est.umss.edu` desde la interfaz para continuar con las pruebas.
+**Pendiente del equipo de backend:** las solicitudes `POST /api/estudiantes` y `POST /api/examenes/{id}/estudiantes` validan el formato del correo, pero no su dominio. Una petición directa al API puede registrar correos externos. Este hallazgo no se corrige en la API desde la rama de frontend. El dato de prueba de Ana fue corregido desde la interfaz a `202104590@est.umss.edu`; el listado mostró la dirección institucional después de guardar.
+
+### Evidencia HU-07: duplicados y registro válido (2026-09-17)
+
+En `EXAMEN-QA-DOCENTE`, con Ana López (SIS `202104590`, CI `8234568A`) registrada, el intento de agregar a Luis con el mismo SIS mostró «El código SIS ya está registrado.» junto al campo. Al usar SIS `202104591` y repetir CI `8234568A` sin complemento, el formulario mostró «El CI y complemento ya están registrados.» junto al CI. El listado continuó mostrando un solo estudiante tras ambos rechazos.
+
+Al registrar a Luis Vargas con SIS `202104591`, CI `8234569A` y correo `202104591@est.umss.edu`, el listado mostró dos estudiantes habilitados, Ana y Luis. La persistencia de Luis tras recargar la página está pendiente de comprobación.
 
 ## 7. Responsive y evidencias
 
