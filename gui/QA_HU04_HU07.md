@@ -123,7 +123,7 @@ Al registrar a Luis Vargas con SIS `202104591`, CI `8234569A` y correo `20210459
 
 ### Evidencia HU-07: estudiantes por examen (2026-09-17)
 
-Al abrir Estudiantes desde `EXAMEN-QA-001`, el listado mostró únicamente a Carlos Vargas Flores (SIS `202104589`, CI `8234567A`), con un estudiante registrado y cero habilitados porque había sido marcado Inhabilitado. Ana y Luis, registrados en `EXAMEN-QA-DOCENTE`, no aparecen en ese examen.
+Al abrir Estudiantes desde `EXAMEN-QA-001`, el listado mostró únicamente a Carlos Vargas Flores (SIS `202104589`, CI `8234567A`), con un estudiante registrado y cero habilitados porque había sido marcado Inhabilitado. Ana y Luis, registrados en `EXAMEN-QA-DOCENTE`, no aparecen en ese examen. Después, se editó a Carlos para volver a Habilitado y, tras recargar, los contadores mostraron un registrado y un habilitado.
 
 ## 7. Responsive y evidencias
 
