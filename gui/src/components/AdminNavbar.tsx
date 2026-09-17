@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Menu, X } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import logoSSO from '../assets/logo SSO.svg'
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8200/api'
@@ -17,6 +18,7 @@ export function AdminNavbar({
   const location = useLocation()
   const navigate = useNavigate()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   const navItems = [
   { name: 'Inicio', href: '/dashboard' },
@@ -65,26 +67,26 @@ export function AdminNavbar({
   return (
     <header className="w-full font-sans shadow-sm sticky top-0 z-40">
       {/* Franja Superior Institucional */}
-      <div className="bg-[#002b5b] text-white px-8 py-1.5 flex justify-between items-center text-xs tracking-wide">
-        <span className="font-semibold uppercase tracking-wider">
+      <div className="bg-[#002b5b] text-white px-4 py-1.5 sm:px-8 flex justify-between items-center text-xs tracking-wide">
+        <span className="font-semibold uppercase tracking-wider text-[10px] sm:text-xs">
           FACULTAD DE CIENCIAS Y TECNOLOGÍA
         </span>
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-cyan-400 inline-block shadow-[0_0_6px_#22d3ee]" />
-          <span className="text-slate-100">Sesión institucional activa</span>
+          <span className="hidden text-slate-100 min-[400px]:inline">Sesión institucional activa</span>
         </div>
       </div>
 
       {/* Barra Principal con el fondo gris institucional idéntico al diseño */}
-      <div className="border-b border-slate-300 bg-slate-200/70 px-8">
-        <div className="flex items-center justify-between h-20">
+      <div className="border-b border-slate-300 bg-slate-200/70 px-4 sm:px-8">
+        <div className="flex h-16 items-center justify-between gap-3 2xl:h-20">
 
           {/* Logo SCI con su icono */}
           <div className="flex items-center gap-3">
             <img
                 src={logoSSO}
                 alt="Logo Institucional"
-                className="h-11 w-auto object-contain"
+                className="h-10 w-auto object-contain 2xl:h-11"
                 />
             <div className="flex items-center">
               <span className="font-extrabold text-2xl text-[#002b5b] tracking-tight">
@@ -94,7 +96,7 @@ export function AdminNavbar({
           </div>
 
           {/* Menú de Navegación Centrado (Con el fondo y borde inferior de la pestaña activa) */}
-          <nav className="flex h-full items-center">
+          <nav className="hidden h-full items-center 2xl:flex">
             {navItems.map((item) => {
               const isActive = location.pathname === item.href.split('?')[0]
 
@@ -122,9 +124,25 @@ export function AdminNavbar({
             })}
           </nav>
 
+          <div className="flex items-center gap-2 2xl:hidden">
+            <span className="hidden max-w-28 truncate text-xs font-semibold text-[#002b5b] sm:block">
+              {usuario}
+            </span>
+            <button
+              type="button"
+              aria-label={isMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+              aria-controls="mobile-admin-nav"
+              aria-expanded={isMenuOpen}
+              onClick={() => setIsMenuOpen((open) => !open)}
+              className="grid h-11 w-11 place-items-center rounded-lg border border-slate-300 text-[#002b5b]"
+            >
+              {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
+          </div>
+
           {/* Perfil de Usuario Administrador (Tarjeta con la letra A en rojo) */}
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-3 bg-white/80 border border-slate-300 px-3 py-1.5 rounded-xl shadow-sm">
+            <div className="hidden items-center gap-3 rounded-xl border border-slate-300 bg-white/80 px-3 py-1.5 shadow-sm 2xl:flex">
               <div className="w-9 h-9 rounded-lg bg-red-50 text-red-600 border border-red-200 flex items-center justify-center font-bold text-sm select-none">
                 {usuario.charAt(0).toUpperCase()}
               </div>
@@ -152,6 +170,45 @@ export function AdminNavbar({
 
         </div>
       </div>
+      {isMenuOpen && (
+        <nav
+          id="mobile-admin-nav"
+          aria-label="Navegación móvil del administrador"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setIsMenuOpen(false)
+          }}
+          className="max-h-[calc(100dvh-6rem)] overflow-y-auto border-b border-slate-300 bg-white px-4 py-3 shadow-sm 2xl:hidden"
+        >
+          <div className="mx-auto max-w-7xl space-y-1">
+            <p className="px-3 py-2 text-xs text-slate-500">{usuario} · {rol}</p>
+            {navItems.map((item) => (
+              <button
+                key={item.name}
+                type="button"
+                aria-current={location.pathname === item.href.split('?')[0] ? 'page' : undefined}
+                onClick={() => {
+                  setIsMenuOpen(false)
+                  navigate(item.href)
+                }}
+                className="block min-h-11 w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-[#002b5b] hover:bg-slate-100 aria-[current=page]:bg-blue-50 aria-[current=page]:font-bold"
+              >
+                {item.name}
+              </button>
+            ))}
+            <button
+              type="button"
+              disabled={isLoggingOut}
+              onClick={() => {
+                setIsMenuOpen(false)
+                void handleLogoutClick()
+              }}
+              className="block min-h-11 w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-[#B0040E] hover:bg-red-50 disabled:opacity-50"
+            >
+              {isLoggingOut ? 'Cerrando...' : 'Cerrar sesión'}
+            </button>
+          </div>
+        </nav>
+      )}
     </header>
   )
 }
