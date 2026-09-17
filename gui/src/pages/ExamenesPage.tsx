@@ -14,6 +14,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Users,
   X,
 } from 'lucide-react'
 
@@ -258,6 +259,7 @@ export default function ExamenesPage() {
                     <div className="flex gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#168FBD]" /><div><dt className="sr-only">Aula</dt><dd>{exam.aula?.nombre ?? 'Aula asignada'}</dd></div></div>
                   </dl>
                   <div className="mt-auto flex flex-wrap gap-2 border-t border-[#E2E8F0] pt-4">
+                    <button type="button" onClick={() => navigate(`/estudiantes?examen=${exam.id}`)} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-[#168FBD]/30 px-3 text-sm font-semibold text-[#08759E] hover:bg-[#168FBD]/8"><Users className="h-4 w-4" /> Estudiantes</button>
                     <button type="button" onClick={() => setSelected(exam)} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-[#E2E8F0] px-3 text-sm font-semibold text-[#003770] hover:bg-[#F7F7F7]"><Eye className="h-4 w-4" /> Ver</button>
                     {canManage && exam.estado === 'Programado' && (
                       <button type="button" onClick={() => navigate(`/programar-examen?edit=${exam.id}`)} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-[#0056B3] px-3 text-sm font-semibold text-white hover:bg-[#003770]"><Pencil className="h-4 w-4" /> Editar</button>
