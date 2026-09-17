@@ -52,6 +52,10 @@ const todayLocal = () => {
 
 const normalizeDate = (date: string) => date.slice(0, 10)
 const normalizeTime = (time: string) => time.slice(0, 5)
+const formatTeacherName = (teacher: DocenteItem) =>
+  [teacher.nombre, teacher.apellido ?? [teacher.apellido_paterno, teacher.apellido_materno].filter(Boolean).join(' ')]
+    .filter(Boolean)
+    .join(' ')
 
 const addMinutes = (time: string, duration: number) => {
   if (!/^\d{2}:\d{2}$/.test(time) || duration <= 0) return ''
@@ -83,6 +87,7 @@ export default function ProgramarExamenPage() {
   const [materias, setMaterias] = useState<CatalogItem[]>([])
   const [aulas, setAulas] = useState<Aula[]>([])
   const [docentes, setDocentes] = useState<DocenteItem[]>([])
+  const selectedTeacher = docentes.find((teacher) => teacher.id === form.id_docente)
   const [normas, setNormas] = useState<Norma[]>([])
   const [selectedNorms, setSelectedNorms] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
@@ -127,7 +132,11 @@ export default function ProgramarExamenPage() {
           : rooms.data,
       )
       setNormas(rules)
-      setDocentes(teachers)
+      setDocentes(
+        !isAdmin && exam?.docente && !teachers.some((teacher) => teacher.id === exam.docente?.id)
+          ? [...teachers, exam.docente]
+          : teachers,
+      )
 
       if (exam) {
         setForm({
@@ -334,19 +343,30 @@ export default function ProgramarExamenPage() {
                   <span className="flex items-center gap-2 text-sm font-semibold text-[#1E293B]">
                     <UserRound className="h-4 w-4 text-[#168FBD]" /> Docente responsable *
                   </span>
-                  <select
-                    value={form.id_docente}
-                    onChange={(event) => setField('id_docente', event.target.value)}
-                    disabled={!isAdmin}
-                    className="h-11 w-full rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm outline-none focus:border-[#0056B3] disabled:bg-[#F7F7F7]"
-                  >
-                    <option value="">Seleccionar docente</option>
-                    {docentes.map((teacher) => (
-                      <option key={teacher.id} value={teacher.id}>
-                        {teacher.nombre} {teacher.apellido ?? teacher.apellido_paterno ?? ''}
-                      </option>
-                    ))}
-                  </select>
+                  {isAdmin ? (
+                    <select
+                      value={form.id_docente}
+                      onChange={(event) => setField('id_docente', event.target.value)}
+                      className="h-11 w-full rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm outline-none focus:border-[#0056B3]"
+                    >
+                      <option value="">Seleccionar docente</option>
+                      {docentes.map((teacher) => (
+                        <option key={teacher.id} value={teacher.id}>
+                          {formatTeacherName(teacher)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <>
+                      <input
+                        type="text"
+                        readOnly
+                        value={selectedTeacher ? formatTeacherName(selectedTeacher) : ''}
+                        className="h-11 w-full cursor-default rounded-lg border border-[#E2E8F0] bg-[#F7F7F7] px-3 text-sm text-[#1E293B] outline-none"
+                      />
+                      <p className="text-xs text-[#64748B]">Se asigna automáticamente desde tu sesión.</p>
+                    </>
+                  )}
                   {fieldErrors.id_docente && <p className="text-sm text-[#E30613]">{fieldErrors.id_docente}</p>}
                 </label>
               </div>
