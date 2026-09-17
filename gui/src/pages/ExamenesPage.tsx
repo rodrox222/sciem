@@ -224,7 +224,7 @@ export default function ExamenesPage() {
 
         <form
           onSubmit={applyFilters}
-          className="hidden grid-cols-6 gap-3 rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-sm md:grid"
+          className="hidden grid-cols-2 gap-3 rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-sm md:grid lg:grid-cols-6"
         >
           {filterFields}
         </form>
