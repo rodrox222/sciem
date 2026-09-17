@@ -9,6 +9,7 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  MoreVertical,
 } from 'lucide-react'
 import { AdminNavbar } from '../components/AdminNavbar'
 import { ConfirmModal } from '../components/ConfirmModal'
@@ -130,6 +131,13 @@ export default function UsuariosPage() {
     useState(false)
 
   // ==========================================================
+  // MENÚ DE ACCIONES EN MÓVIL
+  // ==========================================================
+
+  const [menuAbiertoId, setMenuAbiertoId] =
+    useState<string | null>(null)
+
+  // ==========================================================
   // CARGAR USUARIOS
   // ==========================================================
 
@@ -199,12 +207,18 @@ export default function UsuariosPage() {
         setUsuarios(datos.data || [])
 
         setPaginacion({
-          current_page: datos.current_page || 1,
-          last_page: datos.last_page || 1,
-          total: datos.total || 0,
-          per_page: datos.per_page || 10,
-          from: datos.from ?? null,
-          to: datos.to ?? null,
+          current_page:
+            datos.current_page || 1,
+          last_page:
+            datos.last_page || 1,
+          total:
+            datos.total || 0,
+          per_page:
+            datos.per_page || 10,
+          from:
+            datos.from ?? null,
+          to:
+            datos.to ?? null,
         })
       } catch (error) {
         console.error(
@@ -360,6 +374,7 @@ export default function UsuariosPage() {
   const abrirModalEditarUsuario = (
     usuario: Usuario
   ) => {
+    setMenuAbiertoId(null)
     setModoEdicion(true)
     setUsuarioEditando(usuario)
 
@@ -823,11 +838,11 @@ export default function UsuariosPage() {
       if (!respuesta.ok) {
         throw new Error(
           datos.message ||
-            (
-              modoEdicion
-                ? 'No se pudo actualizar el usuario.'
-                : 'No se pudo crear el usuario.'
-            )
+          (
+            modoEdicion
+              ? 'No se pudo actualizar el usuario.'
+              : 'No se pudo crear el usuario.'
+          )
         )
       }
 
@@ -866,6 +881,7 @@ export default function UsuariosPage() {
   const abrirConfirmacionEstado = (
     usuario: Usuario
   ) => {
+    setMenuAbiertoId(null)
     setUsuarioEstado(usuario)
     setMostrarConfirmacion(true)
   }
@@ -1201,7 +1217,7 @@ export default function UsuariosPage() {
                     key={
                       usuario.id
                     }
-                    className="overflow-hidden rounded-xl border border-[#E2E8F0] bg-white shadow-sm transition hover:shadow-md"
+                    className="overflow-visible rounded-xl border border-[#E2E8F0] bg-white shadow-sm transition hover:shadow-md"
                   >
 
                     {/* BARRA SUPERIOR */}
@@ -1218,17 +1234,15 @@ export default function UsuariosPage() {
 
                       {/* INFORMACIÓN */}
 
-                      <div className="flex min-w-0 items-center gap-4">
+                      <div className="flex w-full min-w-0 items-center gap-4">
 
                         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#E8F4F8] font-['Poppins'] text-lg font-bold text-[#003770]">
                           {usuario.nombre
-                            .charAt(
-                              0
-                            )
+                            .charAt(0)
                             .toUpperCase()}
                         </div>
 
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
 
                           <h2 className="truncate font-['Poppins'] text-lg font-semibold text-[#1E293B]">
                             {
@@ -1238,7 +1252,7 @@ export default function UsuariosPage() {
                             }
                           </h2>
 
-                          <p className="mt-1 text-sm text-[#64748B]">
+                          <p className="mt-1 truncate text-sm text-[#64748B]">
                             CI:{' '}
                             {
                               usuario.ci
@@ -1263,7 +1277,7 @@ export default function UsuariosPage() {
 
                       {/* DATOS Y ACCIONES */}
 
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <div className="flex w-full flex-row flex-wrap items-center justify-between gap-2 md:w-auto md:justify-end md:flex-nowrap">
 
                         {/* ROL */}
 
@@ -1291,44 +1305,115 @@ export default function UsuariosPage() {
                           }
                         </span>
 
-                        {/* EDITAR */}
+                        {/* ACCIONES EN ESCRITORIO */}
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            abrirModalEditarUsuario(
-                              usuario
-                            )
-                          }
-                          className="rounded-lg border border-[#E2E8F0] px-4 py-2 text-sm font-semibold text-[#64748B] transition hover:bg-[#F7F7F7] hover:text-[#0056B3]"
-                        >
-                          Editar
-                        </button>
+                        <div className="hidden items-center gap-2 md:flex">
 
-                        {/* ACTIVAR / DESACTIVAR */}
+                          {/* EDITAR */}
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            abrirConfirmacionEstado(
-                              usuario
-                            )
-                          }
-                          disabled={
-                            cambiandoEstado
-                          }
-                          className={`rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                            usuario.activo
-                              ? 'border border-red-200 text-[#E30613] hover:bg-red-50'
-                              : 'border border-blue-200 text-[#0056B3] hover:bg-blue-50'
-                          }`}
-                        >
-                          {
-                            usuario.activo
-                              ? 'Desactivar'
-                              : 'Activar'
-                          }
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              abrirModalEditarUsuario(
+                                usuario
+                              )
+                            }
+                            className="min-h-11 rounded-lg border border-[#E2E8F0] px-4 py-2 text-sm font-semibold text-[#64748B] transition hover:bg-[#F7F7F7] hover:text-[#0056B3]"
+                          >
+                            Editar
+                          </button>
+
+                          {/* ACTIVAR / DESACTIVAR */}
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              abrirConfirmacionEstado(
+                                usuario
+                              )
+                            }
+                            disabled={
+                              cambiandoEstado
+                            }
+                            className={`min-h-11 rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                              usuario.activo
+                                ? 'border border-red-200 text-[#E30613] hover:bg-red-50'
+                                : 'border border-blue-200 text-[#0056B3] hover:bg-blue-50'
+                            }`}
+                          >
+                            {
+                              usuario.activo
+                                ? 'Desactivar'
+                                : 'Activar'
+                            }
+                          </button>
+
+                        </div>
+
+                        {/* MENÚ DE ACCIONES EN MÓVIL */}
+
+                        <div className="relative md:hidden">
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setMenuAbiertoId(
+                                menuAbiertoId === usuario.id
+                                  ? null
+                                  : usuario.id
+                              )
+                            }
+                            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-[#E2E8F0] bg-white text-[#64748B] transition hover:bg-[#F7F7F7] hover:text-[#0056B3]"
+                            aria-label={`Más acciones para ${obtenerNombreCompleto(usuario)}`}
+                            aria-expanded={
+                              menuAbiertoId === usuario.id
+                            }
+                          >
+                            <MoreVertical className="h-5 w-5" />
+                          </button>
+
+                          {menuAbiertoId === usuario.id && (
+                            <div className="absolute right-0 top-full z-30 mt-2 w-48 overflow-hidden rounded-lg border border-[#E2E8F0] bg-white p-1.5 shadow-lg">
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  abrirModalEditarUsuario(
+                                    usuario
+                                  )
+                                }
+                                className="flex min-h-11 w-full items-center rounded-md px-3 py-2 text-left text-sm font-semibold text-[#1E293B] transition hover:bg-[#F7F7F7] hover:text-[#0056B3]"
+                              >
+                                Editar
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  abrirConfirmacionEstado(
+                                    usuario
+                                  )
+                                }
+                                disabled={
+                                  cambiandoEstado
+                                }
+                                className={`flex min-h-11 w-full items-center rounded-md px-3 py-2 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                                  usuario.activo
+                                    ? 'text-[#E30613] hover:bg-red-50'
+                                    : 'text-[#0056B3] hover:bg-blue-50'
+                                }`}
+                              >
+                                {
+                                  usuario.activo
+                                    ? 'Desactivar'
+                                    : 'Activar'
+                                }
+                              </button>
+
+                            </div>
+                          )}
+
+                        </div>
 
                       </div>
 
@@ -1354,6 +1439,7 @@ export default function UsuariosPage() {
                 {paginacion.total > 0 ? (
                   <>
                     Mostrando{' '}
+
                     <span className="font-semibold text-[#1E293B]">
                       {
                         paginacion.from
@@ -1871,7 +1957,7 @@ export default function UsuariosPage() {
                   disabled={
                     guardando
                   }
-                  className="rounded-lg border border-[#E2E8F0] px-5 py-3 text-sm font-semibold text-[#64748B] transition hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="min-h-11 rounded-lg border border-[#E2E8F0] px-5 py-3 text-sm font-semibold text-[#64748B] transition hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Cancelar
                 </button>
@@ -1881,7 +1967,7 @@ export default function UsuariosPage() {
                   disabled={
                     guardando
                   }
-                  className="rounded-lg bg-[#0056B3] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#003770] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="min-h-11 rounded-lg bg-[#0056B3] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#003770] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {guardando
                     ? modoEdicion

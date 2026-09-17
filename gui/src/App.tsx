@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { LoginPage } from './pages/LoginPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -18,6 +18,20 @@ import EstudiantesPage from './pages/EstudiantesPage'
 
 // Página de HU3
 import { AuditoriaPage } from './pages/AuditoriaPage'
+
+/*
+ * Layout de sesión protegida.
+ * El temporizador se monta una sola vez para todas
+ * las páginas que requieren autenticación.
+ */
+function ProtectedSessionLayout() {
+  return (
+    <>
+      <IdleTimer />
+      <Outlet />
+    </>
+  )
+}
 
 export default function App() {
   return (
@@ -39,78 +53,73 @@ export default function App() {
 
         {/* ==================== RUTAS PROTEGIDAS GENERALES ==================== */}
         <Route element={<ProtectedRoute />}>
+          <Route element={<ProtectedSessionLayout />}>
 
-          <Route
-            path="/dashboard"
-            element={
-              <>
-                <IdleTimer />
-                <DashboardPage />
-              </>
-            }
-          />
+            {/* Dashboard */}
+            <Route
+              path="/dashboard"
+              element={<DashboardPage />}
+            />
 
-          {/* HU1 - Gestión de usuarios */}
-          <Route
-            path="/usuarios"
-            element={<UsuariosPage />}
-          />
+            {/* HU1 - Gestión de usuarios */}
+            <Route
+              path="/usuarios"
+              element={<UsuariosPage />}
+            />
 
-          {/* HU4 - Aulas */}
-          <Route
-            path="/aulas"
-            element={<AulasPage />}
-          />
+            {/* HU4 - Aulas */}
+            <Route
+              path="/aulas"
+              element={<AulasPage />}
+            />
 
-          {/* HU5 - Normas */}
-          <Route
-            path="/normas"
-            element={<NormasPage />}
-          />
+            {/* HU5 - Normas */}
+            <Route
+              path="/normas"
+              element={<NormasPage />}
+            />
 
-          {/* HU6 - Exámenes */}
-          <Route
-            path="/examenes"
-            element={<ExamenesPage />}
-          />
+            {/* HU6 - Exámenes */}
+            <Route
+              path="/examenes"
+              element={<ExamenesPage />}
+            />
 
-          <Route
-            path="/mis-examenes"
-            element={<MisExamenesPage />}
-          />
+            <Route
+              path="/mis-examenes"
+              element={<MisExamenesPage />}
+            />
 
-          <Route
-            path="/programar-examen"
-            element={<ProgramarExamenPage />}
-          />
+            <Route
+              path="/programar-examen"
+              element={<ProgramarExamenPage />}
+            />
 
-          <Route
-            path="/programar-examen-admin"
-            element={<ProgramarExamenAdminPage />}
-          />
+            <Route
+              path="/programar-examen-admin"
+              element={<ProgramarExamenAdminPage />}
+            />
 
-          {/* HU7 - Estudiantes */}
-          <Route
-            path="/estudiantes"
-            element={<EstudiantesPage />}
-          />
+            {/* HU7 - Estudiantes */}
+            <Route
+              path="/estudiantes"
+              element={<EstudiantesPage />}
+            />
 
+          </Route>
         </Route>
 
         {/* ==================== RUTAS PROTEGIDAS DE ADMIN ==================== */}
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+          <Route element={<ProtectedSessionLayout />}>
 
-          {/* HU3 - Auditoría */}
-          <Route
-            path="/dashboard/auditoria"
-            element={
-              <>
-                <IdleTimer />
-                <AuditoriaPage />
-              </>
-            }
-          />
+            {/* HU3 - Auditoría */}
+            <Route
+              path="/dashboard/auditoria"
+              element={<AuditoriaPage />}
+            />
 
+          </Route>
         </Route>
 
         {/* ==================== RUTA POR DEFECTO ==================== */}
