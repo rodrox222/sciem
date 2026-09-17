@@ -9,7 +9,6 @@ import ExamenesPage from './pages/ExamenesPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { HomePage } from './pages/HomePage'
 import { LoginPage } from './pages/LoginPage'
-import MisExamenesPage from './pages/MisExamenesPage'
 import NormasPage from './pages/NormasPage'
 import ProgramarExamenAdminPage from './pages/ProgramarExamenAdminPage'
 import ProgramarExamenPage from './pages/ProgramarExamenPage'
@@ -36,7 +35,7 @@ export default function App() {
             }
           />
           <Route path="/examenes" element={<ExamenesPage />} />
-          <Route path="/mis-examenes" element={<MisExamenesPage />} />
+          <Route path="/mis-examenes" element={<Navigate to="/examenes" replace />} />
           <Route path="/estudiantes" element={<EstudiantesPage />} />
         </Route>
 
