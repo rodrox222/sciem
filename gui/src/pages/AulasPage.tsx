@@ -1,249 +1,457 @@
-import { useState } from 'react'
-import { Plus, Power } from 'lucide-react'
-
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
-  AulaFormModal,
-  type Aula,
-  type AulaFormData,
-} from '../components/aulas/AulaFormModal'
-import { AdminNavbar } from '../components/AdminNavbar'
-import { AdminFooter } from '../components/AdminFooter' // <--- Importar el footer
+  AlertCircle,
+  Building2,
+  ChevronLeft,
+  ChevronRight,
+  LoaderCircle,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  Users,
+  Wrench,
+} from 'lucide-react'
 
-const aulasIniciales: Aula[] = [
-  {
-    id: 1,
-    nombre: 'AULA-623',
-    edificio: 'Edificio de Tecnología',
-    ubicacion: 'Piso 6',
-    capacidad: 52,
-    estado: 'Activo',
-  },
-  {
-    id: 2,
-    nombre: 'LAB-03',
-    edificio: 'Bloque central',
-    ubicacion: 'Piso 2',
-    capacidad: 30,
-    estado: 'Mantenimiento',
-  },
-]
+import { AdminFooter } from '../components/AdminFooter'
+import { AdminNavbar } from '../components/AdminNavbar'
+import { AulaFormModal } from '../components/aulas/AulaFormModal'
+import {
+  aulasService,
+  type Aula,
+  type AulaEstado,
+  type AulaPayload,
+} from '../services/aulas.service'
+import { ApiError } from '../services/apiClient'
+
+const PER_PAGE = 8
+
+const estadoStyles: Record<AulaEstado, string> = {
+  Disponible: 'border-[#168FBD]/30 bg-[#168FBD]/10 text-[#08759E]',
+  Mantenimiento: 'border-[#D59A18]/30 bg-[#D59A18]/10 text-[#946807]',
+  Ocupada: 'border-[#E30613]/25 bg-[#E30613]/8 text-[#B0040E]',
+}
+
+const topBorderStyles: Record<AulaEstado, string> = {
+  Disponible: 'bg-[#168FBD]',
+  Mantenimiento: 'bg-[#D59A18]',
+  Ocupada: 'bg-[#E30613]',
+}
+
+const getErrorMessage = (error: unknown) =>
+  error instanceof ApiError
+    ? error.message
+    : 'Ocurrió un error inesperado. Intenta nuevamente.'
 
 export default function AulasPage() {
-  const [aulas, setAulas] = useState<Aula[]>(aulasIniciales)
+  const [aulas, setAulas] = useState<Aula[]>([])
+  const [searchInput, setSearchInput] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
+  const [estado, setEstado] = useState<AulaEstado | ''>('')
+  const [page, setPage] = useState(1)
+  const [lastPage, setLastPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [changingId, setChangingId] = useState<string | null>(null)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [modalAbierto, setModalAbierto] = useState(false)
   const [aulaSeleccionada, setAulaSeleccionada] = useState<Aula | null>(null)
 
-  const abrirRegistrar = () => {
+  const loadAulas = useCallback(async () => {
+    setLoading(true)
+    setError('')
+
+    try {
+      const response = await aulasService.list({
+        search: searchTerm,
+        estado,
+        page,
+        perPage: PER_PAGE,
+      })
+      setAulas(response.data)
+      setTotal(response.total)
+      setLastPage(Math.max(response.last_page, 1))
+    } catch (loadError) {
+      setError(getErrorMessage(loadError))
+    } finally {
+      setLoading(false)
+    }
+  }, [estado, page, searchTerm])
+
+  useEffect(() => {
+    const requestId = window.setTimeout(() => void loadAulas(), 0)
+    return () => window.clearTimeout(requestId)
+  }, [loadAulas])
+
+  const visibleCapacity = useMemo(
+    () => aulas.reduce((sum, aula) => sum + aula.capacidad, 0),
+    [aulas],
+  )
+
+  const applySearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setPage(1)
+    setSearchTerm(searchInput.trim())
+  }
+
+  const openCreate = () => {
     setAulaSeleccionada(null)
     setModalAbierto(true)
+    setSuccess('')
   }
 
-  const abrirEditar = (aula: Aula) => {
+  const openEdit = (aula: Aula) => {
     setAulaSeleccionada(aula)
     setModalAbierto(true)
+    setSuccess('')
   }
 
-  const desactivarAula = (aula: Aula) => {
-  const confirmar = window.confirm(
-    `¿Deseas desactivar el ambiente ${aula.nombre}?`
-  )
-
-  if (!confirmar) return
-
-  setAulas((actuales) =>
-    actuales.map((item) =>
-      item.id === aula.id
-        ? {
-            ...item,
-            estado: 'Inactivo',
-          }
-        : item
+  const ensureUniqueName = async (payload: AulaPayload) => {
+    const response = await aulasService.list({
+      search: payload.nombre,
+      perPage: 100,
+    })
+    const duplicate = response.data.some(
+      (aula) =>
+        aula.nombre.trim().toLocaleLowerCase() ===
+          payload.nombre.trim().toLocaleLowerCase() &&
+        aula.id !== aulaSeleccionada?.id,
     )
-  )
-}
 
-  const guardarAula = (data: AulaFormData) => {
-    const aulaExistente = aulaSeleccionada
-
-    if (aulaExistente) {
-      setAulas((actuales) =>
-        actuales.map((aula) =>
-          aula.id === aulaExistente.id
-            ? {
-                ...aula,
-                nombre: data.nombre,
-                edificio: data.edificio,
-                ubicacion: data.ubicacion,
-                capacidad: Number(data.capacidad),
-                estado: data.estado,
-              }
-            : aula
-        )
-      )
-    } else {
-      const nuevoId =
-        aulas.length > 0
-          ? Math.max(...aulas.map((aula) => aula.id)) + 1
-          : 1
-
-      const nuevaAula: Aula = {
-        id: nuevoId,
-        nombre: data.nombre,
-        edificio: data.edificio,
-        ubicacion: data.ubicacion,
-        capacidad: Number(data.capacidad),
-        estado: data.estado,
-      }
-
-      setAulas((actuales) => [...actuales, nuevaAula])
+    if (duplicate) {
+      throw new ApiError('Ya existe un ambiente con ese nombre.', 422, {
+        nombre: ['Ya existe un ambiente con ese nombre.'],
+      })
     }
   }
 
-  const aulasFiltradas = aulas.filter(
-    (aula) =>
-      aula.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      aula.edificio.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const saveAula = async (payload: AulaPayload) => {
+    await ensureUniqueName(payload)
+
+    if (aulaSeleccionada) {
+      const response = await aulasService.update(aulaSeleccionada.id, payload)
+      setSuccess(response.message || 'Ambiente actualizado correctamente.')
+    } else {
+      const response = await aulasService.create(payload)
+      setSuccess(response.message || 'Ambiente registrado correctamente.')
+    }
+
+    await loadAulas()
+  }
+
+  const toggleMaintenance = async (aula: Aula) => {
+    if (aula.estado === 'Ocupada') return
+
+    const nextState: AulaEstado =
+      aula.estado === 'Mantenimiento' ? 'Disponible' : 'Mantenimiento'
+    const action = nextState === 'Mantenimiento' ? 'en mantenimiento' : 'disponible'
+
+    if (!window.confirm(`¿Deseas marcar ${aula.nombre} como ${action}?`)) return
+
+    setChangingId(aula.id)
+    setError('')
+    setSuccess('')
+
+    try {
+      const response = await aulasService.update(aula.id, {
+        nombre: aula.nombre,
+        ubicacion: aula.ubicacion,
+        capacidad: aula.capacidad,
+        estado: nextState,
+      })
+      setSuccess(response.message || `Ambiente marcado como ${action}.`)
+      await loadAulas()
+    } catch (updateError) {
+      setError(getErrorMessage(updateError))
+    } finally {
+      setChangingId(null)
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-slate-100/60 flex flex-col justify-between">
-      <div>
-        {/* Navbar exclusivo del Administrador */}
-        <AdminNavbar />
+    <div className="flex min-h-screen flex-col bg-[#F7F7F7]">
+      <AdminNavbar />
 
-        <div className="flex-1 px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full space-y-6">
-
-          {/* Encabezado Principal del Administrador */}
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-
-              <h1 className="mt-1 text-3xl font-extrabold text-slate-900">
-                Aulas y ambientes
-              </h1>
-              <p className="mt-1 text-sm text-slate-500">
-                Registro institucional actualizado · {aulas.length} ambientes
-              </p>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <input
-                type="text"
-                placeholder="Buscar aula o ubicación..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full sm:w-72 h-10 px-3 rounded-lg border border-slate-300 bg-white text-sm outline-none focus:border-[#002b5b] focus:ring-2 focus:ring-[#002b5b]/20"
-              />
-
-              <button
-                type="button"
-                onClick={abrirRegistrar}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#002b5b] px-5 py-2.5 text-sm font-semibold text-white shadow transition hover:bg-[#001d3d] whitespace-nowrap"
-              >
-                <Plus className="h-5 w-5" />
-                Nuevo ambiente
-              </button>
-            </div>
+      <main className="mx-auto w-full max-w-7xl flex-1 space-y-6 px-4 py-7 sm:px-6 lg:px-8 lg:py-9">
+        <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#168FBD]">
+              Administración · Entorno
+            </p>
+            <h1 className="mt-1 text-3xl font-extrabold text-[#003770]">
+              Aulas y ambientes
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm text-[#64748B]">
+              Consulta, registra y actualiza los espacios habilitados para los
+              exámenes institucionales.
+            </p>
           </div>
 
-          {/* Listado en Tarjetas (Estilo Administrador) */}
-          <div className="space-y-4">
-            {aulasFiltradas.length > 0 ? (
-              aulasFiltradas.map((aula) => (
-                <div
-                  key={aula.id}
-                  className="relative bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col md:flex-row items-stretch justify-between transition-all hover:shadow-md"
+          <button
+            type="button"
+            onClick={openCreate}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#0056B3] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#003770] focus:outline-none focus:ring-2 focus:ring-[#0056B3]/30"
+          >
+            <Plus className="h-5 w-5" />
+            Registrar ambiente
+          </button>
+        </header>
+
+        <section
+          aria-label="Resumen del catálogo"
+          className="grid gap-3 sm:grid-cols-3"
+        >
+          <article className="rounded-xl border border-[#E2E8F0] bg-white p-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-11 w-11 place-items-center rounded-lg bg-[#0056B3]/10 text-[#0056B3]">
+                <Building2 className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-xs text-[#64748B]">Ambientes registrados</p>
+                <p className="text-2xl font-bold text-[#003770]">{total}</p>
+              </div>
+            </div>
+          </article>
+
+          <article className="rounded-xl border border-[#E2E8F0] bg-white p-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-11 w-11 place-items-center rounded-lg bg-[#168FBD]/10 text-[#168FBD]">
+                <Users className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-xs text-[#64748B]">Capacidad en esta página</p>
+                <p className="text-2xl font-bold text-[#003770]">{visibleCapacity}</p>
+              </div>
+            </div>
+          </article>
+
+          <article className="rounded-xl border border-[#E2E8F0] bg-white p-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-11 w-11 place-items-center rounded-lg bg-[#D59A18]/10 text-[#D59A18]">
+                <Wrench className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-xs text-[#64748B]">En mantenimiento aquí</p>
+                <p className="text-2xl font-bold text-[#003770]">
+                  {aulas.filter((aula) => aula.estado === 'Mantenimiento').length}
+                </p>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section className="rounded-xl border border-[#E2E8F0] bg-white shadow-sm">
+          <div className="border-b border-[#E2E8F0] p-4 sm:p-5">
+            <form
+              onSubmit={applySearch}
+              className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]"
+            >
+              <label className="relative block">
+                <span className="sr-only">Buscar ambiente</span>
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B]" />
+                <input
+                  type="search"
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  placeholder="Buscar por nombre o ubicación"
+                  className="h-11 w-full rounded-lg border border-[#E2E8F0] bg-white pl-10 pr-3 text-sm text-[#1E293B] outline-none transition placeholder:text-[#64748B] focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/15"
+                />
+              </label>
+
+              <label>
+                <span className="sr-only">Filtrar por estado</span>
+                <select
+                  value={estado}
+                  onChange={(event) => {
+                    setEstado(event.target.value as AulaEstado | '')
+                    setPage(1)
+                  }}
+                  className="h-11 w-full rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm text-[#1E293B] outline-none transition focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/15"
                 >
-                  {/* Franja superior indicadora de color */}
-                  <div
-                    className={`absolute top-0 left-0 right-0 h-1.5 ${
-                      aula.estado === 'Activo'
-                        ? 'bg-[#002b5b]'
-                        : aula.estado === 'Mantenimiento'
-                        ? 'bg-amber-500'
-                        : 'bg-red-600'
-                    }`}
-                  />
+                  <option value="">Todos los estados</option>
+                  <option value="Disponible">Disponible</option>
+                  <option value="Mantenimiento">Mantenimiento</option>
+                  <option value="Ocupada">Ocupada</option>
+                </select>
+              </label>
 
-                  <div className="p-6 flex items-center gap-6 w-full">
-                    {/* Ícono de Aula con Letra */}
-                    <div className="w-14 h-14 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-[#002b5b] font-bold text-xl shadow-inner shrink-0">
-                      A
-                    </div>
+              <button
+                type="submit"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#0056B3] px-5 text-sm font-semibold text-[#0056B3] transition hover:bg-[#0056B3] hover:text-white"
+              >
+                <Search className="h-4 w-4" />
+                Buscar
+              </button>
+            </form>
+          </div>
 
-                    {/* Información Principal */}
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <span
-                          className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                            aula.estado === 'Activo'
-                              ? 'bg-blue-50 text-[#002b5b] border border-blue-200'
-                              : aula.estado === 'Mantenimiento'
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                              : 'bg-red-50 text-red-600 border border-red-200'
-                          }`}
-                        >
-                          {aula.estado}
-                        </span>
-                      </div>
-                      <h3 className="text-xl font-bold text-slate-900 mt-1">
-                        {aula.nombre}
-                      </h3>
-                      <p className="text-sm text-slate-500">
-                        {aula.edificio} · {aula.ubicacion}
-                      </p>
-                    </div>
+          <div className="space-y-4 p-4 sm:p-5">
+            {success && (
+              <div
+                className="rounded-lg border border-[#168FBD]/25 bg-[#168FBD]/8 px-4 py-3 text-sm text-[#08759E]"
+                role="status"
+              >
+                {success}
+              </div>
+            )}
 
-                    {/* Capacidad / Botón Editar a la derecha */}
-                    <div className="flex items-center gap-6 pr-2 shrink-0">
-                      <span className="text-sm font-semibold text-slate-700 hidden sm:inline-block">
-                        {aula.capacidad} estudiantes
+            {error && (
+              <div
+                className="flex flex-col gap-3 rounded-lg border border-[#E30613]/25 bg-[#E30613]/5 px-4 py-3 text-sm text-[#B0040E] sm:flex-row sm:items-center sm:justify-between"
+                role="alert"
+              >
+                <span className="flex items-start gap-2">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  {error}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void loadAulas()}
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#E30613]/25 px-3 font-semibold transition hover:bg-white"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Reintentar
+                </button>
+              </div>
+            )}
+
+            {loading ? (
+              <div className="grid min-h-64 place-items-center text-[#64748B]">
+                <div className="text-center">
+                  <LoaderCircle className="mx-auto h-8 w-8 animate-spin text-[#168FBD]" />
+                  <p className="mt-3 text-sm">Cargando ambientes...</p>
+                </div>
+              </div>
+            ) : aulas.length > 0 ? (
+              <div className="grid gap-4 lg:grid-cols-2">
+                {aulas.map((aula) => (
+                  <article
+                    key={aula.id}
+                    className="relative overflow-hidden rounded-xl border border-[#E2E8F0] bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-md"
+                  >
+                    <span
+                      className={`absolute inset-x-0 top-0 h-1 ${topBorderStyles[aula.estado]}`}
+                    />
+
+                    <div className="flex items-start gap-4">
+                      <span className="grid h-12 w-12 shrink-0 place-items-center rounded-lg border border-[#0056B3]/15 bg-[#0056B3]/8 text-lg font-bold text-[#003770]">
+                        A
                       </span>
 
-                      <div className="flex items-center gap-2">
-  <button
-    type="button"
-    onClick={() => abrirEditar(aula)}
-    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3.5 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-[#002b5b]"
-  >
-    Editar
-  </button>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <h2 className="truncate text-lg font-bold text-[#003770]">
+                              {aula.nombre}
+                            </h2>
+                            <p className="mt-1 text-sm text-[#64748B]">
+                              {aula.ubicacion}
+                            </p>
+                          </div>
+                          <span
+                            className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${estadoStyles[aula.estado]}`}
+                          >
+                            {aula.estado}
+                          </span>
+                        </div>
 
-  {aula.estado === 'Activo' && (
-    <button
-      type="button"
-      onClick={() => desactivarAula(aula)}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3.5 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
-    >
-      <Power className="h-4 w-4" />
-      Desactivar
-    </button>
-  )}
-</div>
+                        <div className="mt-4 flex flex-col gap-3 border-t border-[#E2E8F0] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                          <span className="inline-flex items-center gap-2 text-sm font-semibold text-[#1E293B]">
+                            <Users className="h-4 w-4 text-[#168FBD]" />
+                            {aula.capacidad} estudiantes
+                          </span>
+
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openEdit(aula)}
+                              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#E2E8F0] px-3 text-sm font-semibold text-[#003770] transition hover:border-[#0056B3] hover:bg-[#0056B3]/5"
+                            >
+                              <Pencil className="h-4 w-4" />
+                              Editar
+                            </button>
+
+                            {aula.estado !== 'Ocupada' && (
+                              <button
+                                type="button"
+                                onClick={() => void toggleMaintenance(aula)}
+                                disabled={changingId === aula.id}
+                                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#D59A18]/30 px-3 text-sm font-semibold text-[#946807] transition hover:bg-[#D59A18]/8 disabled:cursor-wait disabled:opacity-60"
+                              >
+                                {changingId === aula.id ? (
+                                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Wrench className="h-4 w-4" />
+                                )}
+                                {aula.estado === 'Mantenimiento'
+                                  ? 'Habilitar'
+                                  : 'Mantenimiento'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              ))
+                  </article>
+                ))}
+              </div>
             ) : (
-              <div className="bg-white rounded-xl p-8 text-center text-slate-500 border border-slate-200">
-                No se encontraron ambientes registrados.
+              <div className="grid min-h-64 place-items-center rounded-xl border border-dashed border-[#E2E8F0] bg-[#F7F7F7] px-6 text-center">
+                <div>
+                  <Building2 className="mx-auto h-10 w-10 text-[#168FBD]" />
+                  <h2 className="mt-3 text-lg font-bold text-[#003770]">
+                    No se encontraron ambientes
+                  </h2>
+                  <p className="mt-1 text-sm text-[#64748B]">
+                    Ajusta la búsqueda o registra un nuevo ambiente.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {!loading && total > 0 && (
+              <div className="flex flex-col gap-3 border-t border-[#E2E8F0] pt-4 text-sm text-[#64748B] sm:flex-row sm:items-center sm:justify-between">
+                <span>
+                  Página {page} de {lastPage} · {total} ambientes
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                    disabled={page <= 1}
+                    className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-[#E2E8F0] px-3 font-semibold text-[#003770] transition hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Anterior
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPage((current) => Math.min(lastPage, current + 1))
+                    }
+                    disabled={page >= lastPage}
+                    className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-[#E2E8F0] px-3 font-semibold text-[#003770] transition hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Siguiente
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             )}
           </div>
+        </section>
+      </main>
 
-          {/* Modal */}
-          <AulaFormModal
-            open={modalAbierto}
-            onOpenChange={setModalAbierto}
-            aula={aulaSeleccionada}
-            aulas={aulas}
-            onSubmit={guardarAula}
-          />
+      {modalAbierto && (
+        <AulaFormModal
+          key={aulaSeleccionada?.id ?? 'new'}
+          aula={aulaSeleccionada}
+          onOpenChange={setModalAbierto}
+          onSubmit={saveAula}
+        />
+      )}
 
-        </div>
-      </div>
-
-      {/* Footer Institucional al fondo */}
       <AdminFooter />
     </div>
   )
