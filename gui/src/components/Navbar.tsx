@@ -21,7 +21,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const baseNavItems = [
     { name: 'Inicio', href: '/dashboard' },
-    { name: 'Mis exámenes', href: '/mis-examenes' },
+    { name: 'Exámenes', href: '/examenes' },
     { name: 'Estudiantes', href: '/estudiantes?rol=docente' },
     { name: 'Cronograma', href: '#' },
     { name: 'Normativas', href: '/normas' },
