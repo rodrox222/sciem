@@ -103,7 +103,8 @@ export const AuditoriaPage: React.FC = () => {
   }, [filters])
 
   useEffect(() => {
-    fetchAuditoria()
+    const requestId = window.setTimeout(() => void fetchAuditoria(), 0)
+    return () => window.clearTimeout(requestId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
