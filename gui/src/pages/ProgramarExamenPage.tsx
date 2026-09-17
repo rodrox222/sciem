@@ -15,7 +15,7 @@ import {
 
 import { MainLayout } from '../layouts/MainLayout'
 import { aulasService, type Aula } from '../services/aulas.service'
-import { ApiError } from '../services/apiClient'
+import { ApiError, apiRequest } from '../services/apiClient'
 import {
   examenesService,
   type CatalogItem,
@@ -67,14 +67,6 @@ const minutesBetween = (start: string, end: string) => {
   return endHour * 60 + endMinute - (startHour * 60 + startMinute)
 }
 
-const getCurrentUser = () => {
-  try {
-    return JSON.parse(localStorage.getItem('user_data') ?? '{}') as DocenteItem
-  } catch {
-    return {} as DocenteItem
-  }
-}
-
 const getErrorMessage = (error: unknown) =>
   error instanceof ApiError
     ? error.message
@@ -108,14 +100,14 @@ export default function ProgramarExamenPage() {
     setError('')
 
     try {
-      const currentUser = getCurrentUser()
+      const currentUser = isAdmin ? null : await apiRequest<DocenteItem>('/me')
       const [subjects, rooms, rules, teachers, exam] = await Promise.all([
         examenesService.listMaterias(),
         aulasService.list({ estado: 'Disponible', perPage: 100 }),
         normasService.listAll(),
         isAdmin
           ? examenesService.listDocentes().then((response) => response.data)
-          : Promise.resolve(currentUser.id ? [currentUser] : []),
+          : Promise.resolve(currentUser?.id ? [currentUser] : []),
         editId ? examenesService.get(editId) : Promise.resolve(null),
       ])
 
@@ -148,7 +140,7 @@ export default function ProgramarExamenPage() {
           id_docente: exam.id_docente,
         })
         setSelectedNorms((exam.normas ?? []).map((norma) => norma.id))
-      } else if (!isAdmin && currentUser.id) {
+      } else if (!isAdmin && currentUser?.id) {
         setForm((current) => ({ ...current, id_docente: currentUser.id }))
       }
     } catch (loadError) {
