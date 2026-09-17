@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { HomeNavbar } from '../components/home/HomeNavbar';
 import { MetricsBar } from '../components/home/MetricsBar';
 import { ExamCard } from '../components/home/ExamCard';
@@ -6,6 +6,7 @@ import { MiniCalendar } from '../components/home/MiniCalendar';
 import { Footer } from '../components/Footer';
 import heroImg from '../assets/home.jpg';
 
+// CAMBIAR ESO EN EL FUTURO
 const EXAMENES_DATA = [
   {
     id: '1',
@@ -36,13 +37,24 @@ const EXAMENES_DATA = [
   },
 ];
 
-export const HomePage: React.FC = () => {
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date(2026, 8, 15)); // 15 de Sep de 2026
-  const [activeTab, setActiveTab] = useState<'inicio' | 'modulos' | 'agenda' | 'perfil'>('inicio');
+const getLocalYMD = (d: Date): string => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
-  const formattedSelected = selectedDate.toISOString().split('T')[0];
-  const datesWithExams = Array.from(new Set(EXAMENES_DATA.map((e) => e.fecha)));
-  const examenesDelDia = EXAMENES_DATA.filter((e) => e.fecha === formattedSelected);
+export const HomePage: React.FC = () => {
+  useEffect(() => {
+    document.title = 'Home | SCI'
+  }, [])
+
+  const [selectedDate, setSelectedDate] = useState<Date>(() => new Date())
+  const [activeTab, setActiveTab] = useState<'inicio' | 'modulos' | 'agenda' | 'perfil'>('inicio')
+
+  const formattedSelected = getLocalYMD(selectedDate)
+  const datesWithExams = Array.from(new Set(EXAMENES_DATA.map((e) => e.fecha)))
+  const examenesDelDia = EXAMENES_DATA.filter((e) => e.fecha === formattedSelected)
 
   // Array de días para el scroll horizontal móvil
   const mobileDays = [

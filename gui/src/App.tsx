@@ -1,10 +1,9 @@
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { LoginPage } from './pages/LoginPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute'
 import { HomePage } from './pages/HomePage'
-import { IdleTimer } from './components/IdleTimer'
 
 // Páginas de HU1, HU4, HU5, HU6 y HU7
 import UsuariosPage from './pages/UsuariosPage'
@@ -19,31 +18,23 @@ import EstudiantesPage from './pages/EstudiantesPage'
 // Página de HU3
 import { AuditoriaPage } from './pages/AuditoriaPage'
 
-/*
- * Layout de sesión protegida.
- * El temporizador se monta una sola vez para todas
- * las páginas que requieren autenticación.
- */
-function ProtectedSessionLayout() {
-  return (
-    <>
-      <IdleTimer />
-      <Outlet />
-    </>
-  )
-}
-
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
 
-        {/* Ruta principal */}
-        <Route path="/" element={<HomePage />} />
+        {/* ==================== LANDING PÚBLICO ==================== */}
+        <Route
+          path="/"
+          element={<HomePage />}
+        />
 
         {/* ==================== RUTAS PÚBLICAS ==================== */}
         <Route element={<PublicRoute />}>
-          <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/login"
+            element={<LoginPage />}
+          />
 
           <Route
             path="/recuperar-contrasena"
@@ -51,81 +42,85 @@ export default function App() {
           />
         </Route>
 
-        {/* ==================== RUTAS PROTEGIDAS GENERALES ==================== */}
+        {/* ==================== RUTAS COMPARTIDAS ==================== */}
+        {/* Admin, Docente y Auxiliar */}
         <Route element={<ProtectedRoute />}>
-          <Route element={<ProtectedSessionLayout />}>
 
-            {/* Dashboard */}
-            <Route
-              path="/dashboard"
-              element={<DashboardPage />}
-            />
+          <Route
+            path="/dashboard"
+            element={<DashboardPage />}
+          />
 
-            {/* HU1 - Gestión de usuarios */}
-            <Route
-              path="/usuarios"
-              element={<UsuariosPage />}
-            />
+          <Route
+            path="/examenes"
+            element={<ExamenesPage />}
+          />
 
-            {/* HU4 - Aulas */}
-            <Route
-              path="/aulas"
-              element={<AulasPage />}
-            />
+          <Route
+            path="/mis-examenes"
+            element={<MisExamenesPage />}
+          />
 
-            {/* HU5 - Normas */}
-            <Route
-              path="/normas"
-              element={<NormasPage />}
-            />
+          <Route
+            path="/estudiantes"
+            element={<EstudiantesPage />}
+          />
 
-            {/* HU6 - Exámenes */}
-            <Route
-              path="/examenes"
-              element={<ExamenesPage />}
-            />
-
-            <Route
-              path="/mis-examenes"
-              element={<MisExamenesPage />}
-            />
-
-            <Route
-              path="/programar-examen"
-              element={<ProgramarExamenPage />}
-            />
-
-            <Route
-              path="/programar-examen-admin"
-              element={<ProgramarExamenAdminPage />}
-            />
-
-            {/* HU7 - Estudiantes */}
-            <Route
-              path="/estudiantes"
-              element={<EstudiantesPage />}
-            />
-
-          </Route>
         </Route>
 
-        {/* ==================== RUTAS PROTEGIDAS DE ADMIN ==================== */}
+        {/* ==================== RUTAS EXCLUSIVAS DE ADMIN ==================== */}
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
-          <Route element={<ProtectedSessionLayout />}>
 
-            {/* HU3 - Auditoría */}
-            <Route
-              path="/dashboard/auditoria"
-              element={<AuditoriaPage />}
-            />
+          {/* HU1 - Gestión de usuarios */}
+          <Route
+            path="/usuarios"
+            element={<UsuariosPage />}
+          />
 
-          </Route>
+          {/* HU4 - Aulas */}
+          <Route
+            path="/aulas"
+            element={<AulasPage />}
+          />
+
+          {/* HU5 - Normas */}
+          <Route
+            path="/normas"
+            element={<NormasPage />}
+          />
+
+          {/* HU6 - Programar examen como administrador */}
+          <Route
+            path="/programar-examen-admin"
+            element={<ProgramarExamenAdminPage />}
+          />
+
+          {/* HU3 - Auditoría */}
+          <Route
+            path="/dashboard/auditoria"
+            element={<AuditoriaPage />}
+          />
+
+        </Route>
+
+        {/* ==================== DOCENTE Y ADMIN ==================== */}
+        <Route
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'docente']} />
+          }
+        >
+
+          <Route
+            path="/programar-examen"
+            element={<ProgramarExamenPage />}
+          />
+
         </Route>
 
         {/* ==================== RUTA POR DEFECTO ==================== */}
         <Route
           path="*"
-          element={<Navigate to="/login" replace />}
+          element={<Navigate to="/" replace />}
         />
 
       </Routes>

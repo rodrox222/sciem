@@ -3,6 +3,7 @@ import { Footer } from '../components/Footer'
 import { Navbar } from '../components/Navbar'
 import { AdminNavbar } from '../components/AdminNavbar'
 
+
 interface MainLayoutProps {
   children: React.ReactNode
 }
@@ -63,3 +64,5 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     </div>
   )
 }
+
+export default MainLayout
