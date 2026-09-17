@@ -25,13 +25,13 @@ export default function App() {
         {/* Landing Público general */}
         <Route path="/" element={<HomePage />} />
 
-        {/* Rutas Públicas (solo si NO has iniciado sesión) */}
+        {/* Rutas Públicas, osea sin iniciar session*/}
         <Route element={<PublicRoute />}>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/recuperar-contrasena" element={<ForgotPasswordPage />} />
         </Route>
 
-        {/* 1. Rutas compartidas por cualquier usuario logueado (Admin, Docente, Auxiliar) */}
+        {/* Rutas compartidas por cualquier usuario logueado (Admin, Docente, Auxiliar) */}
         <Route element={<ProtectedRoute />}>
           <Route
             path="/dashboard"
@@ -47,7 +47,7 @@ export default function App() {
           <Route path="/estudiantes" element={<EstudiantesPage />} />
         </Route>
 
-        {/* 2. Rutas EXCLUSIVAS de ADMINISTRADOR */}
+        {/* Rutas EXCLUSIVAS de ADMINISTRADOR */}
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
           <Route path="/normas" element={<NormasPage />} />
           <Route path="/aulas" element={<AulasPage />} />
@@ -63,7 +63,7 @@ export default function App() {
           />
         </Route>
 
-        {/* 3. Rutas exclusivas para DOCENTE y ADMINISTRADOR */}
+        {/* Rutas exclusivas para docente y admin */}
         <Route element={<ProtectedRoute allowedRoles={['admin', 'docente']} />}>
           <Route path="/programar-examen" element={<ProgramarExamenPage />} />
         </Route>

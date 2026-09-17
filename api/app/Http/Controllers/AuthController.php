@@ -17,27 +17,31 @@ class AuthController extends Controller
     private const IP_FALLBACK = '127.0.0.1';
 
     /**
-     * Inicio de sesión sin selector de rol previo
+     * Autenticación unificada sin selector de roles.
+     * - CI numérico -> Administrador
+     * - @fcyt.umss.edu.bo -> Docente
+     * - @est.umss.edu -> Auxiliar
      */
     public function login(Request $request): JsonResponse
     {
+        // Validación estricta de formato: o es correo institucional válido o es CI numérico
         $request->validate([
             'email' => [
                 'required',
                 'string',
-                'regex:/^([a-zA-Z0-9._%+-]+@(est\.umss\.edu|fcyt\.umss\.edu\.bo)|[0-9]+)$/'
+                'regex:/^([a-zA-Z0-9._%+-]+@(est\.umss\.edu|fcyt\.umss\.edu\.bo)|\d+)$/'
             ],
             'password' => 'required|string',
         ], [
-            'email.regex' => 'Debe ingresar un correo institucional válido.'
+            'email.regex' => 'Debe ingresar un correo institucional válido o su cédula de identidad autorizada.'
         ]);
 
-        $identificador = trim(strtolower($request->email));
-        
-        // Determinar tabla y buscar usuario automáticamente
-        [$user, $rolDetectado] = $this->identificarYBuscarUsuario($identificador);
+        $rawIdentifier = trim($request->email);
 
-        // Validar existencia y contraseña
+        // Resolver tabla y rol según el patrón del identificador
+        [$user, $rolDetectado] = $this->identificarYBuscarUsuario($rawIdentifier);
+
+        // Validar existencia y verificación de hash de contraseña
         if (!$user || !Hash::check($request->password, $user->password)) {
             $this->registrarLogAuth(
                 request: $request,
@@ -45,7 +49,7 @@ class AuthController extends Controller
                 user: $user,
                 rolFallback: $rolDetectado ?? 'desconocido',
                 detalles: [
-                    'identificador_intentado' => $identificador,
+                    'identificador_intentado' => $rawIdentifier,
                     'motivo'                  => 'Credenciales inválidas',
                 ]
             );
@@ -55,7 +59,7 @@ class AuthController extends Controller
             ]);
         }
 
-        // Validar estado de la cuenta
+        // Validar estado activo de la cuenta
         if (!$user->activo) {
             $this->registrarLogAuth(
                 request: $request,
@@ -68,17 +72,17 @@ class AuthController extends Controller
             );
 
             return response()->json([
-                'message' => 'Su cuenta se encuentra desactivada. Comuníquese con administración.',
+                'message' => 'Su cuenta se encuentra desactivada. Comuníquese con la administración.',
             ], 403);
         }
 
-        // Actualizar último acceso y generar token de Sanctum
+        // Registrar último acceso y expedir token de Sanctum
         $user->ultimo_acceso = now();
         $user->save();
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        // Registrar login exitoso
+        // Registrar auditoría de éxito
         $this->registrarLogAuth(
             request: $request,
             accion: 'LOGIN_EXITOSO',
@@ -128,26 +132,31 @@ class AuthController extends Controller
     // --- MÉTODOS AUXILIARES ---
 
     /**
-     * Localiza el usuario en su tabla correspondiente según su correo o identificador numérico
+     * Discrimina de forma unívoca la entidad a consultar:
+     * - Solo números -> Admin (por columna CI)
+     * - Terminado en @fcyt.umss.edu.bo -> Docente (por columna email)
+     * - Terminado en @est.umss.edu -> Auxiliar (por columna email)
      */
     private function identificarYBuscarUsuario(string $identificador): array
     {
-        // 1. Docente (@fcyt.umss.edu.bo)
-        if (str_ends_with($identificador, '@fcyt.umss.edu.bo')) {
-            $docente = Docente::where('email', $identificador)->first();
-            return [$docente, 'docente'];
-        }
-
-        // 2. Auxiliar / Estudiante (@est.umss.edu)
-        if (str_ends_with($identificador, '@est.umss.edu')) {
-            $auxiliar = Auxiliar::where('email', $identificador)->first();
-            return [$auxiliar, 'auxiliar'];
-        }
-
-        // 3. Admin (por CI numérico)
+        // Administrador (CI numérico)
         if (ctype_digit($identificador)) {
             $admin = Admin::where('ci', $identificador)->first();
             return [$admin, 'admin'];
+        }
+
+        $emailLower = strtolower($identificador);
+
+        // Docente (@fcyt.umss.edu.bo)
+        if (str_ends_with($emailLower, '@fcyt.umss.edu.bo')) {
+            $docente = Docente::where('email', $emailLower)->first();
+            return [$docente, 'docente'];
+        }
+
+        // Auxiliar (@est.umss.edu)
+        if (str_ends_with($emailLower, '@est.umss.edu')) {
+            $auxiliar = Auxiliar::where('email', $emailLower)->first();
+            return [$auxiliar, 'auxiliar'];
         }
 
         return [null, null];

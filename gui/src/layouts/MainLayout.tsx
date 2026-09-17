@@ -1,9 +1,7 @@
 import React from 'react'
-import { ConfirmModal } from '../components/ConfirmModal'
 import { Footer } from '../components/Footer'
 import { Navbar } from '../components/Navbar'
-import { useIdleTimer } from '../hooks/useIdleTimer'
-
+import { IdleTimer } from '../components/IdleTimer'
 interface MainLayoutProps {
   children: React.ReactNode
 }
@@ -28,20 +26,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     // Si el JSON guardado no es válido, se mantiene el rol como respaldo
   }
 
-  // Listener de inactividad (5 min total, modal 1 min antes)
-  // Se mapean los nombres retornados hacia los esperados por el JSX
-  const idleHook = useIdleTimer({
-    timeout: 5 * 60 * 1000,
-    promptBefore: 1 * 60 * 1000,
-    onIdle: handleLogout,
-  } as any)
-
-  const showModal = idleHook?.showModal ?? idleHook?.isPrompted ?? false
-  const secondsRemaining =
-    idleHook?.secondsRemaining ??
-    (idleHook?.remainingTime ? Math.ceil(idleHook.remainingTime / 1000) : 60)
-  const handleStayActive = idleHook?.handleStayActive ?? idleHook?.stayLoggedIn ?? (() => {})
-
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
       {/* Barra de navegación superior */}
@@ -55,25 +39,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       {/* Footer institucional */}
       <Footer />
 
-      {/* Modal de advertencia por inactividad */}
-      <ConfirmModal
-        open={showModal}
-        title="Advertencia de Inactividad"
-        description={
-          <span>
-            Tu sesión está a punto de cerrarse por inactividad. El sistema se
-            cerrará en{' '}
-            <strong className="text-[#E30613] font-bold">
-              {secondsRemaining} segundos
-            </strong>
-            . ¿Deseas continuar trabajando?
-          </span>
-        }
-        confirmText="Mantener sesión iniciada"
-        cancelText="Cerrar sesión ahora"
-        onConfirm={handleStayActive}
-        onCancel={handleLogout}
-      />
+      <IdleTimer />
     </div>
   )
 }
+
+export default MainLayout
