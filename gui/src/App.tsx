@@ -6,7 +6,8 @@ import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute'
 import { HomePage } from './pages/HomePage'
 import { IdleTimer } from './components/IdleTimer'
 
-// Páginas de HU4-front
+// Páginas de HU1, HU4, HU5, HU6 y HU7
+import UsuariosPage from './pages/UsuariosPage'
 import AulasPage from './pages/AulasPage'
 import NormasPage from './pages/NormasPage'
 import ProgramarExamenPage from './pages/ProgramarExamenPage'
@@ -15,27 +16,30 @@ import ProgramarExamenAdminPage from './pages/ProgramarExamenAdminPage'
 import MisExamenesPage from './pages/MisExamenesPage'
 import EstudiantesPage from './pages/EstudiantesPage'
 
-// Páginas de integracion-front-back
+// Página de HU3
 import { AuditoriaPage } from './pages/AuditoriaPage'
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+
         {/* Ruta principal */}
         <Route path="/" element={<HomePage />} />
 
-        {/* Rutas Públicas */}
+        {/* ==================== RUTAS PÚBLICAS ==================== */}
         <Route element={<PublicRoute />}>
           <Route path="/login" element={<LoginPage />} />
+
           <Route
             path="/recuperar-contrasena"
             element={<ForgotPasswordPage />}
           />
         </Route>
 
-        {/* Rutas Protegidas Generales */}
+        {/* ==================== RUTAS PROTEGIDAS GENERALES ==================== */}
         <Route element={<ProtectedRoute />}>
+
           <Route
             path="/dashboard"
             element={
@@ -45,20 +49,58 @@ export default function App() {
               </>
             }
           />
-          <Route path="/aulas" element={<AulasPage />} />
-          <Route path="/normas" element={<NormasPage />} />
-          <Route path="/examenes" element={<ExamenesPage />} />
-          <Route path="/mis-examenes" element={<MisExamenesPage />} />
-          <Route path="/programar-examen" element={<ProgramarExamenPage />} />
+
+          {/* HU1 - Gestión de usuarios */}
+          <Route
+            path="/usuarios"
+            element={<UsuariosPage />}
+          />
+
+          {/* HU4 - Aulas */}
+          <Route
+            path="/aulas"
+            element={<AulasPage />}
+          />
+
+          {/* HU5 - Normas */}
+          <Route
+            path="/normas"
+            element={<NormasPage />}
+          />
+
+          {/* HU6 - Exámenes */}
+          <Route
+            path="/examenes"
+            element={<ExamenesPage />}
+          />
+
+          <Route
+            path="/mis-examenes"
+            element={<MisExamenesPage />}
+          />
+
+          <Route
+            path="/programar-examen"
+            element={<ProgramarExamenPage />}
+          />
+
           <Route
             path="/programar-examen-admin"
             element={<ProgramarExamenAdminPage />}
           />
-          <Route path="/estudiantes" element={<EstudiantesPage />} />
+
+          {/* HU7 - Estudiantes */}
+          <Route
+            path="/estudiantes"
+            element={<EstudiantesPage />}
+          />
+
         </Route>
 
-        {/* Rutas Protegidas por Rol (Admin) */}
+        {/* ==================== RUTAS PROTEGIDAS DE ADMIN ==================== */}
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+
+          {/* HU3 - Auditoría */}
           <Route
             path="/dashboard/auditoria"
             element={
@@ -68,10 +110,15 @@ export default function App() {
               </>
             }
           />
+
         </Route>
 
-        {/* Ruta comodín por defecto */}
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        {/* ==================== RUTA POR DEFECTO ==================== */}
+        <Route
+          path="*"
+          element={<Navigate to="/login" replace />}
+        />
+
       </Routes>
     </BrowserRouter>
   )
