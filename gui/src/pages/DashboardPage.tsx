@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react'
 import { MainLayout } from '../layouts/MainLayout'
+import { AdminDashboard } from '../components/dashboard/AdminDashboard'
 
 export const DashboardPage: React.FC = () => {
   useEffect(() => {
@@ -27,6 +28,10 @@ export const DashboardPage: React.FC = () => {
   }, [])
 
   const role = localStorage.getItem('user_role') || 'Docente'
+
+  if (['admin', 'administrador'].includes(role.toLowerCase())) {
+    return <MainLayout><AdminDashboard /></MainLayout>
+  }
 
   return (
     <MainLayout>
