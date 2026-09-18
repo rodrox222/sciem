@@ -26,21 +26,6 @@ const getErrorMessage = (error: unknown) =>
     ? error.message
     : 'Ocurrió un error inesperado. Intenta nuevamente.'
 
-const TIPO_BADGE_STYLES: Record<string, string> = {
-  General: 'border-blue-200 bg-blue-50 text-[#002b5b]',
-  Particular: 'border-purple-200 bg-purple-50 text-purple-700',
-}
-
-const ESTADO_BADGE_STYLES: Record<string, string> = {
-  Activo: 'border-green-200 bg-green-50 text-green-700',
-  Inactivo: 'border-red-200 bg-red-50 text-red-600',
-}
-
-const ESTADO_BORDER_STYLES: Record<string, string> = {
-  Activo: 'bg-[#002b5b]',
-  Inactivo: 'bg-red-500',
-}
-
 export default function NormasPage() {
   const [normas, setNormas] = useState<Norma[]>([])
   const [searchInput, setSearchInput] = useState('')
