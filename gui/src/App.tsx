@@ -44,6 +44,7 @@ export default function App() {
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
           <Route path="/usuarios" element={<UsuariosPage />} />
           <Route path="/aulas" element={<AulasPage />} />
+          <Route path="/normas" element={<NormasPage />} />
           <Route
             path="/programar-examen-admin"
             element={<ProgramarExamenAdminPage />}
@@ -57,7 +58,6 @@ export default function App() {
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['admin', 'docente']} />}>
-          <Route path="/normas" element={<NormasPage />} />
           <Route path="/programar-examen" element={<ProgramarExamenPage />} />
         </Route>
 

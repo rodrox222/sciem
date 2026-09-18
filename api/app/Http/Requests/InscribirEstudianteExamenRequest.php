@@ -21,8 +21,20 @@ class InscribirEstudianteExamenRequest extends FormRequest
             'nombre'              => ['required', 'string', 'max:100'],
             'apellido_paterno'    => ['required', 'string', 'max:100'],
             'apellido_materno'    => ['nullable', 'string', 'max:100'],
-            'email_institucional' => ['required', 'email', 'max:150'],
+            'email_institucional' => [
+                'required',
+                'string',
+                'max:150',
+                'regex:/^[0-9]+@est\.umss\.edu$/i',
+            ],
             'estado'              => ['nullable', 'string', Rule::in(['Habilitado', 'Inhabilitado'])],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'email_institucional.regex' => 'El correo debe tener código numérico antes de @est.umss.edu.',
         ];
     }
 }

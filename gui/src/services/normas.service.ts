@@ -69,6 +69,13 @@ export const normasService = {
     })
   },
 
+  createParticularForExam(examId: string, particulares: Pick<NormaPayload, 'titulo' | 'descripcion'>[]) {
+    return apiRequest<{ message: string; normas: Norma[] }>(
+      `/examenes/${examId}/normas/particulares`,
+      { method: 'POST', body: JSON.stringify({ particulares }) },
+    )
+  },
+
   assignToExam(examId: string, normIds: string[]) {
     return apiRequest<{ message: string; normas: Norma[] }>(
       `/examenes/${examId}/normas`,

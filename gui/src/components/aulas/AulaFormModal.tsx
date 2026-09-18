@@ -179,6 +179,7 @@ export function AulaFormModal({
                 <Input
                   id="aula-capacidad"
                   type="number"
+                  onWheel={(event) => event.currentTarget.blur()}
                   min="1"
                   max="32767"
                   value={form.capacidad}

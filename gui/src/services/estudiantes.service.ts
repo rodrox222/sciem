@@ -59,13 +59,6 @@ export const estudiantesService = {
     )
   },
 
-  create(payload: EstudiantePayload) {
-    return apiRequest<MutationResponse>('/estudiantes', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    })
-  },
-
   enroll(examId: string, payload: InscripcionPayload) {
     return apiRequest<MutationResponse>(`/examenes/${examId}/estudiantes`, {
       method: 'POST',
