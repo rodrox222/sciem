@@ -127,7 +127,7 @@ export const HomeNavbar: React.FC<HomeNavbarProps> = ({
         </div>
 
         {/* La misma barra de navegación se usa en todas las páginas. */}
-        <nav aria-label="Navegación principal" className={"hidden flex-wrap border-t border-slate-100 pt-1 text-xs font-medium sm:flex sm:gap-1 xl:gap-3 xl:text-sm" + (authenticated ? " sm:justify-center" : "")}>
+        <nav aria-label="Navegación principal" className="hidden flex-wrap justify-center border-t border-slate-100 pt-1 text-xs font-medium sm:flex sm:gap-1 xl:gap-3 xl:text-sm">
           {authenticated ? navItems.filter((item) => item.href !== '#').map((item) => {
             const active = location.pathname === item.href;
             return (
@@ -154,6 +154,9 @@ export const HomeNavbar: React.FC<HomeNavbarProps> = ({
               <button type="button" onClick={() => goTo('/cronograma')} aria-current={location.pathname === '/cronograma' ? 'page' : undefined}
                 className={'rounded-t-md border-b-2 px-4 py-2.5 transition-colors ' + (location.pathname === '/cronograma' ? 'border-sky-600 bg-sky-50/70 font-bold text-blue-950' : 'border-transparent text-slate-600 hover:text-blue-950')}>
                 Cronograma de exámenes
+              </button>
+              <button type="button" disabled title="Disponible próximamente" className="rounded-t-md border-b-2 border-transparent px-4 py-2.5 text-slate-600">
+                Noticias
               </button>
             </>
           )}
