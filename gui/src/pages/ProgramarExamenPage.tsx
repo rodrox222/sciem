@@ -1,9 +1,15 @@
 import React, { useMemo, useState } from 'react'
-import { ArrowLeft, ArrowRight, CheckCircle2, Clock, FileText, MapPin, X } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  Clock,
+  FileText,
+  MapPin,
+  X,
+} from 'lucide-react'
 
-import { Navbar } from '../components/Navbar'
-import { AdminNavbar } from '../components/AdminNavbar'
-import { AdminFooter } from '../components/AdminFooter'
+import { MainLayout } from '../layouts/MainLayout'
 import { NormaSelector } from '../components/normas/NormaSelector'
 import type { Norma } from '../components/normas/NormaFormModal'
 
@@ -48,26 +54,11 @@ const normasIniciales: Norma[] = [
 ]
 
 const asignaturasIniciales = [
-  {
-    id: 1,
-    nombre: 'Sistemas Operativos',
-  },
-  {
-    id: 2,
-    nombre: 'Ingeniería de Software',
-  },
-  {
-    id: 3,
-    nombre: 'Redes de Computadoras',
-  },
-  {
-    id: 4,
-    nombre: 'Bases de Datos',
-  },
-  {
-    id: 5,
-    nombre: 'Simulación de Sistemas',
-  },
+  { id: 1, nombre: 'Sistemas Operativos' },
+  { id: 2, nombre: 'Ingeniería de Software' },
+  { id: 3, nombre: 'Redes de Computadoras' },
+  { id: 4, nombre: 'Bases de Datos' },
+  { id: 5, nombre: 'Simulación de Sistemas' },
 ]
 
 const aulasIniciales: Aula[] = [
@@ -124,15 +115,15 @@ const pasos = [
   },
 ]
 
-
+const TIPO_NORMA_BADGE: Record<string, string> = {
+  General: 'border-blue-200 bg-blue-50 text-[#002b5b]',
+  Particular: 'border-purple-200 bg-purple-50 text-purple-700',
+}
 
 export const ProgramarExamenPage: React.FC = () => {
   const role = localStorage.getItem('user_role') || 'Docente'
-  const usuario = localStorage.getItem('user_data') || role
-
   const esAdministrador =
-    role.toLowerCase() === 'administrador' ||
-    role.toLowerCase() === 'admin'
+    role.toLowerCase() === 'administrador' || role.toLowerCase() === 'admin'
 
   const [pasoActual, setPasoActual] = useState<Paso>(1)
 
@@ -150,7 +141,7 @@ export const ProgramarExamenPage: React.FC = () => {
 
   const aulasDisponibles = useMemo(
     () => aulasIniciales.filter((aula) => aula.disponible),
-    [],
+    []
   )
 
   const horaFin = useMemo(() => {
@@ -164,10 +155,7 @@ export const ProgramarExamenPage: React.FC = () => {
 
     const [horas, minutos] = horaInicio.split(':').map(Number)
 
-    if (
-      Number.isNaN(horas) ||
-      Number.isNaN(minutos)
-    ) {
+    if (Number.isNaN(horas) || Number.isNaN(minutos)) {
       return ''
     }
 
@@ -183,7 +171,6 @@ export const ProgramarExamenPage: React.FC = () => {
 
   const fechaMinima = useMemo(() => {
     const hoy = new Date()
-
     const year = hoy.getFullYear()
     const month = String(hoy.getMonth() + 1).padStart(2, '0')
     const day = String(hoy.getDate()).padStart(2, '0')
@@ -191,13 +178,11 @@ export const ProgramarExamenPage: React.FC = () => {
     return `${year}-${month}-${day}`
   }, [])
 
-  const aulaSeleccionada = aulasIniciales.find(
-    (aula) => aula.id === aulaId,
-  )
+  const aulaSeleccionada = aulasIniciales.find((aula) => aula.id === aulaId)
 
   const normasSeleccionadasData = normas.filter((norma) =>
-  normasSeleccionadas.includes(norma.id),
-)
+    normasSeleccionadas.includes(norma.id)
+  )
 
   const limpiarMensajes = () => {
     setError('')
@@ -205,27 +190,25 @@ export const ProgramarExamenPage: React.FC = () => {
   }
 
   const crearNormaParticular = (descripcion: string) => {
-  const nuevaNorma: Norma = {
-    id: Date.now(),
-    descripcion,
-    tipo: 'Particular',
-    estado: 'Activo',
+    const nuevaNorma: Norma = {
+      id: Date.now(),
+      descripcion,
+      tipo: 'Particular',
+      estado: 'Activo',
+    }
+
+    setNormas((normasActuales) => [...normasActuales, nuevaNorma])
+    setNormasSeleccionadas((seleccionadas) => [
+      ...seleccionadas,
+      nuevaNorma.id,
+    ])
   }
-
-  setNormas((normasActuales) => [...normasActuales, nuevaNorma])
-
-  setNormasSeleccionadas((seleccionadas) => [
-    ...seleccionadas,
-    nuevaNorma.id,
-  ])
-}
 
   const validarPaso1 = () => {
     if (!asignatura.trim()) {
-      setError('Debes ingresar la asignatura del examen.')
+      setError('Debes seleccionar la asignatura del examen.')
       return false
     }
-
     return true
   }
 
@@ -280,33 +263,29 @@ export const ProgramarExamenPage: React.FC = () => {
   }
 
   const cambiarPaso = (destino: Paso) => {
-  limpiarMensajes()
+    limpiarMensajes()
 
-  if (destino === pasoActual) {
-    return
+    if (destino === pasoActual) return
+
+    if (destino > pasoActual) {
+      if (destino >= 2 && !validarPaso1()) {
+        setPasoActual(1)
+        return
+      }
+
+      if (destino >= 3 && !validarPaso2()) {
+        setPasoActual(2)
+        return
+      }
+
+      if (destino >= 4 && !validarPaso3()) {
+        setPasoActual(3)
+        return
+      }
+    }
+
+    setPasoActual(destino)
   }
-
-  // Si intenta avanzar directamente a otro paso,
-  // validamos primero los pasos anteriores.
-  if (destino > pasoActual) {
-    if (destino >= 2 && !validarPaso1()) {
-      setPasoActual(1)
-      return
-    }
-
-    if (destino >= 3 && !validarPaso2()) {
-      setPasoActual(2)
-      return
-    }
-
-    if (destino >= 4 && !validarPaso3()) {
-      setPasoActual(3)
-      return
-    }
-  }
-
-  setPasoActual(destino)
-}
 
   const irSiguiente = () => {
     limpiarMensajes()
@@ -355,22 +334,8 @@ export const ProgramarExamenPage: React.FC = () => {
       return
     }
 
-    /*
-     * IMPORTANTE:
-     * Aquí posteriormente conectaremos el formulario con el API.
-     *
-     * El backend deberá validar nuevamente:
-     * - fecha válida
-     * - duración > 0
-     * - aula seleccionada
-     * - al menos una norma
-     * - conflictos de horario/aula
-     *
-     * Por ahora solo simulamos la confirmación visual.
-     */
-
     setMensajeExito(
-      'El examen fue validado correctamente. La conexión con el API se integrará posteriormente.',
+      'El examen fue validado correctamente. La conexión con el API se integrará posteriormente.'
     )
   }
 
@@ -389,49 +354,49 @@ export const ProgramarExamenPage: React.FC = () => {
             </div>
 
             <div>
-  <label className="mb-2 block text-sm font-semibold text-slate-700">
-    Asignatura <span className="text-[#E30613]">*</span>
-  </label>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">
+                Asignatura <span className="text-[#E30613]">*</span>
+              </label>
 
-  <p className="mb-3 text-sm text-slate-500">
-    Selecciona la asignatura correspondiente al examen.
-  </p>
+              <p className="mb-3 text-sm text-slate-500">
+                Selecciona la asignatura correspondiente al examen.
+              </p>
 
-  <div className="space-y-2">
-    {asignaturasIniciales.map((asignaturaItem) => {
-      const seleccionada = asignatura === asignaturaItem.nombre
+              <div className="space-y-2">
+                {asignaturasIniciales.map((asignaturaItem) => {
+                  const seleccionada = asignatura === asignaturaItem.nombre
 
-      return (
-        <button
-          key={asignaturaItem.id}
-          type="button"
-          onClick={() => setAsignatura(asignaturaItem.nombre)}
-          className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition ${
-            seleccionada
-              ? 'border-[#003770] bg-blue-50'
-              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-          }`}
-        >
-          <span
-            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
-              seleccionada
-                ? 'border-[#003770] bg-[#003770]'
-                : 'border-slate-300 bg-white'
-            }`}
-          >
-            {seleccionada && (
-              <CheckCircle2 className="h-3.5 w-3.5 text-white" />
-            )}
-          </span>
+                  return (
+                    <button
+                      key={asignaturaItem.id}
+                      type="button"
+                      onClick={() => setAsignatura(asignaturaItem.nombre)}
+                      className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition ${
+                        seleccionada
+                          ? 'border-[#003770] bg-blue-50'
+                          : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span
+                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
+                          seleccionada
+                            ? 'border-[#003770] bg-[#003770]'
+                            : 'border-slate-300 bg-white'
+                        }`}
+                      >
+                        {seleccionada && (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-white" />
+                        )}
+                      </span>
 
-          <span className="text-sm font-medium text-slate-700">
-            {asignaturaItem.nombre}
-          </span>
-        </button>
-      )
-    })}
-  </div>
-</div>
+                      <span className="text-sm font-medium text-slate-700">
+                        {asignaturaItem.nombre}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
           </section>
         )
 
@@ -489,37 +454,36 @@ export const ProgramarExamenPage: React.FC = () => {
                   htmlFor="duracion"
                   className="mb-2 block text-sm font-semibold text-slate-700"
                 >
-                  Duración en minutos{' '}
-                  <span className="text-[#E30613]">*</span>
+                  Duración en minutos <span className="text-[#E30613]">*</span>
                 </label>
 
-               <input
-  id="duracion"
-  type="text"
-  inputMode="numeric"
-  value={duracion}
-  maxLength={3}
-  onChange={(event) => {
-    const valor = event.target.value.replace(/\D/g, '')
+                <input
+                  id="duracion"
+                  type="text"
+                  inputMode="numeric"
+                  value={duracion}
+                  maxLength={3}
+                  onChange={(event) => {
+                    const valor = event.target.value.replace(/\D/g, '')
 
-    if (valor === '') {
-      setDuracion('')
-      return
-    }
+                    if (valor === '') {
+                      setDuracion('')
+                      return
+                    }
 
-    const minutos = Number(valor)
+                    const minutos = Number(valor)
 
-    if (minutos <= 270) {
-      setDuracion(valor)
-    }
-  }}
-  placeholder="Ej. 90"
-  className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-[#003770] focus:ring-2 focus:ring-[#003770]/20"
-/>
+                    if (minutos <= 270) {
+                      setDuracion(valor)
+                    }
+                  }}
+                  placeholder="Ej. 90"
+                  className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-[#003770] focus:ring-2 focus:ring-[#003770]/20"
+                />
 
-<p className="mt-1.5 text-xs text-slate-400">
-  La duración debe estar entre 1 y 270 minutos (máximo 4 horas y 30 minutos).
-</p>
+                <p className="mt-1.5 text-xs text-slate-400">
+                  La duración debe estar entre 1 y 270 minutos (máximo 4 horas y 30 minutos).
+                </p>
               </div>
 
               <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
@@ -569,15 +533,12 @@ export const ProgramarExamenPage: React.FC = () => {
                   value={aulaId ?? ''}
                   onChange={(event) =>
                     setAulaId(
-                      event.target.value
-                        ? Number(event.target.value)
-                        : null,
+                      event.target.value ? Number(event.target.value) : null
                     )
                   }
                   className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-[#003770] focus:ring-2 focus:ring-[#003770]/20"
                 >
                   <option value="">Selecciona un aula disponible</option>
-
                   {aulasDisponibles.map((aula) => (
                     <option key={aula.id} value={aula.id}>
                       {aula.nombre} · Capacidad: {aula.capacidad}
@@ -591,14 +552,14 @@ export const ProgramarExamenPage: React.FC = () => {
               </div>
 
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-  <NormaSelector
-    normas={normas}
-    selectedIds={normasSeleccionadas}
-    onChange={setNormasSeleccionadas}
-    permitirNormaParticular={!esAdministrador}
-    onCrearNormaParticular={crearNormaParticular}
-  />
-</div>
+                <NormaSelector
+                  normas={normas}
+                  selectedIds={normasSeleccionadas}
+                  onChange={setNormasSeleccionadas}
+                  permitirNormaParticular={!esAdministrador}
+                  onCrearNormaParticular={crearNormaParticular}
+                />
+              </div>
             </div>
           </section>
         )
@@ -615,7 +576,7 @@ export const ProgramarExamenPage: React.FC = () => {
               </p>
             </div>
 
-            <div className="overflow-hidden rounded-xl border border-slate-200">
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
               <div className="divide-y divide-slate-200">
                 <div className="flex flex-col gap-1 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
                   <span className="text-sm font-medium text-slate-500">
@@ -627,9 +588,7 @@ export const ProgramarExamenPage: React.FC = () => {
                 </div>
 
                 <div className="flex flex-col gap-1 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <span className="text-sm font-medium text-slate-500">
-                    Fecha
-                  </span>
+                  <span className="text-sm font-medium text-slate-500">Fecha</span>
                   <span className="text-sm font-semibold text-slate-900">
                     {fecha}
                   </span>
@@ -654,9 +613,7 @@ export const ProgramarExamenPage: React.FC = () => {
                 </div>
 
                 <div className="flex flex-col gap-1 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <span className="text-sm font-medium text-slate-500">
-                    Aula
-                  </span>
+                  <span className="text-sm font-medium text-slate-500">Aula</span>
                   <span className="text-sm font-semibold text-slate-900">
                     {aulaSeleccionada?.nombre || 'No seleccionada'}
                   </span>
@@ -675,9 +632,8 @@ export const ProgramarExamenPage: React.FC = () => {
                       >
                         <span
                           className={`mb-2 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                            norma.tipo === 'General'
-                              ? 'border-blue-200 bg-blue-50 text-[#002b5b]'
-                              : 'border-purple-200 bg-purple-50 text-purple-700'
+                            TIPO_NORMA_BADGE[norma.tipo] ||
+                            'border-slate-200 bg-white text-slate-600'
                           }`}
                         >
                           {norma.tipo}
@@ -709,177 +665,163 @@ export const ProgramarExamenPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100/60 flex flex-col">
-      {esAdministrador ? (
-        <AdminNavbar rol={role} usuario={usuario} />
-      ) : (
-        <Navbar rol={role} usuario={usuario} />
-      )}
-
-      <main className="flex-1 w-full px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto w-full max-w-5xl">
-          <div className="mb-8">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500">
-                  Programación de exámenes
-                </p>
-
-                <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#003770] sm:text-3xl">
-                  Programar examen
-                </h1>
-
-                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-                  Completa la información requerida para programar un examen.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={cancelarFormulario}
-                className="inline-flex items-center justify-center gap-2 self-start rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-400 hover:bg-slate-50"
-              >
-                <X className="h-4 w-4" />
-                Limpiar
-              </button>
-            </div>
+    <MainLayout>
+      <div className="w-full max-w-5xl mx-auto space-y-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-slate-500">
+              Programación de exámenes
+            </p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#003770] sm:text-3xl">
+              Programar examen
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
+              Completa la información requerida para programar un examen.
+            </p>
           </div>
 
-          <div className="mb-6 overflow-x-auto">
-  <div className="min-w-[680px] rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-    <div className="flex items-start">
-      {pasos.map((paso, index) => {
-        const Icon = paso.icono
-        const completado = paso.numero < pasoActual
-        const activo = paso.numero === pasoActual
+          <button
+            type="button"
+            onClick={cancelarFormulario}
+            className="inline-flex items-center justify-center gap-2 self-start rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-400 hover:bg-slate-50"
+          >
+            <X className="h-4 w-4" />
+            Limpiar
+          </button>
+        </div>
 
-        return (
-          <React.Fragment key={paso.numero}>
-            <button
-              type="button"
-              onClick={() => cambiarPaso(paso.numero as Paso)}
-              className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-lg p-2 text-left transition hover:bg-slate-50"
-            >
-              <div
-                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 ${
-                  completado
-                    ? 'border-[#003770] bg-[#003770] text-white'
-                    : activo
-                      ? 'border-[#003770] bg-blue-50 text-[#003770]'
-                      : 'border-slate-200 bg-white text-slate-400'
-                }`}
-              >
-                {completado ? (
-                  <CheckCircle2 className="h-5 w-5" />
-                ) : (
-                  <Icon className="h-5 w-5" />
-                )}
-              </div>
+        {/* Stepper de Pasos */}
+        <div className="overflow-x-auto">
+          <div className="min-w-[680px] rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+            <div className="flex items-start">
+              {pasos.map((paso, index) => {
+                const Icon = paso.icono
+                const completado = paso.numero < pasoActual
+                const activo = paso.numero === pasoActual
 
-              <div className="min-w-0">
-                <p
-                  className={`text-sm font-semibold ${
-                    activo || completado
-                      ? 'text-[#003770]'
-                      : 'text-slate-400'
-                  }`}
-                >
-                  {paso.titulo}
-                </p>
+                return (
+                  <React.Fragment key={paso.numero}>
+                    <button
+                      type="button"
+                      onClick={() => cambiarPaso(paso.numero as Paso)}
+                      className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-lg p-2 text-left transition hover:bg-slate-50"
+                    >
+                      <div
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 ${
+                          completado
+                            ? 'border-[#003770] bg-[#003770] text-white'
+                            : activo
+                            ? 'border-[#003770] bg-blue-50 text-[#003770]'
+                            : 'border-slate-200 bg-white text-slate-400'
+                        }`}
+                      >
+                        {completado ? (
+                          <CheckCircle2 className="h-5 w-5" />
+                        ) : (
+                          <Icon className="h-5 w-5" />
+                        )}
+                      </div>
 
-                <p className="mt-0.5 text-xs text-slate-400">
-                  {paso.descripcion}
-                </p>
-              </div>
-            </button>
+                      <div className="min-w-0">
+                        <p
+                          className={`text-sm font-semibold ${
+                            activo || completado
+                              ? 'text-[#003770]'
+                              : 'text-slate-400'
+                          }`}
+                        >
+                          {paso.titulo}
+                        </p>
 
-            {index < pasos.length - 1 && (
-              <div
-                className={`mt-5 h-0.5 w-10 shrink-0 ${
-                  paso.numero < pasoActual
-                    ? 'bg-[#003770]'
-                    : 'bg-slate-200'
-                }`}
-              />
-            )}
-          </React.Fragment>
-        )
-      })}
-    </div>
-  </div>
-</div>
+                        <p className="mt-0.5 text-xs text-slate-400">
+                          {paso.descripcion}
+                        </p>
+                      </div>
+                    </button>
 
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="p-5 sm:p-8">
-              {error && (
-                <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-                  <p className="text-sm font-medium leading-relaxed text-red-700">
-                    {error}
-                  </p>
-                </div>
-              )}
-
-              {mensajeExito && (
-                <div className="mb-6 flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
-                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
-
-                  <div>
-                    <p className="text-sm font-semibold text-green-800">
-                      Programación validada
-                    </p>
-
-                    <p className="mt-1 text-sm leading-relaxed text-green-700">
-                      {mensajeExito}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {renderPasoActual()}
-            </div>
-
-            <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-              <div>
-                {pasoActual > 1 && (
-                  <button
-                    type="button"
-                    onClick={irAnterior}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 sm:w-auto"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    Anterior
-                  </button>
-                )}
-              </div>
-
-              <div>
-                {pasoActual < 4 ? (
-                  <button
-                    type="button"
-                    onClick={irSiguiente}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#003770] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#002b5b] sm:w-auto"
-                  >
-                    Siguiente
-                    <ArrowRight className="h-4 w-4" />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={confirmarProgramacion}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#E30613] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#c90511] sm:w-auto"
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    Confirmar programación
-                  </button>
-                )}
-              </div>
+                    {index < pasos.length - 1 && (
+                      <div
+                        className={`mt-5 h-0.5 w-10 shrink-0 ${
+                          paso.numero < pasoActual
+                            ? 'bg-[#003770]'
+                            : 'bg-slate-200'
+                        }`}
+                      />
+                    )}
+                  </React.Fragment>
+                )
+              })}
             </div>
           </div>
         </div>
-      </main>
 
-      <AdminFooter />
-    </div>
+        {/* Tarjeta de Contenido */}
+        <div className="rounded-xl border border-slate-200 bg-white shadow-xs">
+          <div className="p-5 sm:p-8">
+            {error && (
+              <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                <p className="text-sm font-medium leading-relaxed text-red-700">
+                  {error}
+                </p>
+              </div>
+            )}
+
+            {mensajeExito && (
+              <div className="mb-6 flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
+                <div>
+                  <p className="text-sm font-semibold text-green-800">
+                    Programación validada
+                  </p>
+                  <p className="mt-1 text-sm leading-relaxed text-green-700">
+                    {mensajeExito}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {renderPasoActual()}
+          </div>
+
+          <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+            <div>
+              {pasoActual > 1 && (
+                <button
+                  type="button"
+                  onClick={irAnterior}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 sm:w-auto"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Anterior
+                </button>
+              )}
+            </div>
+
+            <div>
+              {pasoActual < 4 ? (
+                <button
+                  type="button"
+                  onClick={irSiguiente}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#003770] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#002b5b] sm:w-auto"
+                >
+                  Siguiente
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={confirmarProgramacion}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#E30613] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#c90511] sm:w-auto"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  Confirmar programación
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </MainLayout>
   )
 }
 

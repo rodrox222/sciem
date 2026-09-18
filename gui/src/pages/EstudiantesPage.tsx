@@ -1,7 +1,4 @@
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { Navbar } from '../components/Navbar'
-import { AdminNavbar } from '../components/AdminNavbar'
 import {
   Edit3,
   Search,
@@ -10,8 +7,7 @@ import {
   Users,
 } from 'lucide-react'
 
-
-import { AdminFooter } from '../components/AdminFooter'
+import { MainLayout } from '../layouts/MainLayout'
 import {
   EstudianteFormModal,
   type Estudiante,
@@ -60,25 +56,16 @@ const estudiantesIniciales: Estudiante[] = [
   },
 ]
 
+const ESTADO_BADGE_STYLES: Record<string, string> = {
+  Activo: 'bg-emerald-100 text-emerald-700',
+  Inactivo: 'bg-slate-100 text-slate-600',
+}
+
 export default function EstudiantesPage() {
-  
- const [searchParams] = useSearchParams()
-
-const rolRuta = searchParams.get('rol')
-const rolLocal = localStorage.getItem('user_role')
-
-const esAdmin =
-  rolRuta === 'admin' ||
-  rolLocal?.toLowerCase().includes('admin') === true
-  const [estudiantes, setEstudiantes] =
-    useState<Estudiante[]>(estudiantesIniciales)
-
+  const [estudiantes, setEstudiantes] = useState<Estudiante[]>(estudiantesIniciales)
   const [busqueda, setBusqueda] = useState('')
-
   const [modalAbierto, setModalAbierto] = useState(false)
-
-  const [estudianteEditando, setEstudianteEditando] =
-    useState<Estudiante | null>(null)
+  const [estudianteEditando, setEstudianteEditando] = useState<Estudiante | null>(null)
 
   const estudiantesFiltrados = useMemo(() => {
     const texto = busqueda.trim().toLowerCase()
@@ -93,6 +80,7 @@ const esAdmin =
         estudiante.apellidoPaterno,
         estudiante.apellidoMaterno,
       ]
+        .filter(Boolean)
         .join(' ')
         .toLowerCase()
 
@@ -104,13 +92,15 @@ const esAdmin =
     })
   }, [busqueda, estudiantes])
 
-  const estudiantesActivos = estudiantes.filter(
-    (estudiante) => estudiante.estado === 'Activo',
-  ).length
+  const estudiantesActivos = useMemo(
+    () => estudiantes.filter((estudiante) => estudiante.estado === 'Activo').length,
+    [estudiantes]
+  )
 
-  const estudiantesInactivos = estudiantes.filter(
-    (estudiante) => estudiante.estado === 'Inactivo',
-  ).length
+  const estudiantesInactivos = useMemo(
+    () => estudiantes.filter((estudiante) => estudiante.estado === 'Inactivo').length,
+    [estudiantes]
+  )
 
   const handleRegistrar = () => {
     setEstudianteEditando(null)
@@ -129,15 +119,11 @@ const esAdmin =
 
   const handleGuardarEstudiante = (estudianteGuardado: Estudiante) => {
     setEstudiantes((actuales) => {
-      const existe = actuales.some(
-        (estudiante) => estudiante.id === estudianteGuardado.id,
-      )
+      const existe = actuales.some((item) => item.id === estudianteGuardado.id)
 
       if (existe) {
-        return actuales.map((estudiante) =>
-          estudiante.id === estudianteGuardado.id
-            ? estudianteGuardado
-            : estudiante,
+        return actuales.map((item) =>
+          item.id === estudianteGuardado.id ? estudianteGuardado : item
         )
       }
 
@@ -148,47 +134,29 @@ const esAdmin =
   }
 
   const handleDesactivar = (estudiante: Estudiante) => {
-    if (estudiante.estado === 'Inactivo') {
-      return
-    }
+    if (estudiante.estado === 'Inactivo') return
 
     setEstudiantes((actuales) =>
       actuales.map((item) =>
-        item.id === estudiante.id
-          ? { ...item, estado: 'Inactivo' }
-          : item,
-      ),
+        item.id === estudiante.id ? { ...item, estado: 'Inactivo' } : item
+      )
     )
   }
 
   return (
-    <div className="min-h-screen bg-slate-100/60 flex flex-col">
-    {esAdmin ? (
-  <AdminNavbar
-    rol="Administrador"
-    usuario="Administrador"
-  />
-) : (
-  <Navbar
-    rol="Docente"
-    usuario="Docente"
-  />
-)}
-
-      <main className="flex-1 px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
+    <MainLayout>
+      <div className="space-y-6">
         {/* Encabezado */}
-        <section className="mb-6">
+        <section>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold text-[#003770] uppercase tracking-wide">
                 Gestión académica
               </p>
-
-              <h1 className="mt-1 text-2xl font-bold text-slate-900 sm:text-3xl">
+              <h1 className="mt-1 text-2xl font-bold text-slate-900 sm:text-3xl tracking-tight">
                 Estudiantes
               </h1>
-
-              <p className="text-sm text-slate-600 mt-2 max-w-2xl">
+              <p className="text-sm text-slate-600 mt-1 max-w-2xl">
                 Registra, consulta y modifica los datos de los estudiantes.
               </p>
             </div>
@@ -196,7 +164,7 @@ const esAdmin =
             <button
               type="button"
               onClick={handleRegistrar}
-              className="min-h-[44px] w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-lg bg-[#003770] px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#002b5b] transition"
+              className="min-h-[44px] w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-lg bg-[#003770] px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-[#002b5b] transition whitespace-nowrap"
             >
               <UserPlus className="h-5 w-5" />
               Registrar estudiante
@@ -204,18 +172,15 @@ const esAdmin =
           </div>
         </section>
 
-        {/* Resumen */}
-        <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        {/* Tarjetas de Resumen */}
+        <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-blue-50 p-3">
                 <Users className="h-5 w-5 text-[#003770]" />
               </div>
-
               <div>
-                <p className="text-sm text-slate-500">
-                  Total estudiantes
-                </p>
+                <p className="text-sm text-slate-500">Total estudiantes</p>
                 <p className="text-2xl font-bold text-slate-900">
                   {estudiantes.length}
                 </p>
@@ -223,22 +188,18 @@ const esAdmin =
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
             <div>
-              <p className="text-sm text-slate-500">
-                Estudiantes activos
-              </p>
+              <p className="text-sm text-slate-500">Estudiantes activos</p>
               <p className="text-2xl font-bold text-emerald-600 mt-1">
                 {estudiantesActivos}
               </p>
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
             <div>
-              <p className="text-sm text-slate-500">
-                Estudiantes inactivos
-              </p>
+              <p className="text-sm text-slate-500">Estudiantes inactivos</p>
               <p className="text-2xl font-bold text-slate-500 mt-1">
                 {estudiantesInactivos}
               </p>
@@ -246,8 +207,8 @@ const esAdmin =
           </div>
         </section>
 
-        {/* Búsqueda */}
-        <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm mb-6">
+        {/* Buscador */}
+        <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
           <label
             htmlFor="buscar-estudiante"
             className="block text-sm font-semibold text-slate-700 mb-2"
@@ -257,7 +218,6 @@ const esAdmin =
 
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-
             <input
               id="buscar-estudiante"
               type="search"
@@ -273,90 +233,62 @@ const esAdmin =
           </p>
         </section>
 
-        {/* Vista escritorio */}
-        <section className="hidden md:block rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        {/* Tabla Desktop */}
+        <section className="hidden md:block rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="text-left px-5 py-4 font-semibold text-slate-700">
-                    Estudiante
-                  </th>
-                  <th className="text-left px-5 py-4 font-semibold text-slate-700">
-                    Código SIS
-                  </th>
-                  <th className="text-left px-5 py-4 font-semibold text-slate-700">
-                    CI
-                  </th>
-                  <th className="text-left px-5 py-4 font-semibold text-slate-700">
-                    Correo
-                  </th>
-                  <th className="text-left px-5 py-4 font-semibold text-slate-700">
-                    Estado
-                  </th>
-                  <th className="text-right px-5 py-4 font-semibold text-slate-700">
-                    Acciones
-                  </th>
+                  <th className="text-left px-5 py-4 font-semibold text-slate-700">Estudiante</th>
+                  <th className="text-left px-5 py-4 font-semibold text-slate-700">Código SIS</th>
+                  <th className="text-left px-5 py-4 font-semibold text-slate-700">CI</th>
+                  <th className="text-left px-5 py-4 font-semibold text-slate-700">Correo</th>
+                  <th className="text-left px-5 py-4 font-semibold text-slate-700">Estado</th>
+                  <th className="text-right px-5 py-4 font-semibold text-slate-700">Acciones</th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-slate-100">
                 {estudiantesFiltrados.map((estudiante) => (
-                  <tr
-                    key={estudiante.id}
-                    className="hover:bg-slate-50 transition"
-                  >
+                  <tr key={estudiante.id} className="hover:bg-slate-50 transition">
                     <td className="px-5 py-4">
                       <p className="font-semibold text-slate-900">
-                        {estudiante.nombre}{' '}
-                        {estudiante.apellidoPaterno}{' '}
-                        {estudiante.apellidoMaterno}
+                        {[estudiante.nombre, estudiante.apellidoPaterno, estudiante.apellidoMaterno]
+                          .filter(Boolean)
+                          .join(' ')}
                       </p>
                     </td>
-
-                    <td className="px-5 py-4 text-slate-600">
-                      {estudiante.codigoSis}
-                    </td>
-
-                    <td className="px-5 py-4 text-slate-600">
-                      {estudiante.ci}
-                    </td>
-
-                    <td className="px-5 py-4 text-slate-600">
-                      {estudiante.correo || '—'}
-                    </td>
-
+                    <td className="px-5 py-4 text-slate-600">{estudiante.codigoSis}</td>
+                    <td className="px-5 py-4 text-slate-600">{estudiante.ci}</td>
+                    <td className="px-5 py-4 text-slate-600">{estudiante.correo || '—'}</td>
                     <td className="px-5 py-4">
                       <span
                         className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                          estudiante.estado === 'Activo'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-slate-100 text-slate-600'
+                          ESTADO_BADGE_STYLES[estudiante.estado] || ESTADO_BADGE_STYLES.Inactivo
                         }`}
                       >
                         {estudiante.estado}
                       </span>
                     </td>
-
                     <td className="px-5 py-4">
                       <div className="flex justify-end gap-2">
                         <button
                           type="button"
                           onClick={() => handleEditar(estudiante)}
-                          className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition"
+                          className="min-h-[38px] min-w-[38px] inline-flex items-center justify-center rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition"
                           title="Editar estudiante"
                         >
-                          <Edit3 className="h-5 w-5" />
+                          <Edit3 className="h-4 w-4" />
                         </button>
 
                         <button
                           type="button"
                           onClick={() => handleDesactivar(estudiante)}
                           disabled={estudiante.estado === 'Inactivo'}
-                          className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-lg border border-red-200 text-[#E30613] hover:bg-red-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="min-h-[38px] min-w-[38px] inline-flex items-center justify-center rounded-lg border border-red-200 text-[#E30613] hover:bg-red-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
                           title="Desactivar estudiante"
                         >
-                          <UserX className="h-5 w-5" />
+                          <UserX className="h-4 w-4" />
                         </button>
                       </div>
                     </td>
@@ -365,10 +297,7 @@ const esAdmin =
 
                 {estudiantesFiltrados.length === 0 && (
                   <tr>
-                    <td
-                      colSpan={6}
-                      className="px-5 py-12 text-center text-slate-500"
-                    >
+                    <td colSpan={6} className="px-5 py-12 text-center text-slate-500">
                       No se encontraron estudiantes.
                     </td>
                   </tr>
@@ -378,20 +307,20 @@ const esAdmin =
           </div>
         </section>
 
-        {/* Vista móvil */}
+        {/* Tarjetas Móviles */}
         <section className="md:hidden space-y-4">
           {estudiantesFiltrados.map((estudiante) => (
             <article
               key={estudiante.id}
-              className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+              className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="font-semibold text-slate-900 break-words">
-                    {estudiante.nombre} {estudiante.apellidoPaterno}{' '}
-                    {estudiante.apellidoMaterno}
+                    {[estudiante.nombre, estudiante.apellidoPaterno, estudiante.apellidoMaterno]
+                      .filter(Boolean)
+                      .join(' ')}
                   </h2>
-
                   <p className="text-sm text-slate-500 mt-1">
                     SIS: {estudiante.codigoSis}
                   </p>
@@ -399,9 +328,7 @@ const esAdmin =
 
                 <span
                   className={`shrink-0 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
-                    estudiante.estado === 'Activo'
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'bg-slate-100 text-slate-600'
+                    ESTADO_BADGE_STYLES[estudiante.estado] || ESTADO_BADGE_STYLES.Inactivo
                   }`}
                 >
                   {estudiante.estado}
@@ -409,18 +336,13 @@ const esAdmin =
               </div>
 
               <div className="mt-4 space-y-2 text-sm">
-                <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
+                <div className="flex justify-between gap-1">
                   <span className="text-slate-500">CI</span>
-                  <span className="font-medium text-slate-800 break-all">
-                    {estudiante.ci}
-                  </span>
+                  <span className="font-medium text-slate-800 break-all">{estudiante.ci}</span>
                 </div>
-
-                <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
+                <div className="flex justify-between gap-1">
                   <span className="text-slate-500">Correo</span>
-                  <span className="font-medium text-slate-800 break-all">
-                    {estudiante.correo || '—'}
-                  </span>
+                  <span className="font-medium text-slate-800 break-all">{estudiante.correo || '—'}</span>
                 </div>
               </div>
 
@@ -453,17 +375,15 @@ const esAdmin =
             </div>
           )}
         </section>
-      </main>
 
-      <AdminFooter />
-
-      {/* Modal de registro / edición */}
-      <EstudianteFormModal
-        open={modalAbierto}
-        estudiante={estudianteEditando}
-        onClose={handleCerrarModal}
-        onSave={handleGuardarEstudiante}
-      />
-    </div>
+        {/* Modal */}
+        <EstudianteFormModal
+          open={modalAbierto}
+          estudiante={estudianteEditando}
+          onClose={handleCerrarModal}
+          onSave={handleGuardarEstudiante}
+        />
+      </div>
+    </MainLayout>
   )
 }

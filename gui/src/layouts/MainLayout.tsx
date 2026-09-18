@@ -2,6 +2,7 @@ import React from 'react'
 import { Footer } from '../components/Footer'
 import { Navbar } from '../components/Navbar'
 import { IdleTimer } from '../components/IdleTimer'
+
 interface MainLayoutProps {
   children: React.ReactNode
 }
@@ -16,6 +17,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   const role = localStorage.getItem('user_role') || 'Docente'
   let displayName = role
+
   try {
     const userDataRaw = localStorage.getItem('user_data')
     const userData = userDataRaw ? JSON.parse(userDataRaw) : null
@@ -28,7 +30,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
-      {/* Barra de navegación superior */}
+      {/* Barra de navegación única adaptativa */}
       <Navbar rol={role} usuario={displayName} onLogout={handleLogout} />
 
       {/* Área principal de contenido */}
@@ -39,6 +41,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       {/* Footer institucional */}
       <Footer />
 
+      {/* Modal único de control de inactividad */}
       <IdleTimer />
     </div>
   )
