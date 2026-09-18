@@ -202,7 +202,7 @@ export default function EstudiantesPage() {
           {canManage && examId && exam && (
             <button type="button" onClick={openCreate} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#0056B3] px-5 py-3 text-sm font-semibold text-white hover:bg-[#003770]">
               <UserPlus className="h-5 w-5" />
-              Agregar al examen
+              Agregar Estudiantes
             </button>
           )}
         </header>
