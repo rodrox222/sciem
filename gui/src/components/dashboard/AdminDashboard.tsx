@@ -14,10 +14,10 @@ import {
   UsersRound,
 } from 'lucide-react'
 
-import { aulasService, type PaginatedResponse } from '../services/aulas.service'
-import { apiRequest } from '../services/apiClient'
-import { estudiantesService } from '../services/estudiantes.service'
-import { examenesService, type Examen } from '../services/examenes.service'
+import { aulasService, type PaginatedResponse } from '../../services/aulas.service'
+import { apiRequest } from '../../services/apiClient'
+import { estudiantesService } from '../../services/estudiantes.service'
+import { examenesService, type Examen } from '../../services/examenes.service'
 
 interface AuditEntry {
   id: string | number
