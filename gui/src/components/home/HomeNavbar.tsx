@@ -67,15 +67,6 @@ export const HomeNavbar: React.FC = () => {
             Inicio
           </button>
           <button className="py-2.5 px-4 text-slate-600 hover:text-blue-950 transition-colors cursor-pointer">
-            Exámenes pasados
-          </button>
-          <button className="py-2.5 px-4 text-slate-600 hover:text-blue-950 transition-colors cursor-pointer">
-            Aulas
-          </button>
-          <button className="py-2.5 px-4 text-slate-600 hover:text-blue-950 transition-colors cursor-pointer">
-            Mapa de aulas
-          </button>
-          <button className="py-2.5 px-4 text-slate-600 hover:text-blue-950 transition-colors cursor-pointer">
             Cronograma de exámenes
           </button>
           <button className="py-2.5 px-4 text-slate-600 hover:text-blue-950 transition-colors cursor-pointer">
