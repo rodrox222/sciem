@@ -36,11 +36,6 @@ const fullName = (student: Estudiante) =>
     .filter(Boolean)
     .join(' ')
 
-const ESTADO_BADGE_STYLES: Record<string, string> = {
-  Activo: 'bg-emerald-100 text-emerald-700',
-  Inactivo: 'bg-slate-100 text-slate-600',
-}
-
 export default function EstudiantesPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()

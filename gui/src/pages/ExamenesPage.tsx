@@ -49,12 +49,6 @@ const getErrorMessage = (error: unknown) =>
     ? error.message
     : 'Ocurrió un error inesperado. Intenta nuevamente.'
 
-const ESTADO_BADGE_STYLES: Record<EstadoExamen, string> = {
-  Programado: 'bg-green-100 text-green-700',
-  Finalizado: 'bg-blue-100 text-blue-700',
-  Cancelado: 'bg-red-100 text-red-700',
-}
-
 export default function ExamenesPage() {
   const navigate = useNavigate()
   const location = useLocation()
