@@ -34,7 +34,7 @@ class InscribirEstudianteExamenRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'email_institucional.regex' => 'El correo debe tener código numérico antes de @est.umss.edu.',
+            'email_institucional.regex' => 'El correo debe pertenecer al dominio institucional de estudiantes (@est.umss.edu).',
         ];
     }
 }
