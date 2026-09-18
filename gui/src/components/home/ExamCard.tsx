@@ -5,6 +5,8 @@ interface ExamCardProps {
   aula: string;
   horario: string;
   tipoBorde?: 'sky' | 'amber';
+  onDetails: () => void;
+  estado?: string;
 }
 
 export const ExamCard: React.FC<ExamCardProps> = ({
@@ -12,6 +14,8 @@ export const ExamCard: React.FC<ExamCardProps> = ({
   aula,
   horario,
   tipoBorde = 'sky',
+  onDetails,
+  estado = 'Programado',
 }) => {
   const borderClasses = tipoBorde === 'sky' ? 'border-t-sky-500' : 'border-t-amber-500';
   const tagClasses = tipoBorde === 'sky' 
@@ -22,14 +26,14 @@ export const ExamCard: React.FC<ExamCardProps> = ({
     <div className={`bg-white rounded-xl p-5 border-t-4 ${borderClasses} border-x border-b border-slate-200 shadow-sm flex flex-col justify-between`}>
       <div>
         <span className={`inline-block text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${tagClasses} mb-3`}>
-          Programado
+          {estado}
         </span>
         <div className="flex justify-between items-start">
           <div>
             <h3 className="text-base font-bold text-slate-900">{materia}</h3>
             <p className="text-xs text-slate-500 mt-1">{aula} • {horario}</p>
           </div>
-          <button className="px-3.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
+          <button type="button" onClick={onDetails} className="px-3.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
             Ver detalle
           </button>
         </div>
