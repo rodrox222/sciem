@@ -1,43 +1,32 @@
-import { useState } from 'react'
-import { Plus, Pencil, Power, Search } from 'lucide-react'
-
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
-  NormaFormModal,
-  type Norma,
-  type NormaFormData,
-} from '../components/normas/NormaFormModal'
-import { MainLayout } from '../layouts/MainLayout'
+  AlertCircle,
+  BookOpenCheck,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  LoaderCircle,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  Tag,
+} from 'lucide-react'
 
-const normasIniciales: Norma[] = [
-  {
-    id: 1,
-    descripcion:
-      'Normas generales para la evaluación académica de los estudiantes.',
-    tipo: 'General',
-    estado: 'Activo',
-  },
-  {
-    id: 2,
-    descripcion:
-      'Lineamientos para la organización y realización de exámenes finales.',
-    tipo: 'Particular',
-    estado: 'Activo',
-  },
-  {
-    id: 3,
-    descripcion:
-      'Disposiciones relacionadas con el comportamiento durante las evaluaciones.',
-    tipo: 'General',
-    estado: 'Activo',
-  },
-  {
-    id: 4,
-    descripcion:
-      'Reglas específicas para evaluaciones realizadas en laboratorios.',
-    tipo: 'Particular',
-    estado: 'Inactivo',
-  },
-]
+import { NormaFormModal } from '../components/normas/NormaFormModal'
+import { MainLayout } from '../layouts/MainLayout'
+import {
+  normasService,
+  type Norma,
+  type NormaPayload,
+  type NormaTipo,
+} from '../services/normas.service'
+import { ApiError } from '../services/apiClient'
+
+const getErrorMessage = (error: unknown) =>
+  error instanceof ApiError
+    ? error.message
+    : 'Ocurrió un error inesperado. Intenta nuevamente.'
 
 const TIPO_BADGE_STYLES: Record<string, string> = {
   General: 'border-blue-200 bg-blue-50 text-[#002b5b]',
@@ -55,237 +44,327 @@ const ESTADO_BORDER_STYLES: Record<string, string> = {
 }
 
 export default function NormasPage() {
-  const [normas, setNormas] = useState<Norma[]>(normasIniciales)
+  const [normas, setNormas] = useState<Norma[]>([])
+  const [searchInput, setSearchInput] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
-  const [tipoFiltro, setTipoFiltro] = useState<'Todos' | 'General' | 'Particular'>('Todos')
-
+  const [tipo, setTipo] = useState<NormaTipo | ''>('')
+  const [page, setPage] = useState(1)
+  const [lastPage, setLastPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [modalAbierto, setModalAbierto] = useState(false)
   const [normaSeleccionada, setNormaSeleccionada] = useState<Norma | null>(null)
 
-  const abrirRegistrar = () => {
+  const loadNormas = useCallback(async () => {
+    setLoading(true)
+    setError('')
+
+    try {
+      const response = await normasService.list({
+        search: searchTerm,
+        tipo,
+        page,
+      })
+      setNormas(response.data)
+      setTotal(response.total)
+      setLastPage(Math.max(response.last_page, 1))
+    } catch (loadError) {
+      setError(getErrorMessage(loadError))
+    } finally {
+      setLoading(false)
+    }
+  }, [page, searchTerm, tipo])
+
+  useEffect(() => {
+    const requestId = window.setTimeout(() => void loadNormas(), 0)
+    return () => window.clearTimeout(requestId)
+  }, [loadNormas])
+
+  const visibleCounts = useMemo(
+    () => ({
+      general: normas.filter((norma) => norma.tipo === 'General').length,
+      particular: normas.filter((norma) => norma.tipo === 'Particular').length,
+    }),
+    [normas],
+  )
+
+  const applySearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setPage(1)
+    setSearchTerm(searchInput.trim())
+  }
+
+  const openCreate = () => {
     setNormaSeleccionada(null)
     setModalAbierto(true)
+    setSuccess('')
   }
 
-  const abrirEditar = (norma: Norma) => {
+  const openEdit = (norma: Norma) => {
     setNormaSeleccionada(norma)
     setModalAbierto(true)
+    setSuccess('')
   }
 
-  const desactivarNorma = (norma: Norma) => {
-    const confirmar = window.confirm('¿Deseas desactivar esta norma?')
-    if (!confirmar) return
-
-    setNormas((actuales) =>
-      actuales.map((item) =>
-        item.id === norma.id ? { ...item, estado: 'Inactivo' } : item
-      )
-    )
-  }
-
-  const guardarNorma = (data: NormaFormData) => {
+  const saveNorma = async (payload: NormaPayload) => {
     if (normaSeleccionada) {
-      setNormas((actuales) =>
-        actuales.map((norma) =>
-          norma.id === normaSeleccionada.id
-            ? {
-                ...norma,
-                descripcion: data.descripcion,
-                tipo: data.tipo,
-                estado: data.estado,
-              }
-            : norma
-        )
-      )
-      return
+      const response = await normasService.update(normaSeleccionada.id, payload)
+      setSuccess(response.message || 'Norma actualizada correctamente.')
+    } else {
+      const response = await normasService.create(payload)
+      setSuccess(response.message || 'Norma registrada correctamente.')
     }
 
-    const nuevoId =
-      normas.length > 0 ? Math.max(...normas.map((norma) => norma.id)) + 1 : 1
-
-    const nuevaNorma: Norma = {
-      id: nuevoId,
-      descripcion: data.descripcion,
-      tipo: data.tipo,
-      estado: data.estado,
-    }
-
-    setNormas((actuales) => [...actuales, nuevaNorma])
+    await loadNormas()
   }
-
-  const normasFiltradas = normas.filter((norma) => {
-    const texto = searchTerm.trim().toLowerCase()
-    const coincideBusqueda =
-      !texto || norma.descripcion.toLowerCase().includes(texto)
-    const coincideTipo =
-      tipoFiltro === 'Todos' || norma.tipo === tipoFiltro
-
-    return coincideBusqueda && coincideTipo
-  })
 
   return (
     <MainLayout>
-      <div className="space-y-6">
-        {/* Encabezado */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <section className="space-y-6">
+        <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-              Gestión de normas
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#D59A18]">
+              Configuración · Normativas
+            </p>
+            <h1 className="mt-1 text-3xl font-extrabold text-[#003770]">
+              Catálogo de normas
             </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Administra las normas disponibles para la programación de exámenes.
+            <p className="mt-2 max-w-2xl text-sm text-[#64748B]">
+              Registra y reutiliza lineamientos generales o particulares al
+              programar evaluaciones.
             </p>
           </div>
 
           <button
             type="button"
-            onClick={abrirRegistrar}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#002b5b] px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-[#001d3d] whitespace-nowrap"
+            onClick={openCreate}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#0056B3] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#003770]"
           >
             <Plus className="h-5 w-5" />
-            Nueva norma
+            Registrar norma
           </button>
-        </div>
+        </header>
 
-        {/* Barra de Filtros */}
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-          <div className="flex flex-col gap-3 lg:flex-row">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Buscar por descripción..."
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                className="h-10 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-[#002b5b] focus:ring-2 focus:ring-[#002b5b]/20"
-              />
+        <div className="grid gap-3 sm:grid-cols-3">
+          <article className="rounded-xl border border-[#E2E8F0] bg-white p-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-11 w-11 place-items-center rounded-lg bg-[#0056B3]/10 text-[#0056B3]">
+                <BookOpenCheck className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-xs text-[#64748B]">Normas registradas</p>
+                <p className="text-2xl font-bold text-[#003770]">{total}</p>
+              </div>
             </div>
+          </article>
 
-            <select
-              value={tipoFiltro}
-              onChange={(event) =>
-                setTipoFiltro(
-                  event.target.value as 'Todos' | 'General' | 'Particular'
-                )
-              }
-              className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-[#002b5b] focus:ring-2 focus:ring-[#002b5b]/20"
+          <article className="rounded-xl border border-[#E2E8F0] bg-white p-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-11 w-11 place-items-center rounded-lg bg-[#168FBD]/10 text-[#168FBD]">
+                <FileText className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-xs text-[#64748B]">Generales en esta página</p>
+                <p className="text-2xl font-bold text-[#003770]">
+                  {visibleCounts.general}
+                </p>
+              </div>
+            </div>
+          </article>
+
+          <article className="rounded-xl border border-[#E2E8F0] bg-white p-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-11 w-11 place-items-center rounded-lg bg-[#D59A18]/10 text-[#D59A18]">
+                <Tag className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-xs text-[#64748B]">Particulares en esta página</p>
+                <p className="text-2xl font-bold text-[#003770]">
+                  {visibleCounts.particular}
+                </p>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <section className="rounded-xl border border-[#E2E8F0] bg-white shadow-sm">
+          <div className="border-b border-[#E2E8F0] p-4 sm:p-5">
+            <form
+              onSubmit={applySearch}
+              className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]"
             >
-              <option value="Todos">Todos los tipos</option>
-              <option value="General">General</option>
-              <option value="Particular">Particular</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Tarjetas de Resumen */}
-        <div className="flex flex-wrap gap-3">
-          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-xs">
-            <p className="text-xs text-slate-500">Total de normas</p>
-            <p className="mt-1 text-xl font-bold text-slate-900">
-              {normas.length}
-            </p>
-          </div>
-
-          <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 shadow-xs">
-            <p className="text-xs text-blue-600">Normas generales</p>
-            <p className="mt-1 text-xl font-bold text-[#002b5b]">
-              {normas.filter((norma) => norma.tipo === 'General').length}
-            </p>
-          </div>
-
-          <div className="rounded-lg border border-purple-100 bg-purple-50 px-4 py-3 shadow-xs">
-            <p className="text-xs text-purple-600">Normas particulares</p>
-            <p className="mt-1 text-xl font-bold text-purple-700">
-              {normas.filter((norma) => norma.tipo === 'Particular').length}
-            </p>
-          </div>
-        </div>
-
-        {/* Listado en Tarjetas */}
-        <div className="space-y-4">
-          {normasFiltradas.length > 0 ? (
-            normasFiltradas.map((norma) => (
-              <div
-                key={norma.id}
-                className="relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs transition-all hover:shadow-md"
-              >
-                <div
-                  className={`absolute left-0 right-0 top-0 h-1.5 ${
-                    ESTADO_BORDER_STYLES[norma.estado] || ESTADO_BORDER_STYLES.Inactivo
-                  }`}
+              <label className="relative block">
+                <span className="sr-only">Buscar norma</span>
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B]" />
+                <input
+                  type="search"
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  placeholder="Buscar por título o descripción"
+                  className="h-11 w-full rounded-lg border border-[#E2E8F0] pl-10 pr-3 text-sm text-[#1E293B] outline-none transition focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/15"
                 />
+              </label>
 
-                <div className="p-6">
-                  <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="flex-1">
-                      <div className="mb-2 flex flex-wrap items-center gap-2">
-                        <span
-                          className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                            TIPO_BADGE_STYLES[norma.tipo] || 'border-slate-200 bg-slate-50 text-slate-600'
-                          }`}
-                        >
-                          {norma.tipo}
-                        </span>
+              <label>
+                <span className="sr-only">Filtrar por tipo</span>
+                <select
+                  value={tipo}
+                  onChange={(event) => {
+                    setTipo(event.target.value as NormaTipo | '')
+                    setPage(1)
+                  }}
+                  className="h-11 w-full rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm text-[#1E293B] outline-none transition focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/15"
+                >
+                  <option value="">Todos los tipos</option>
+                  <option value="General">General</option>
+                  <option value="Particular">Particular</option>
+                </select>
+              </label>
 
-                        <span
-                          className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                            ESTADO_BADGE_STYLES[norma.estado] || ESTADO_BADGE_STYLES.Inactivo
-                          }`}
-                        >
-                          {norma.estado}
-                        </span>
-                      </div>
+              <button
+                type="submit"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#0056B3] px-5 text-sm font-semibold text-[#0056B3] transition hover:bg-[#0056B3] hover:text-white"
+              >
+                <Search className="h-4 w-4" />
+                Buscar
+              </button>
+            </form>
+          </div>
 
-                      <p className="text-base leading-relaxed text-slate-700">
-                        {norma.descripcion}
-                      </p>
-                    </div>
+          <div className="space-y-4 p-4 sm:p-5">
+            {success && (
+              <div
+                className="rounded-lg border border-[#168FBD]/25 bg-[#168FBD]/8 px-4 py-3 text-sm text-[#08759E]"
+                role="status"
+              >
+                {success}
+              </div>
+            )}
 
-                    <div className="flex shrink-0 items-center gap-2">
+            {error && (
+              <div
+                className="flex flex-col gap-3 rounded-lg border border-[#E30613]/25 bg-[#E30613]/5 px-4 py-3 text-sm text-[#B0040E] sm:flex-row sm:items-center sm:justify-between"
+                role="alert"
+              >
+                <span className="flex items-start gap-2">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  {error}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void loadNormas()}
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#E30613]/25 px-3 font-semibold hover:bg-white"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Reintentar
+                </button>
+              </div>
+            )}
+
+            {loading ? (
+              <div className="grid min-h-64 place-items-center text-[#64748B]">
+                <div className="text-center">
+                  <LoaderCircle className="mx-auto h-8 w-8 animate-spin text-[#D59A18]" />
+                  <p className="mt-3 text-sm">Cargando normas...</p>
+                </div>
+              </div>
+            ) : normas.length > 0 ? (
+              <div className="grid gap-4 lg:grid-cols-2">
+                {normas.map((norma) => (
+                  <article
+                    key={norma.id}
+                    className="relative flex min-h-52 flex-col overflow-hidden rounded-xl border border-[#E2E8F0] bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-md"
+                  >
+                    <span
+                      className={`absolute inset-x-0 top-0 h-1 ${
+                        norma.tipo === 'General' ? 'bg-[#168FBD]' : 'bg-[#D59A18]'
+                      }`}
+                    />
+
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <span
+                        className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                          norma.tipo === 'General'
+                            ? 'border-[#168FBD]/30 bg-[#168FBD]/10 text-[#08759E]'
+                            : 'border-[#D59A18]/30 bg-[#D59A18]/10 text-[#946807]'
+                        }`}
+                      >
+                        {norma.tipo}
+                      </span>
                       <button
                         type="button"
-                        onClick={() => abrirEditar(norma)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3.5 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-[#002b5b]"
+                        onClick={() => openEdit(norma)}
+                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#E2E8F0] px-3 text-sm font-semibold text-[#003770] transition hover:border-[#0056B3] hover:bg-[#0056B3]/5"
                       >
                         <Pencil className="h-4 w-4" />
                         Editar
                       </button>
-
-                      {norma.estado === 'Activo' && (
-                        <button
-                          type="button"
-                          onClick={() => desactivarNorma(norma)}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3.5 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
-                        >
-                          <Power className="h-4 w-4" />
-                          Desactivar
-                        </button>
-                      )}
                     </div>
-                  </div>
+
+                    <h2 className="mt-4 text-lg font-bold text-[#003770]">
+                      {norma.titulo}
+                    </h2>
+                    <p className="mt-2 line-clamp-4 text-sm leading-relaxed text-[#64748B]">
+                      {norma.descripcion}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="grid min-h-64 place-items-center rounded-xl border border-dashed border-[#E2E8F0] bg-[#F7F7F7] px-6 text-center">
+                <div>
+                  <BookOpenCheck className="mx-auto h-10 w-10 text-[#D59A18]" />
+                  <h2 className="mt-3 text-lg font-bold text-[#003770]">
+                    No se encontraron normas
+                  </h2>
+                  <p className="mt-1 text-sm text-[#64748B]">
+                    Ajusta la búsqueda o registra un nuevo lineamiento.
+                  </p>
                 </div>
               </div>
-            ))
-          ) : (
-            <div className="rounded-xl border border-slate-200 bg-white p-10 text-center shadow-xs">
-              <p className="font-semibold text-slate-700">
-                No se encontraron normas.
-              </p>
-              <p className="mt-1 text-sm text-slate-500">
-                Prueba con otro término de búsqueda o tipo.
-              </p>
-            </div>
-          )}
-        </div>
+            )}
 
-        {/* Modal de Formulario */}
-        <NormaFormModal
-          open={modalAbierto}
-          onOpenChange={setModalAbierto}
-          norma={normaSeleccionada}
-          onSubmit={guardarNorma}
-        />
-      </div>
+            {!loading && total > 0 && (
+              <div className="flex flex-col gap-3 border-t border-[#E2E8F0] pt-4 text-sm text-[#64748B] sm:flex-row sm:items-center sm:justify-between">
+                <span>
+                  Página {page} de {lastPage} · {total} normas
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                    disabled={page <= 1}
+                    className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-[#E2E8F0] px-3 font-semibold text-[#003770] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Anterior
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPage((current) => Math.min(lastPage, current + 1))}
+                    disabled={page >= lastPage}
+                    className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-[#E2E8F0] px-3 font-semibold text-[#003770] hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Siguiente
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {modalAbierto && (
+          <NormaFormModal
+            key={normaSeleccionada?.id ?? 'new'}
+            norma={normaSeleccionada}
+            onOpenChange={setModalAbierto}
+            onSubmit={saveNorma}
+          />
+        )}
+      </section>
     </MainLayout>
   )
 }

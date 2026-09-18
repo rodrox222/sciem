@@ -17,7 +17,7 @@ interface NavItem {
   href: string
 }
 
-// Configuracion de los menus
+// Configuración de los menús por rol
 const NAV_ITEMS_BY_ROLE: Record<string, NavItem[]> = {
   admin: [
     { name: 'Inicio', href: '#' },
@@ -30,17 +30,17 @@ const NAV_ITEMS_BY_ROLE: Record<string, NavItem[]> = {
   ],
   docente: [
     { name: 'Inicio', href: '/dashboard' },
-    { name: 'Mis exámenes', href: '/mis-examenes' },
+    { name: 'Mis exámenes', href: '/examenes' },
     { name: 'Estudiantes', href: '/estudiantes?rol=docente' },
     { name: 'Cronograma', href: '#' },
-    { name: 'Normativas', href: '#' },
+    { name: 'Normativas', href: '/normas' },
     { name: 'Perfil', href: '#' },
   ],
   auxiliar: [
     { name: 'Inicio', href: '/dashboard' },
     { name: 'Control de ingreso', href: '#' },
-    { name: 'Aulas', href: '#' }, //aqui
-    { name: 'Exámenes asignados', href: '#' }, //aqui 
+    { name: 'Aulas', href: '#' },
+    { name: 'Exámenes asignados', href: '#' },
     { name: 'Perfil', href: '#' },
   ],
 }
@@ -115,9 +115,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <div className="flex shrink-0 items-center gap-2">
             <span className="inline-block h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_8px_#38BDF8]" />
-            <span className="text-slate-100">
-              Sesión institucional activa
-            </span>
+            <span className="text-slate-100">Sesión institucional activa</span>
           </div>
         </div>
       </div>
@@ -137,7 +135,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               alt="Logo Institucional"
               className="h-9 w-auto shrink-0 object-contain sm:h-12"
             />
-            <div className="flex flex-col">
+            <div className="flex flex-col text-left">
               <span className="font-black text-2xl text-[#003770] tracking-tight leading-none">
                 SCI
               </span>
@@ -147,7 +145,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </button>
 
-          {/* Menú de Navegación Dinámico */}
+          {/* Menú de Navegación de Escritorio */}
           <nav className="hidden h-full items-center gap-1 lg:flex">
             {navItems.map((item) => {
               const isActive =
@@ -175,7 +173,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             })}
           </nav>
 
-          {/* Perfil de Usuario */}
+          {/* Perfil de Usuario de Escritorio */}
           <div className="hidden items-center gap-3.5 lg:flex">
             <div
               className={`w-10 h-10 rounded-xl border flex items-center justify-center font-black text-base shadow-xs select-none ${
@@ -201,7 +199,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* Botón de menú móvil */}
+          {/* Botón de Menú Móvil */}
           <button
             type="button"
             onClick={() => setMenuAbierto((anterior) => !anterior)}
@@ -217,7 +215,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
 
-        {/* Menú móvil */}
+        {/* Menú Desplegable Móvil */}
         {menuAbierto && (
           <div className="border-t border-slate-200 bg-white lg:hidden">
             <nav className="mx-auto max-w-7xl px-4 py-2">
@@ -242,9 +240,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )
               })}
 
-              {/* Perfil móvil */}
+              {/* Perfil en Vista Móvil */}
               <div className="mt-2 flex items-center gap-3 border-t border-slate-200 px-4 py-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-base font-bold text-[#003770]">
+                <div
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-base font-bold select-none ${
+                    avatarTheme[normalizedRole] || avatarTheme.docente
+                  }`}
+                >
                   {usuario.charAt(0).toUpperCase()}
                 </div>
 

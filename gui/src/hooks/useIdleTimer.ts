@@ -12,18 +12,10 @@ export const useIdleTimer = () => {
 
   const handleLogout = useCallback(() => {
     setShowModal(false)
-
-    // Guarda la URL si nos botan por inactividad
-    const currentPath = window.location.pathname + window.location.search
-    if (currentPath && currentPath !== '/login') {
-      localStorage.setItem('sciem_idle_redirect', currentPath)
-    }
-
     localStorage.removeItem('auth_token')
     localStorage.removeItem('user_role')
     localStorage.removeItem(STORAGE_KEY)
-    
-    // Redirige a la página de login
+    // Redirección dura inmediata: evita que pinte el dashboard
     window.location.replace('/login')
   }, [])
 
@@ -79,12 +71,9 @@ export const useIdleTimer = () => {
 
   // Montaje inicial y eventos de usuario
   useEffect(() => {
-    // Primero comprobamos si el tiempo expiró mientras la pestaña estuvo cerrada
-    const sessionActive = checkSession()
-    if (!sessionActive) return
-
-    // Si está activa, arrancamos el temporizador local
-    resetTimer()
+    const initialCheckId = window.setTimeout(() => {
+      if (checkSession()) resetTimer()
+    }, 0)
 
     const events = ['mousemove', 'keydown', 'scroll', 'click']
     const handler = () => resetTimer()
@@ -100,6 +89,7 @@ export const useIdleTimer = () => {
     document.addEventListener('visibilitychange', handleVisibility)
 
     return () => {
+      window.clearTimeout(initialCheckId)
       events.forEach((ev) => window.removeEventListener(ev, handler))
       document.removeEventListener('visibilitychange', handleVisibility)
       if (timerRef.current) clearTimeout(timerRef.current)

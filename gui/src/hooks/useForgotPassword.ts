@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8200/api'
@@ -21,13 +21,6 @@ export const useForgotPassword = (options?: UseForgotPasswordOptions) => {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-
-  useEffect(() => {
-    if (tokenFromUrl) {
-      setStep('reset')
-      if (emailFromUrl) setEmail(emailFromUrl)
-    }
-  }, [tokenFromUrl, emailFromUrl])
 
   const requestReset = async (e: React.FormEvent) => {
     e.preventDefault()
