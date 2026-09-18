@@ -2,7 +2,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { RotateCcw, Search, ShieldAlert } from 'lucide-react'
+import { Download, RotateCcw, Search, ShieldAlert } from 'lucide-react'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MainLayout } from '../layouts/MainLayout'
@@ -103,7 +103,8 @@ export const AuditoriaPage: React.FC = () => {
   }, [filters])
 
   useEffect(() => {
-    fetchAuditoria()
+    const requestId = window.setTimeout(() => void fetchAuditoria(), 0)
+    return () => window.clearTimeout(requestId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -112,6 +113,120 @@ export const AuditoriaPage: React.FC = () => {
   }
 
   const handleBuscar = () => fetchAuditoria()
+
+  const handleExportarCSV = async () => {
+    try {
+      const token = localStorage.getItem('auth_token')
+
+      if (!token) {
+        navigate('/login')
+        return
+      }
+
+      setLoading(true)
+      setError(null)
+
+      const params = new URLSearchParams()
+
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) params.set(key, value)
+      })
+
+      // Pedimos todos los registros que coincidan con los filtros.
+      params.set('per_page', '10000')
+
+      const res = await fetch(
+        `${API_BASE_URL}/auditoria?${params.toString()}`,
+        {
+          headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+
+      const data = await res.json()
+
+      if (res.status === 401) {
+        localStorage.removeItem('auth_token')
+        localStorage.removeItem('user_role')
+        localStorage.removeItem('user_data')
+        navigate('/login')
+        return
+      }
+
+      if (!res.ok) {
+        throw new Error(
+          data?.message || 'No se pudieron obtener los registros para exportar.'
+        )
+      }
+
+      if (!data?.data?.length) {
+        alert('No hay registros para exportar con los filtros actuales.')
+        return
+      }
+
+      const encabezados = [
+        'Fecha/Hora',
+        'Usuario',
+        'Usuario ID',
+        'Rol',
+        'Acción',
+        'Módulo',
+        'IP',
+        'Detalles',
+      ]
+
+      const filas: Array<Array<string | number>> = data.data.map((log: LogAuditoria) => [
+        fmtFecha(log.created_at),
+        log.usuario_nombre || '—',
+        log.user_id || '—',
+        log.rol_en_el_momento || '—',
+        log.accion || '—',
+        log.modulo || '—',
+        log.ip_origen || '—',
+        log.detalles ? JSON.stringify(log.detalles) : '—',
+      ])
+
+      const contenido = [encabezados, ...filas]
+        .map((fila) =>
+          fila
+            .map((valor: string | number) => `"${String(valor).replace(/"/g, '""')}"`)
+            .join(',')
+        )
+        .join('\n')
+
+      const blob = new Blob(['\uFEFF' + contenido], {
+        type: 'text/csv;charset=utf-8;',
+      })
+
+      const url = URL.createObjectURL(blob)
+      const enlace = document.createElement('a')
+
+      const fechaArchivo = new Date().toISOString().slice(0, 10)
+
+      enlace.href = url
+      enlace.download = `auditoria-${fechaArchivo}.csv`
+
+      document.body.appendChild(enlace)
+      enlace.click()
+      document.body.removeChild(enlace)
+
+      URL.revokeObjectURL(url)
+
+      alert(`Exportación completada: ${data.data.length} registros.`)
+    } catch (err: unknown) {
+      console.error('Error al exportar auditoría:', err)
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'No se pudo exportar el historial de auditoría.'
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleLimpiar = () => {
     setFilters(initialFilters)
     fetchAuditoria(`${API_BASE_URL}/auditoria`)
@@ -162,14 +277,25 @@ export const AuditoriaPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex gap-2 mt-4">
+          <div className="flex flex-wrap gap-2 mt-4">
             <Button onClick={handleBuscar} disabled={loading} className="bg-[#003770] hover:bg-[#002852] text-white h-9 px-5 text-sm">
               <Search className="h-4 w-4 mr-1.5" />
               Buscar
             </Button>
+
             <Button onClick={handleLimpiar} disabled={loading} variant="outline" className="h-9 px-4 text-sm border-slate-300">
               <RotateCcw className="h-4 w-4 mr-1.5" />
               Limpiar filtros
+            </Button>
+
+            <Button
+              onClick={handleExportarCSV}
+              disabled={loading}
+              variant="outline"
+              className="h-9 px-4 text-sm border-[#0056B3] text-[#0056B3] hover:bg-blue-50"
+            >
+              <Download className="h-4 w-4 mr-1.5" />
+              Exportar CSV
             </Button>
           </div>
         </div>

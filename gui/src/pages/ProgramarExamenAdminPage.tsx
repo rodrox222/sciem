@@ -9,8 +9,7 @@ import {
   X,
 } from 'lucide-react'
 
-import { AdminNavbar } from '../components/AdminNavbar'
-import { AdminFooter } from '../components/AdminFooter'
+import { MainLayout } from '../layouts/MainLayout'
 import { NormaSelector } from '../components/normas/NormaSelector'
 import type { Norma } from '../components/normas/NormaFormModal'
 
@@ -116,6 +115,11 @@ const pasos = [
   },
 ]
 
+const TIPO_NORMA_BADGE: Record<string, string> = {
+  General: 'bg-blue-100 text-blue-700',
+  Particular: 'bg-purple-100 text-purple-700',
+}
+
 export const ProgramarExamenAdminPage: React.FC = () => {
   const [pasoActual, setPasoActual] = useState<Paso>(1)
 
@@ -133,7 +137,7 @@ export const ProgramarExamenAdminPage: React.FC = () => {
 
   const aulasDisponibles = useMemo(
     () => aulasIniciales.filter((aula) => aula.disponible),
-    [],
+    []
   )
 
   const fechaMinima = useMemo(() => {
@@ -150,28 +154,19 @@ export const ProgramarExamenAdminPage: React.FC = () => {
 
     const minutosDuracion = Number(duracion)
 
-    if (
-      !Number.isFinite(minutosDuracion) ||
-      minutosDuracion <= 0
-    ) {
+    if (!Number.isFinite(minutosDuracion) || minutosDuracion <= 0) {
       return ''
     }
 
     const [horas, minutos] = horaInicio.split(':').map(Number)
 
-    if (
-      Number.isNaN(horas) ||
-      Number.isNaN(minutos)
-    ) {
+    if (Number.isNaN(horas) || Number.isNaN(minutos)) {
       return ''
     }
 
     const fechaHora = new Date()
-
     fechaHora.setHours(horas, minutos, 0, 0)
-    fechaHora.setMinutes(
-      fechaHora.getMinutes() + minutosDuracion,
-    )
+    fechaHora.setMinutes(fechaHora.getMinutes() + minutosDuracion)
 
     const horasFin = String(fechaHora.getHours()).padStart(2, '0')
     const minutosFin = String(fechaHora.getMinutes()).padStart(2, '0')
@@ -179,12 +174,10 @@ export const ProgramarExamenAdminPage: React.FC = () => {
     return `${horasFin}:${minutosFin}`
   }, [horaInicio, duracion])
 
-  const aulaSeleccionada = aulasIniciales.find(
-    (aula) => aula.id === aulaId,
-  )
+  const aulaSeleccionada = aulasIniciales.find((aula) => aula.id === aulaId)
 
   const normasSeleccionadasData = normas.filter((norma) =>
-    normasSeleccionadas.includes(norma.id),
+    normasSeleccionadas.includes(norma.id)
   )
 
   const limpiarMensajes = () => {
@@ -200,15 +193,8 @@ export const ProgramarExamenAdminPage: React.FC = () => {
       estado: 'Activo',
     }
 
-    setNormas((normasActuales) => [
-      ...normasActuales,
-      nuevaNorma,
-    ])
-
-    setNormasSeleccionadas((seleccionadas) => [
-      ...seleccionadas,
-      nuevaNorma.id,
-    ])
+    setNormas((normasActuales) => [...normasActuales, nuevaNorma])
+    setNormasSeleccionadas((seleccionadas) => [...seleccionadas, nuevaNorma.id])
   }
 
   const validarPaso1 = () => {
@@ -216,7 +202,6 @@ export const ProgramarExamenAdminPage: React.FC = () => {
       setError('Debes seleccionar una asignatura para el examen.')
       return false
     }
-
     return true
   }
 
@@ -227,9 +212,7 @@ export const ProgramarExamenAdminPage: React.FC = () => {
     }
 
     if (fecha < fechaMinima) {
-      setError(
-        'La fecha del examen no puede ser anterior a la fecha actual.',
-      )
+      setError('La fecha del examen no puede ser anterior a la fecha actual.')
       return false
     }
 
@@ -245,27 +228,18 @@ export const ProgramarExamenAdminPage: React.FC = () => {
 
     const minutosDuracion = Number(duracion)
 
-    if (
-      !Number.isFinite(minutosDuracion) ||
-      minutosDuracion <= 0
-    ) {
-      setError(
-        'La duración del examen debe ser mayor a 0 minutos.',
-      )
+    if (!Number.isFinite(minutosDuracion) || minutosDuracion <= 0) {
+      setError('La duración del examen debe ser mayor a 0 minutos.')
       return false
     }
 
     if (minutosDuracion > 270) {
-      setError(
-        'La duración máxima permitida para el examen es de 270 minutos.',
-      )
+      setError('La duración máxima permitida para el examen es de 270 minutos.')
       return false
     }
 
     if (!horaFin) {
-      setError(
-        'No fue posible calcular la hora de finalización.',
-      )
+      setError('No fue posible calcular la hora de finalización.')
       return false
     }
 
@@ -279,9 +253,7 @@ export const ProgramarExamenAdminPage: React.FC = () => {
     }
 
     if (normasSeleccionadas.length === 0) {
-      setError(
-        'Debes seleccionar al menos una norma para el examen.',
-      )
+      setError('Debes seleccionar al menos una norma para el examen.')
       return false
     }
 
@@ -318,21 +290,18 @@ export const ProgramarExamenAdminPage: React.FC = () => {
 
     if (pasoActual === 1) {
       if (!validarPaso1()) return
-
       setPasoActual(2)
       return
     }
 
     if (pasoActual === 2) {
       if (!validarPaso2()) return
-
       setPasoActual(3)
       return
     }
 
     if (pasoActual === 3) {
       if (!validarPaso3()) return
-
       setPasoActual(4)
     }
   }
@@ -352,25 +321,19 @@ export const ProgramarExamenAdminPage: React.FC = () => {
     setDuracion('')
     setAulaId(null)
     setNormasSeleccionadas([])
-
     setPasoActual(1)
-
     limpiarMensajes()
   }
 
   const confirmarProgramacion = () => {
     limpiarMensajes()
 
-    if (
-      !validarPaso1() ||
-      !validarPaso2() ||
-      !validarPaso3()
-    ) {
+    if (!validarPaso1() || !validarPaso2() || !validarPaso3()) {
       return
     }
 
     setMensajeExito(
-      'El examen fue validado correctamente. La conexión con el API se integrará posteriormente.',
+      'El examen fue validado correctamente. La conexión con el API se integrará posteriormente.'
     )
   }
 
@@ -383,7 +346,6 @@ export const ProgramarExamenAdminPage: React.FC = () => {
               <h2 className="text-xl font-bold text-slate-800">
                 Datos del examen
               </h2>
-
               <p className="mt-1 text-sm text-slate-500">
                 Selecciona la asignatura correspondiente al examen.
               </p>
@@ -396,8 +358,7 @@ export const ProgramarExamenAdminPage: React.FC = () => {
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {asignaturasIniciales.map((item) => {
-                  const seleccionada =
-                    asignatura === item.nombre
+                  const seleccionada = asignatura === item.nombre
 
                   return (
                     <button
@@ -430,7 +391,6 @@ export const ProgramarExamenAdminPage: React.FC = () => {
                           <p className="font-semibold text-slate-800">
                             {item.nombre}
                           </p>
-
                           <p className="mt-1 text-xs text-slate-500">
                             Asignatura disponible
                           </p>
@@ -447,10 +407,7 @@ export const ProgramarExamenAdminPage: React.FC = () => {
                 <p className="text-xs font-semibold uppercase tracking-wide text-[#003770]">
                   Asignatura seleccionada
                 </p>
-
-                <p className="mt-1 font-bold text-slate-800">
-                  {asignatura}
-                </p>
+                <p className="mt-1 font-bold text-slate-800">{asignatura}</p>
               </div>
             )}
           </section>
@@ -463,7 +420,6 @@ export const ProgramarExamenAdminPage: React.FC = () => {
               <h2 className="text-xl font-bold text-slate-800">
                 Horario del examen
               </h2>
-
               <p className="mt-1 text-sm text-slate-500">
                 Define la fecha, hora de inicio y duración.
               </p>
@@ -545,7 +501,6 @@ export const ProgramarExamenAdminPage: React.FC = () => {
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Hora de finalización
                   </p>
-
                   <p className="mt-1 text-2xl font-bold text-[#003770]">
                     {horaFin || '--:--'}
                   </p>
@@ -569,7 +524,6 @@ export const ProgramarExamenAdminPage: React.FC = () => {
               <h2 className="text-xl font-bold text-slate-800">
                 Ambiente y normas
               </h2>
-
               <p className="mt-1 text-sm text-slate-500">
                 Selecciona el aula y las normas que aplicarán al examen.
               </p>
@@ -588,24 +542,14 @@ export const ProgramarExamenAdminPage: React.FC = () => {
                 value={aulaId ?? ''}
                 onChange={(event) => {
                   const value = event.target.value
-
-                  setAulaId(
-                    value ? Number(value) : null,
-                  )
-
+                  setAulaId(value ? Number(value) : null)
                   limpiarMensajes()
                 }}
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-[#003770] focus:ring-2 focus:ring-[#003770]/20"
               >
-                <option value="">
-                  Selecciona un aula
-                </option>
-
+                <option value="">Selecciona un aula</option>
                 {aulasDisponibles.map((aula) => (
-                  <option
-                    key={aula.id}
-                    value={aula.id}
-                  >
+                  <option key={aula.id} value={aula.id}>
                     {aula.nombre} · Capacidad: {aula.capacidad}
                   </option>
                 ))}
@@ -615,15 +559,12 @@ export const ProgramarExamenAdminPage: React.FC = () => {
             {aulaSeleccionada && (
               <div className="flex items-start gap-3 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
                 <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
-
                 <div>
                   <p className="font-semibold text-slate-800">
                     {aulaSeleccionada.nombre}
                   </p>
-
                   <p className="mt-1 text-sm text-slate-600">
-                    Capacidad disponible:{' '}
-                    {aulaSeleccionada.capacidad} estudiantes.
+                    Capacidad disponible: {aulaSeleccionada.capacidad} estudiantes.
                   </p>
                 </div>
               </div>
@@ -635,9 +576,7 @@ export const ProgramarExamenAdminPage: React.FC = () => {
                 selectedIds={normasSeleccionadas}
                 onChange={setNormasSeleccionadas}
                 permitirNormaParticular={true}
-                onCrearNormaParticular={
-                  crearNormaParticular
-                }
+                onCrearNormaParticular={crearNormaParticular}
               />
             </div>
           </section>
@@ -650,7 +589,6 @@ export const ProgramarExamenAdminPage: React.FC = () => {
               <h2 className="text-xl font-bold text-slate-800">
                 Confirmación
               </h2>
-
               <p className="mt-1 text-sm text-slate-500">
                 Revisa la información antes de programar el examen.
               </p>
@@ -661,17 +599,13 @@ export const ProgramarExamenAdminPage: React.FC = () => {
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Asignatura
                 </p>
-
-                <p className="mt-2 font-bold text-slate-800">
-                  {asignatura}
-                </p>
+                <p className="mt-2 font-bold text-slate-800">{asignatura}</p>
               </div>
 
               <div className="rounded-xl border border-slate-200 bg-white p-5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Fecha
                 </p>
-
                 <p className="mt-2 font-bold text-slate-800">
                   {fecha || 'No definida'}
                 </p>
@@ -681,11 +615,9 @@ export const ProgramarExamenAdminPage: React.FC = () => {
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Horario
                 </p>
-
                 <p className="mt-2 font-bold text-slate-800">
                   {horaInicio || '--:--'} - {horaFin || '--:--'}
                 </p>
-
                 <p className="mt-1 text-sm text-slate-500">
                   Duración: {duracion || '0'} minutos
                 </p>
@@ -695,12 +627,9 @@ export const ProgramarExamenAdminPage: React.FC = () => {
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Ambiente
                 </p>
-
                 <p className="mt-2 font-bold text-slate-800">
-                  {aulaSeleccionada?.nombre ||
-                    'No seleccionado'}
+                  {aulaSeleccionada?.nombre || 'No seleccionado'}
                 </p>
-
                 {aulaSeleccionada && (
                   <p className="mt-1 text-sm text-slate-500">
                     Capacidad: {aulaSeleccionada.capacidad}
@@ -715,12 +644,10 @@ export const ProgramarExamenAdminPage: React.FC = () => {
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Normas seleccionadas
                   </p>
-
                   <p className="mt-1 text-sm text-slate-500">
                     {normasSeleccionadasData.length} norma(s)
                   </p>
                 </div>
-
                 <CheckCircle2 className="h-6 w-6 text-emerald-600" />
               </div>
 
@@ -733,19 +660,15 @@ export const ProgramarExamenAdminPage: React.FC = () => {
                     <div className="flex flex-wrap items-center gap-2">
                       <span
                         className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                          norma.tipo === 'General'
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-purple-100 text-purple-700'
+                          TIPO_NORMA_BADGE[norma.tipo] || 'bg-slate-100 text-slate-700'
                         }`}
                       >
                         {norma.tipo}
                       </span>
-
                       <span className="text-xs font-medium text-emerald-600">
                         {norma.estado}
                       </span>
                     </div>
-
                     <p className="mt-2 text-sm leading-6 text-slate-700">
                       {norma.descripcion}
                     </p>
@@ -756,10 +679,10 @@ export const ProgramarExamenAdminPage: React.FC = () => {
 
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
               <p className="text-sm leading-6 text-amber-800">
-                Al confirmar, el examen quedará registrado con
-                estado <strong>Programado</strong>. La validación
-                definitiva de disponibilidad y solapamiento del
-                aula será realizada posteriormente por el API.
+                Al confirmar, el examen quedará registrado con estado{' '}
+                <strong>Programado</strong>. La validación definitiva de
+                disponibilidad y solapamiento del aula será realizada
+                posteriormente por el API.
               </p>
             </div>
           </section>
@@ -771,34 +694,27 @@ export const ProgramarExamenAdminPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100/60 flex flex-col">
-      <AdminNavbar
-        rol="Administrador"
-        usuario="Administrador"
-      />
-
-      <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-8">
+    <MainLayout>
+      <div className="w-full max-w-5xl mx-auto space-y-6">
+        {/* Encabezado */}
+        <div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-semibold text-[#003770]">
+              <p className="text-sm font-semibold text-[#003770] uppercase tracking-wide">
                 Administración de exámenes
               </p>
-
-              <h1 className="mt-1 text-3xl font-bold text-slate-900">
+              <h1 className="mt-1 text-3xl font-extrabold text-slate-900 tracking-tight">
                 Programar examen
               </h1>
-
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                Registra y programa un nuevo examen indicando su
-                asignatura, horario, ambiente y normas aplicables.
+              <p className="mt-1 max-w-2xl text-sm text-slate-500">
+                Registra y programa un nuevo examen indicando su asignatura, horario, ambiente y normas aplicables.
               </p>
             </div>
 
             <button
               type="button"
               onClick={cancelarFormulario}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 whitespace-nowrap"
             >
               <X className="h-4 w-4" />
               Limpiar
@@ -806,11 +722,11 @@ export const ProgramarExamenAdminPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="mb-8 overflow-x-auto">
+        {/* Stepper de Pasos */}
+        <div className="overflow-x-auto pb-2">
           <div className="flex min-w-[700px] items-start">
             {pasos.map((paso, index) => {
               const Icon = paso.icono
-
               const activo = paso.numero === pasoActual
               const completado = paso.numero < pasoActual
 
@@ -818,9 +734,7 @@ export const ProgramarExamenAdminPage: React.FC = () => {
                 <React.Fragment key={paso.numero}>
                   <button
                     type="button"
-                    onClick={() =>
-                      cambiarPaso(paso.numero as Paso)
-                    }
+                    onClick={() => cambiarPaso(paso.numero as Paso)}
                     className="flex min-w-[150px] flex-1 flex-col items-center text-center"
                   >
                     <div
@@ -828,8 +742,8 @@ export const ProgramarExamenAdminPage: React.FC = () => {
                         activo
                           ? 'border-[#003770] bg-[#003770] text-white'
                           : completado
-                            ? 'border-emerald-500 bg-emerald-500 text-white'
-                            : 'border-slate-300 bg-white text-slate-400'
+                          ? 'border-emerald-500 bg-emerald-500 text-white'
+                          : 'border-slate-300 bg-white text-slate-400'
                       }`}
                     >
                       {completado ? (
@@ -844,8 +758,8 @@ export const ProgramarExamenAdminPage: React.FC = () => {
                         activo
                           ? 'text-[#003770]'
                           : completado
-                            ? 'text-emerald-600'
-                            : 'text-slate-500'
+                          ? 'text-emerald-600'
+                          : 'text-slate-500'
                       }`}
                     >
                       {paso.titulo}
@@ -871,7 +785,8 @@ export const ProgramarExamenAdminPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {/* Contenedor del Formulario */}
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
           <div className="p-5 sm:p-8">
             {error && (
               <div
@@ -888,15 +803,9 @@ export const ProgramarExamenAdminPage: React.FC = () => {
                 className="mb-6 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm leading-6 text-emerald-700"
               >
                 <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
-
                 <div>
-                  <p className="font-bold">
-                    Examen validado correctamente
-                  </p>
-
-                  <p className="mt-1">
-                    {mensajeExito}
-                  </p>
+                  <p className="font-bold">Examen validado correctamente</p>
+                  <p className="mt-1">{mensajeExito}</p>
                 </div>
               </div>
             )}
@@ -904,6 +813,7 @@ export const ProgramarExamenAdminPage: React.FC = () => {
             {renderPasoActual()}
           </div>
 
+          {/* Botones de Navegación del Asistente */}
           <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
             <button
               type="button"
@@ -936,10 +846,8 @@ export const ProgramarExamenAdminPage: React.FC = () => {
             )}
           </div>
         </div>
-      </main>
-
-      <AdminFooter />
-    </div>
+      </div>
+    </MainLayout>
   )
 }
 
