@@ -8,12 +8,14 @@ import {
   Check,
   Clock3,
   LoaderCircle,
+  Plus,
   MapPin,
   Save,
   UserRound,
 } from 'lucide-react'
 
 import { MainLayout } from '../layouts/MainLayout'
+import { CrearMateriaModal } from '../components/examenes/CrearMateriaModal'
 import { aulasService, type Aula } from '../services/aulas.service'
 import { ApiError, apiRequest } from '../services/apiClient'
 import {
@@ -85,6 +87,7 @@ export default function ProgramarExamenPage() {
 
   const [form, setForm] = useState<FormState>(emptyForm)
   const [materias, setMaterias] = useState<CatalogItem[]>([])
+  const [materiaModalOpen, setMateriaModalOpen] = useState(false)
   const [aulas, setAulas] = useState<Aula[]>([])
   const [docentes, setDocentes] = useState<DocenteItem[]>([])
   const selectedTeacher = docentes.find((teacher) => teacher.id === form.id_docente)
@@ -363,11 +366,22 @@ export default function ProgramarExamenPage() {
                   {fieldErrors.nombre && <p className="text-sm text-[#E30613]">{fieldErrors.nombre}</p>}
                 </label>
 
-                <label className="space-y-2">
-                  <span className="flex items-center gap-2 text-sm font-semibold text-[#1E293B]">
-                    <BookOpenCheck className="h-4 w-4 text-[#168FBD]" /> Asignatura *
-                  </span>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label htmlFor="examen-materia" className="flex items-center gap-2 text-sm font-semibold text-[#1E293B]">
+                      <BookOpenCheck className="h-4 w-4 text-[#168FBD]" /> Asignatura *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setMateriaModalOpen(true)}
+                      disabled={saving}
+                      className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-[#0056B3] hover:bg-[#0056B3]/5"
+                    >
+                      <Plus className="h-4 w-4" /> Crear materia
+                    </button>
+                  </div>
                   <select
+                    id="examen-materia"
                     value={form.id_materia}
                     onChange={(event) => setField('id_materia', event.target.value)}
                     className="h-11 w-full rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm outline-none focus:border-[#0056B3]"
@@ -376,7 +390,7 @@ export default function ProgramarExamenPage() {
                     {materias.map((subject) => <option key={subject.id} value={subject.id}>{subject.nombre}</option>)}
                   </select>
                   {fieldErrors.id_materia && <p className="text-sm text-[#E30613]">{fieldErrors.id_materia}</p>}
-                </label>
+                </div>
 
                 <label className="space-y-2">
                   <span className="flex items-center gap-2 text-sm font-semibold text-[#1E293B]">
@@ -542,6 +556,17 @@ export default function ProgramarExamenPage() {
               </button>
             </div>
           </form>
+        )}
+        {materiaModalOpen && (
+          <CrearMateriaModal
+            onOpenChange={setMateriaModalOpen}
+            onCreated={(materia) => {
+              setMaterias((current) => [...current.filter((item) => item.id !== materia.id), materia]
+                .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')))
+              setField('id_materia', materia.id)
+              setMateriaModalOpen(false)
+            }}
+          />
         )}
       </section>
     </MainLayout>
