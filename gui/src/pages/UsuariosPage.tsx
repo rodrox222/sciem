@@ -11,7 +11,7 @@ import {
   ChevronRight,
   MoreVertical,
 } from 'lucide-react'
-import { Navbar } from '../components/Navbar'
+import { MainLayout } from '../layouts/MainLayout'
 import { ConfirmModal } from '../components/ConfirmModal'
 
 const API_BASE_URL =
@@ -1015,7 +1015,7 @@ export default function UsuariosPage() {
   return (
     <div className="min-h-screen bg-[#F7F7F7]">
 
-      <Navbar />
+      <MainLayout>
 
       <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
 
@@ -2066,7 +2066,7 @@ export default function UsuariosPage() {
         />
 
       )}
-
+      </MainLayout>
     </div>
   )
 }
