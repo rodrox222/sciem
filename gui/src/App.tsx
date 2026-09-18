@@ -14,6 +14,7 @@ import EstudiantesPage from './pages/EstudiantesPage'
 import ExamenesPage from './pages/ExamenesPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { HomePage } from './pages/HomePage'
+import CronogramaPublicPage from './pages/CronogramaPublicPage'
 import { LoginPage } from './pages/LoginPage'
 import ProgramarExamenAdminPage from './pages/ProgramarExamenAdminPage'
 import ProgramarExamenPage from './pages/ProgramarExamenPage'
@@ -23,6 +24,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/cronograma" element={<CronogramaPublicPage />} />
 
         <Route element={<PublicRoute />}>
           <Route path="/login" element={<LoginPage />} />
