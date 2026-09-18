@@ -3,10 +3,15 @@ import { HomeNavbar } from '../components/home/HomeNavbar';
 import { MetricsBar } from '../components/home/MetricsBar';
 import { ExamCard } from '../components/home/ExamCard';
 import { MiniCalendar } from '../components/home/MiniCalendar';
+import { CronogramaCard } from '../components/home/CronogramaCard';
+import { NewsCard } from '../components/home/NewsCard';
+import { MobileNav } from '../components/home/MobileNav';
 import { Footer } from '../components/Footer';
-import heroImg from '../assets/home.jpg';
 
-// CAMBIAR ESO EN EL FUTURO
+// ======================================================
+// DATOS DE LOS EXÁMENES
+// ======================================================
+
 const EXAMENES_DATA = [
   {
     id: '1',
@@ -37,256 +42,371 @@ const EXAMENES_DATA = [
   },
 ];
 
+// ======================================================
+// FECHAS
+// ======================================================
+
 const getLocalYMD = (d: Date): string => {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+
+  return `${y}-${m}-${day}`;
+};
+
+// ======================================================
+// HOME PAGE
+// ======================================================
 
 export const HomePage: React.FC = () => {
   useEffect(() => {
-    document.title = 'Home | SCI'
-  }, [])
+    document.title = 'Home | SCI';
+  }, []);
 
-  const [selectedDate, setSelectedDate] = useState<Date>(() => new Date())
-  const [activeTab, setActiveTab] = useState<'inicio' | 'modulos' | 'agenda' | 'perfil'>('inicio')
+  const [selectedDate, setSelectedDate] = useState<Date>(
+    () => new Date(2026, 8, 17)
+  );
 
-  const formattedSelected = getLocalYMD(selectedDate)
-  const datesWithExams = Array.from(new Set(EXAMENES_DATA.map((e) => e.fecha)))
-  const examenesDelDia = EXAMENES_DATA.filter((e) => e.fecha === formattedSelected)
+  const [activeTab, setActiveTab] = useState<
+    'inicio' | 'modulos' | 'agenda' | 'perfil'
+  >('inicio');
 
-  // Array de días para el scroll horizontal móvil
+  const formattedSelected = getLocalYMD(selectedDate);
+
+  const datesWithExams = Array.from(
+    new Set(EXAMENES_DATA.map((e) => e.fecha))
+  );
+
+  const examenesDelDia = EXAMENES_DATA.filter(
+    (e) => e.fecha === formattedSelected
+  );
+
+  // ======================================================
+  // DÍAS PARA MÓVIL
+  // ======================================================
+
   const mobileDays = [
-    { num: 14, date: new Date(2026, 8, 14), hasDot: false },
-    { num: 15, date: new Date(2026, 8, 15), hasDot: true },
-    { num: 16, date: new Date(2026, 8, 16), hasDot: true },
-    { num: 17, date: new Date(2026, 8, 17), hasDot: true },
-    { num: 18, date: new Date(2026, 8, 18), hasDot: true },
+    {
+      num: 14,
+      date: new Date(2026, 8, 14),
+      hasDot: false,
+    },
+    {
+      num: 15,
+      date: new Date(2026, 8, 15),
+      hasDot: true,
+    },
+    {
+      num: 16,
+      date: new Date(2026, 8, 16),
+      hasDot: true,
+    },
+    {
+      num: 17,
+      date: new Date(2026, 8, 17),
+      hasDot: true,
+    },
+    {
+      num: 18,
+      date: new Date(2026, 8, 18),
+      hasDot: true,
+    },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800 pb-20 sm:pb-0">
+    <div className="min-h-screen bg-[#f5f8fc] flex flex-col font-sans text-slate-800 pb-20 sm:pb-0">
+
+      {/* ==================================================
+          NAVBAR
+      ================================================== */}
+
       <HomeNavbar />
 
-      {/* --- HERO SECTION --- */}
-      {/* Móvil: Fondo blanco y texto oscuro. Desktop: Gradiente azul con foto */}
-      <section className="bg-white sm:bg-gradient-to-r sm:from-blue-950 sm:via-blue-900 sm:to-sky-900 py-6 sm:py-12 lg:py-16">
-        <div className="max-w-7xl mx-auto px-5 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-center">
-          
-          <div className="lg:col-span-7 space-y-4 sm:space-y-6">
-            <div className="inline-block px-4 py-1.5 rounded-full text-xs font-medium border border-sky-200 sm:border-blue-700 bg-sky-50 sm:bg-blue-800/80 text-sky-700 sm:text-blue-200">
-              Plataforma institucional FCyT
+      {/* ==================================================
+          HERO
+      ================================================== */}
+
+      <section className="relative overflow-hidden bg-gradient-to-r from-[#092f63] via-[#0a4d91] to-[#087db8]">
+
+        {/* Decoraciones */}
+        <div className="absolute -left-20 top-0 h-64 w-64 rounded-full bg-[#062650] opacity-70" />
+
+        <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[#ed1c2e] opacity-90" />
+
+        <div className="absolute right-32 bottom-[-100px] h-64 w-64 rounded-full bg-[#0877c7] opacity-70" />
+
+        <div className="relative mx-auto max-w-7xl px-5 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-11">
+
+          <div className="grid items-center gap-8 lg:grid-cols-12">
+
+            {/* ==================================================
+                CALENDARIO
+            ================================================== */}
+
+            <div className="lg:col-span-4">
+
+              <div className="rounded-2xl bg-white p-4 shadow-xl">
+
+                <MiniCalendar
+                  selectedDate={selectedDate}
+                  onSelectDate={setSelectedDate}
+                  examDates={datesWithExams}
+                />
+
+              </div>
+
             </div>
 
-            <h1 className="text-2xl sm:text-5xl font-black tracking-tight leading-tight text-[#0a2e5c] sm:text-white">
-              Información clara para tus evaluaciones académicas.
-            </h1>
+            {/* ==================================================
+                TEXTO CENTRAL
+            ================================================== */}
 
-            <p className="text-slate-500 sm:text-blue-100 text-sm sm:text-base max-w-xl leading-relaxed">
-              Consulta cronogramas, ambientes y comunicados oficiales.
-            </p>
+            <div className="lg:col-span-4">
 
-            <div className="grid grid-cols-2 sm:flex gap-3 sm:gap-4 pt-1">
-              <button className="w-full sm:w-auto px-4 sm:px-6 py-3 rounded-xl text-xs sm:text-sm font-bold bg-[#0a58ca] sm:bg-sky-600 hover:bg-blue-700 text-white shadow-md active:scale-95 transition-all text-center">
-                Consultar cronograma
-              </button>
-              <button className="w-full sm:w-auto px-4 sm:px-6 py-3 rounded-xl text-xs sm:text-sm font-bold bg-white text-blue-950 border border-slate-200 hover:bg-slate-50 shadow-sm active:scale-95 transition-all text-center">
-                Mapa
-              </button>
+              <span className="mb-4 inline-flex rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs font-semibold text-white backdrop-blur">
+                Plataforma institucional FCyT
+              </span>
+
+              <h1 className="text-3xl font-black leading-tight tracking-tight text-white sm:text-4xl lg:text-[42px]">
+                Tu información
+                <br />
+                académica,
+                <span className="block text-[#12c4e8]">
+                  en un solo lugar.
+                </span>
+              </h1>
+
+              <p className="mt-4 max-w-md text-sm leading-6 text-blue-100 sm:text-base">
+                Consulta cronogramas, ambientes y comunicados oficiales.
+              </p>
+
+              <div className="mt-6 flex flex-wrap gap-3">
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    document
+                      .getElementById('proximos-examenes')
+                      ?.scrollIntoView({ behavior: 'smooth' })
+                  }
+                  className="rounded-xl bg-[#0878ed] px-5 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-[#066bd4] active:scale-95"
+                >
+                  Consultar cronograma
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    document
+                      .getElementById('proximos-examenes')
+                      ?.scrollIntoView({ behavior: 'smooth' })
+                  }
+                  className="rounded-xl bg-white px-5 py-3 text-sm font-bold text-[#092f63] shadow-lg transition hover:bg-slate-100 active:scale-95"
+                >
+                  Ver próximos exámenes
+                </button>
+
+              </div>
+
             </div>
-          </div>
 
-          {/* Desktop: Muestra la foto de estudiantes / Móvil: Oculto */}
-          <div className="hidden lg:flex lg:col-span-5 justify-end">
-            <div className="relative w-full max-w-md rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-slate-900/40">
-              <img
-                src={heroImg}
-                alt="Estudiantes"
-                className="w-full h-72 sm:h-80 object-cover hover:scale-105 transition-transform duration-500"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-blue-950/60 via-transparent to-transparent pointer-events-none" />
-            </div>
+            {/* ==================================================
+                CRONOGRAMA
+            ================================================== */}
+
+            <CronogramaCard />
+
           </div>
 
         </div>
+
       </section>
 
-      {/* Card "PRÓXIMA EVALUACIÓN" (Destacado solo en móvil según diseño de la imagen) */}
-      <section className="px-5 pt-2 sm:hidden">
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 border-t-4 border-t-amber-500">
-          <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Próxima evaluación
+      {/* ==================================================
+          AGENDA ACADÉMICA
+      ================================================== */}
+
+      <main
+        id="proximos-examenes"
+        className="mx-auto w-full max-w-7xl flex-1 px-5 py-8 sm:px-6 sm:py-10 lg:px-8"
+      >
+
+        {/* Encabezado */}
+
+        <div className="mb-7 flex items-end justify-between">
+
+          <div>
+
+            <span className="block text-[11px] font-bold uppercase tracking-[0.12em] text-sky-700">
+              Agenda académica
             </span>
-            <span className="text-[11px] px-3 py-0.5 rounded-full font-medium border border-sky-300 text-sky-600 bg-white">
-              Programado
-            </span>
+
+            <h2 className="mt-1 text-2xl font-extrabold text-[#092f63] sm:text-3xl">
+              Próximos exámenes
+            </h2>
+
           </div>
 
-          <div className="flex items-start gap-4 mb-4">
-            <div className="text-4xl font-extrabold text-[#0a2e5c] leading-none">15</div>
-            <div>
-              <div className="text-xs font-bold text-slate-800 tracking-wide uppercase">SEP</div>
-            </div>
-          </div>
+          <button
+            type="button"
+            className="hidden text-sm font-semibold text-blue-600 transition hover:text-blue-800 sm:block"
+          >
+            Ver todos →
+          </button>
 
-          <div className="flex justify-between items-end">
-            <div>
-              <h3 className="font-bold text-[#0a2e5c] text-base">Examen Álgebra II</h3>
-              <p className="text-xs text-slate-500 mt-1">Aula 623 · 14:15 – 15:45</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Métricas rápidas (Solo Desktop/Tablet) */}
-      <div className="hidden sm:block">
-        <MetricsBar />
-      </div>
-
-      {/* --- AGENDA ACADÉMICA --- */}
-      <main className="max-w-7xl mx-auto px-5 sm:px-6 lg:px-8 py-6 sm:py-10 flex-1 w-full space-y-6">
-        <div>
-          <span className="text-[11px] font-bold uppercase tracking-wider text-sky-700 block">
-            Agenda académica
-          </span>
-          <h2 className="hidden sm:block text-2xl sm:text-3xl font-extrabold text-blue-950">
-            Próximos exámenes
-          </h2>
         </div>
 
-        {/* Selector de días tipo píldora para móvil */}
-        <div className="flex sm:hidden gap-2.5 overflow-x-auto pb-2 -mx-5 px-5 no-scrollbar">
+        {/* ==================================================
+            MÓVIL - SELECTOR DE DÍAS
+        ================================================== */}
+
+        <div className="mb-5 flex gap-2.5 overflow-x-auto pb-2 sm:hidden">
+
           {mobileDays.map((d) => {
-            const isSelected = selectedDate.getDate() === d.num;
+
+            const isSelected =
+              selectedDate.getDate() === d.num;
+
             return (
               <button
                 key={d.num}
+                type="button"
                 onClick={() => setSelectedDate(d.date)}
-                className={`flex-shrink-0 w-14 h-16 rounded-2xl flex flex-col items-center justify-center font-bold transition-all ${
-                  isSelected
-                    ? 'bg-[#0a2e5c] text-white shadow-md'
-                    : 'bg-white text-slate-700 border border-slate-200'
-                }`}
+                className={`
+                  flex
+                  h-16
+                  w-14
+                  shrink-0
+                  flex-col
+                  items-center
+                  justify-center
+                  rounded-2xl
+                  font-bold
+                  transition-all
+                  ${
+                    isSelected
+                      ? 'bg-[#092f63] text-white shadow-md'
+                      : 'border border-slate-200 bg-white text-slate-700'
+                  }
+                `}
               >
-                <span className="text-lg leading-tight">{d.num}</span>
+
+                <span className="text-lg">
+                  {d.num}
+                </span>
+
                 {d.hasDot && (
                   <span
-                    className={`w-1.5 h-1.5 rounded-full mt-1 ${
-                      isSelected ? 'bg-white' : 'bg-sky-500'
-                    }`}
+                    className={`
+                      mt-1 h-1.5 w-1.5 rounded-full
+                      ${
+                        isSelected
+                          ? 'bg-white'
+                          : 'bg-sky-500'
+                      }
+                    `}
                   />
                 )}
+
               </button>
             );
           })}
+
         </div>
 
-        {/* Vista Desktop con Mini Calendario + Lista de Exámenes */}
-        <div className="hidden sm:grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <div className="lg:col-span-4">
-            <MiniCalendar
-              selectedDate={selectedDate}
-              onSelectDate={setSelectedDate}
-              examDates={datesWithExams}
-            />
-          </div>
+        {/* ==================================================
+            CONTENIDO PRINCIPAL
+        ================================================== */}
 
-          <div className="lg:col-span-5 space-y-4">
-            {examenesDelDia.length > 0 ? (
-              examenesDelDia.map((exam) => (
-                <ExamCard
-                  key={exam.id}
-                  materia={exam.materia}
-                  aula={exam.aula}
-                  horario={exam.horario}
-                  tipoBorde={exam.tipo}
-                />
-              ))
-            ) : (
-              <div className="bg-white rounded-xl p-8 border border-slate-200 text-center text-slate-500 text-sm">
-                No hay evaluaciones programadas para este día.
-              </div>
-            )}
-          </div>
+        <div className="grid gap-7 lg:grid-cols-12">
 
-          <div className="lg:col-span-3">
-            <div className="bg-white rounded-xl p-5 border-t-4 border-t-red-600 border-x border-b border-slate-200 shadow-sm space-y-4">
-              <span className="text-[11px] font-bold text-red-600 uppercase tracking-wider block">Noticias</span>
-              <h3 className="text-base font-bold text-slate-900 leading-snug">Nuevo cronograma de evaluaciones</h3>
-              <p className="text-xs text-slate-500 leading-relaxed">La Facultad comunica las fechas oficiales del segundo semestre.</p>
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 font-medium">
-                <span className="px-2 py-0.5 rounded bg-slate-100 font-bold text-slate-600">SCI</span>
-                <span>10 SEP 2026</span>
-              </div>
+          {/* ==================================================
+              EXÁMENES
+          ================================================== */}
+
+          <section className="lg:col-span-8">
+
+            <div className="space-y-4">
+
+              {examenesDelDia.length > 0 ? (
+
+                examenesDelDia.map((exam) => (
+
+                  <ExamCard
+                    key={exam.id}
+                    materia={exam.materia}
+                    aula={exam.aula}
+                    horario={exam.horario}
+                    tipoBorde={exam.tipo}
+                  />
+
+                ))
+
+              ) : (
+
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
+
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-2xl">
+                    📅
+                  </div>
+
+                  <h3 className="font-bold text-slate-800">
+                    No hay evaluaciones programadas
+                  </h3>
+
+                  <p className="mt-2 text-sm text-slate-500">
+                    No existen exámenes registrados para esta fecha.
+                  </p>
+
+                </div>
+
+              )}
+
             </div>
-          </div>
+
+          </section>
+
+          {/* ==================================================
+              NOTICIAS
+          ================================================== */}
+
+          <aside className="lg:col-span-4">
+            <NewsCard />
+          </aside>
+
         </div>
 
-        {/* Tarjeta de Noticias Compacta (Móvil) */}
-        <div className="sm:hidden">
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 border-t-4 border-t-red-600 flex items-center gap-4">
-            <span className="px-3.5 py-1 rounded-full border border-sky-300 text-sky-700 text-xs font-bold">
-              SCI
-            </span>
-            <div>
-              <h4 className="font-bold text-xs text-[#0a2e5c] leading-snug">
-                Nuevo cronograma de evaluaciones
-              </h4>
-              <p className="text-[10px] text-slate-400 mt-0.5">Comunicado oficial - 10 SEP</p>
-            </div>
-          </div>
-        </div>
       </main>
 
-      {/* Footer solo para Desktop */}
-      <div className="hidden sm:block">
-        <Footer />
-      </div>
+      {/* ==================================================
+          MÉTRICAS
+      ================================================== */}
 
-      {/* --- BOTTOM NAVIGATION BAR (Fijo en Móvil) --- */}
-      <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around items-center py-2.5 px-3 z-50 shadow-lg">
-        <button
-          onClick={() => setActiveTab('inicio')}
-          className="flex flex-col items-center gap-1 text-slate-500 cursor-pointer"
-        >
-          <span className={`w-1.5 h-1.5 rounded-full ${activeTab === 'inicio' ? 'bg-[#0a58ca]' : 'bg-transparent'}`} />
-          <span className={`text-[11px] font-bold ${activeTab === 'inicio' ? 'text-[#0a58ca]' : 'text-slate-400'}`}>
-            Inicio
-          </span>
-        </button>
+      <section className="mx-auto w-full max-w-7xl px-5 pb-8 sm:px-6 lg:px-8">
 
-        <button
-          onClick={() => setActiveTab('modulos')}
-          className="flex flex-col items-center gap-1 text-slate-500 cursor-pointer"
-        >
-          <span className={`w-1.5 h-1.5 rounded-full ${activeTab === 'modulos' ? 'bg-[#0a58ca]' : 'bg-transparent'}`} />
-          <span className={`text-[11px] font-medium ${activeTab === 'modulos' ? 'text-[#0a58ca]' : 'text-slate-400'}`}>
-            Módulos
-          </span>
-        </button>
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
 
-        <button
-          onClick={() => setActiveTab('agenda')}
-          className="flex flex-col items-center gap-1 text-slate-500 cursor-pointer"
-        >
-          <span className={`w-1.5 h-1.5 rounded-full ${activeTab === 'agenda' ? 'bg-[#0a58ca]' : 'bg-transparent'}`} />
-          <span className={`text-[11px] font-medium ${activeTab === 'agenda' ? 'text-[#0a58ca]' : 'text-slate-400'}`}>
-            Agenda
-          </span>
-        </button>
+          <MetricsBar />
 
-        <button
-          onClick={() => setActiveTab('perfil')}
-          className="flex flex-col items-center gap-1 text-slate-500 cursor-pointer"
-        >
-          <span className={`w-1.5 h-1.5 rounded-full ${activeTab === 'perfil' ? 'bg-[#0a58ca]' : 'bg-transparent'}`} />
-          <span className={`text-[11px] font-medium ${activeTab === 'perfil' ? 'text-[#0a58ca]' : 'text-slate-400'}`}>
-            Perfil
-          </span>
-        </button>
-      </nav>
+        </div>
+
+      </section>
+
+      {/* ==================================================
+          FOOTER
+      ================================================== */}
+
+      <Footer />
+
+      {/* ==================================================
+          NAVEGACIÓN MÓVIL
+      ================================================== */}
+
+      <MobileNav
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+      />
+
     </div>
   );
 };
