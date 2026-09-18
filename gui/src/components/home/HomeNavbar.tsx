@@ -127,7 +127,7 @@ export const HomeNavbar: React.FC<HomeNavbarProps> = ({
         </div>
 
         {/* La misma barra de navegación se usa en todas las páginas. */}
-        <nav aria-label="Navegación principal" className="hidden flex-wrap border-t border-slate-100 pt-1 text-xs font-medium sm:flex sm:gap-1 xl:gap-3 xl:text-sm">
+        <nav aria-label="Navegación principal" className={"hidden flex-wrap border-t border-slate-100 pt-1 text-xs font-medium sm:flex sm:gap-1 xl:gap-3 xl:text-sm" + (authenticated ? " sm:justify-center" : "")}>
           {authenticated ? navItems.filter((item) => item.href !== '#').map((item) => {
             const active = location.pathname === item.href;
             return (
