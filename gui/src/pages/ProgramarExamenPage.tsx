@@ -90,6 +90,10 @@ export default function ProgramarExamenPage() {
   const selectedTeacher = docentes.find((teacher) => teacher.id === form.id_docente)
   const [normas, setNormas] = useState<Norma[]>([])
   const [selectedNorms, setSelectedNorms] = useState<string[]>([])
+  const [particulares, setParticulares] = useState<{ titulo: string; descripcion: string }[]>([])
+  const [particularTitulo, setParticularTitulo] = useState('')
+  const [particularDescripcion, setParticularDescripcion] = useState('')
+  const [savedExamId, setSavedExamId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -109,7 +113,7 @@ export default function ProgramarExamenPage() {
       const [subjects, rooms, rules, teachers, exam] = await Promise.all([
         examenesService.listMaterias(),
         aulasService.list({ estado: 'Disponible', perPage: 100 }),
-        normasService.listAll(),
+        normasService.listAll({ tipo: 'General' }),
         isAdmin
           ? examenesService.listDocentes().then((response) => response.data)
           : Promise.resolve(currentUser?.id ? [currentUser] : []),
@@ -131,7 +135,10 @@ export default function ProgramarExamenPage() {
             ]
           : rooms.data,
       )
-      setNormas(rules)
+      setNormas([
+        ...rules,
+        ...(exam?.normas ?? []).filter((norma) => norma.tipo === 'Particular'),
+      ])
       setDocentes(
         !isAdmin && exam?.docente && !teachers.some((teacher) => teacher.id === exam.docente?.id)
           ? [...teachers, exam.docente]
@@ -176,6 +183,19 @@ export default function ProgramarExamenPage() {
     setFieldErrors((current) => ({ ...current, normas: '' }))
   }
 
+  const addParticular = () => {
+    const titulo = particularTitulo.trim()
+    const descripcion = particularDescripcion.trim()
+    if (!titulo || !descripcion) {
+      setFieldErrors((current) => ({ ...current, particular: 'Completa el título y la descripción.' }))
+      return
+    }
+    setParticulares((current) => [...current, { titulo, descripcion }])
+    setParticularTitulo('')
+    setParticularDescripcion('')
+    setFieldErrors((current) => ({ ...current, particular: '', normas: '' }))
+  }
+
   const validate = () => {
     const errors: Record<string, string> = {}
     const duration = Number(form.duracion)
@@ -192,7 +212,12 @@ export default function ProgramarExamenPage() {
     }
     if (!form.id_aula) errors.id_aula = 'Selecciona un aula disponible.'
     if (!form.id_docente) errors.id_docente = 'Selecciona el docente responsable.'
-    if (selectedNorms.length === 0) errors.normas = 'Selecciona al menos una norma.'
+    if (selectedNorms.length === 0 && particulares.length === 0) {
+      errors.normas = 'Selecciona una norma general o agrega una particular.'
+    }
+    if (particularTitulo.trim() || particularDescripcion.trim()) {
+      errors.particular = 'Pulsa Agregar norma particular para incluir el borrador.'
+    }
 
     setFieldErrors(errors)
     return Object.keys(errors).length === 0
@@ -216,6 +241,7 @@ export default function ProgramarExamenPage() {
     if (!validate()) return
 
     setSaving(true)
+    let createdId: string | null = null
 
     try {
       const conflict = await checkScheduleConflict()
@@ -237,11 +263,20 @@ export default function ProgramarExamenPage() {
         id_docente: form.id_docente,
       }
 
-      const response = editId
-        ? await examenesService.update(editId, payload)
+      const currentId = editId ?? savedExamId
+      const response = currentId
+        ? await examenesService.update(currentId, payload)
         : await examenesService.create(payload)
+      if (!currentId) {
+        createdId = response.examen.id
+        setSavedExamId(createdId)
+      }
 
       await normasService.assignToExam(response.examen.id, selectedNorms)
+      if (particulares.length > 0) {
+        await normasService.createParticularForExam(response.examen.id, particulares)
+        setParticulares([])
+      }
       navigate('/examenes', {
         replace: true,
         state: {
@@ -251,7 +286,11 @@ export default function ProgramarExamenPage() {
         },
       })
     } catch (submitError) {
-      setError(getErrorMessage(submitError))
+      setError(
+        (createdId || savedExamId)
+          ? `El examen ya se guardó. Completa la asignación de normas sin crear otro examen: ${getErrorMessage(submitError)}`
+          : getErrorMessage(submitError),
+      )
     } finally {
       setSaving(false)
     }
@@ -425,6 +464,7 @@ export default function ProgramarExamenPage() {
                   <span className="text-sm font-semibold text-[#1E293B]">Duración en minutos *</span>
                   <input
                     type="number"
+                    onWheel={(event) => event.currentTarget.blur()}
                     min="1"
                     step="1"
                     value={form.duracion}
@@ -438,7 +478,7 @@ export default function ProgramarExamenPage() {
 
             <fieldset className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-6">
               <legend className="px-2 text-base font-bold text-[#003770]">Normas aplicables *</legend>
-              <p className="mb-4 text-sm text-[#64748B]">Selecciona una o varias normas del catálogo institucional.</p>
+              <p className="mb-4 text-sm text-[#64748B]">Selecciona normas generales del catálogo o agrega normas particulares para este examen.</p>
               <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
                 {normas.map((rule) => {
                   const selected = selectedNorms.includes(rule.id)
@@ -468,6 +508,19 @@ export default function ProgramarExamenPage() {
                 })}
               </div>
               {fieldErrors.normas && <p className="mt-3 text-sm text-[#E30613]">{fieldErrors.normas}</p>}
+              <div className="mt-5 space-y-3 border-t border-[#E2E8F0] pt-4">
+                <h3 className="text-sm font-bold text-[#003770]">Agregar norma particular de este examen</h3>
+                <input type="text" maxLength={150} value={particularTitulo} onChange={(event) => setParticularTitulo(event.target.value)} placeholder="Título de la norma" aria-label="Título de la norma particular" className="h-11 w-full rounded-lg border border-[#E2E8F0] px-3 text-sm" />
+                <textarea value={particularDescripcion} onChange={(event) => setParticularDescripcion(event.target.value)} placeholder="Descripción de la norma" aria-label="Descripción de la norma particular" rows={3} className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm" />
+                <button type="button" onClick={addParticular} className="min-h-11 rounded-lg border border-[#0056B3] px-4 text-sm font-semibold text-[#0056B3]">Agregar norma particular</button>
+                {fieldErrors.particular && <p className="text-sm text-[#E30613]">{fieldErrors.particular}</p>}
+                {particulares.map((norma, index) => (
+                  <div key={index} className="flex items-center justify-between gap-3 rounded-lg border border-[#E2E8F0] p-3 text-sm">
+                    <span><strong>{norma.titulo}</strong> · {norma.descripcion}</span>
+                    <button type="button" onClick={() => setParticulares((current) => current.filter((_, item) => item !== index))} className="min-h-10 text-[#B0040E]">Quitar</button>
+                  </div>
+                ))}
+              </div>
             </fieldset>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">

@@ -29,22 +29,13 @@ interface NormaFormModalProps {
   onSubmit: (data: NormaPayload) => Promise<void>
 }
 
-const isAdminRole = () => {
-  const role = (localStorage.getItem('user_role') ?? '').toLowerCase()
-  return role === 'admin' || role === 'administrador'
-}
-
 export function NormaFormModal({
   norma,
   onOpenChange,
   onSubmit,
 }: NormaFormModalProps) {
-  const admin = isAdminRole()
   const [titulo, setTitulo] = useState(norma?.titulo ?? '')
   const [descripcion, setDescripcion] = useState(norma?.descripcion ?? '')
-  const [tipo, setTipo] = useState<NormaTipo>(
-    admin ? (norma?.tipo ?? 'General') : 'Particular',
-  )
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [generalError, setGeneralError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -58,7 +49,6 @@ export function NormaFormModal({
     if (!descripcion.trim()) {
       errors.descripcion = 'La descripción es obligatoria y no puede contener solo espacios.'
     }
-    if (!tipo) errors.tipo = 'Selecciona el tipo de norma.'
 
     setFieldErrors(errors)
     return Object.keys(errors).length === 0
@@ -75,7 +65,7 @@ export function NormaFormModal({
       await onSubmit({
         titulo: titulo.trim(),
         descripcion: descripcion.trim(),
-        tipo: admin ? tipo : 'Particular',
+        tipo: 'General',
       })
       onOpenChange(false)
     } catch (error) {
@@ -123,7 +113,7 @@ export function NormaFormModal({
                 {editando ? 'Editar norma' : 'Registrar norma'}
               </h2>
               <p className="mt-1 text-sm text-[#64748B]">
-                La norma quedará disponible para reutilizarla en los exámenes.
+                Esta norma general quedará disponible para los exámenes.
               </p>
             </div>
 
@@ -179,24 +169,7 @@ export function NormaFormModal({
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="norma-tipo">Tipo *</Label>
-              <select
-                id="norma-tipo"
-                value={tipo}
-                onChange={(event) => setTipo(event.target.value as NormaTipo)}
-                disabled={!admin}
-                className="h-11 w-full rounded-md border border-[#E2E8F0] bg-white px-3 text-sm text-[#1E293B] outline-none transition focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/20 disabled:cursor-not-allowed disabled:bg-[#F7F7F7]"
-              >
-                {admin && <option value="General">General</option>}
-                <option value="Particular">Particular</option>
-              </select>
-              {!admin && (
-                <p className="text-xs text-[#64748B]">
-                  El perfil docente registra normas de tipo particular.
-                </p>
-              )}
-            </div>
+            <p className="text-sm text-[#64748B]">Tipo: General. Las normas particulares se crean dentro de un examen.</p>
 
             {generalError && (
               <div
@@ -210,8 +183,7 @@ export function NormaFormModal({
             <div className="flex gap-3 rounded-lg border border-[#168FBD]/20 bg-[#168FBD]/8 px-4 py-3">
               <Info className="mt-0.5 h-5 w-5 shrink-0 text-[#168FBD]" />
               <p className="text-sm text-[#1E536E]">
-                Registrar la norma en el catálogo no la asigna automáticamente a
-                un examen. La asociación se realiza durante su programación.
+                Esta norma general podrá seleccionarse durante la programación de un examen.
               </p>
             </div>
           </div>

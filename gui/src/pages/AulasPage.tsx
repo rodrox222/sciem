@@ -15,6 +15,7 @@ import {
 
 import { MainLayout } from '../layouts/MainLayout'
 import { AulaFormModal } from '../components/aulas/AulaFormModal'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog'
 import {
   aulasService,
   type Aula,
@@ -56,6 +57,7 @@ export default function AulasPage() {
   const [success, setSuccess] = useState('')
   const [modalAbierto, setModalAbierto] = useState(false)
   const [aulaSeleccionada, setAulaSeleccionada] = useState<Aula | null>(null)
+  const [aulaPorConfirmar, setAulaPorConfirmar] = useState<Aula | null>(null)
 
   const loadAulas = useCallback(async () => {
     setLoading(true)
@@ -146,8 +148,6 @@ export default function AulasPage() {
       aula.estado === 'Mantenimiento' ? 'Disponible' : 'Mantenimiento'
     const action = nextState === 'Mantenimiento' ? 'en mantenimiento' : 'disponible'
 
-    if (!window.confirm(`¿Deseas marcar ${aula.nombre} como ${action}?`)) return
-
     setChangingId(aula.id)
     setError('')
     setSuccess('')
@@ -165,6 +165,7 @@ export default function AulasPage() {
       setError(getErrorMessage(updateError))
     } finally {
       setChangingId(null)
+      setAulaPorConfirmar(null)
     }
   }
 
@@ -372,7 +373,7 @@ export default function AulasPage() {
                             {aula.estado !== 'Ocupada' && (
                               <button
                                 type="button"
-                                onClick={() => void toggleMaintenance(aula)}
+                                onClick={() => setAulaPorConfirmar(aula)}
                                 disabled={changingId === aula.id}
                                 className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#D59A18]/30 px-3 text-sm font-semibold text-[#946807] transition hover:bg-[#D59A18]/8 disabled:cursor-wait disabled:opacity-60"
                               >
@@ -447,6 +448,54 @@ export default function AulasPage() {
           onOpenChange={setModalAbierto}
           onSubmit={saveAula}
         />
+      )}
+
+      {aulaPorConfirmar && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open && changingId !== aulaPorConfirmar.id) setAulaPorConfirmar(null)
+          }}
+        >
+          <DialogContent
+            showCloseButton={false}
+            className="max-w-md gap-0 overflow-hidden border-t-4 border-[#D59A18] bg-white p-0 text-[#1E293B] shadow-2xl"
+          >
+            <DialogHeader className="gap-2 px-6 py-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#946807]">
+                Catálogo de aulas
+              </p>
+              <DialogTitle className="text-xl font-bold text-[#003770]">
+                Confirmar cambio de estado
+              </DialogTitle>
+              <DialogDescription className="text-sm leading-relaxed text-[#64748B]">
+                ¿Deseas marcar <strong className="text-[#003770]">{aulaPorConfirmar.nombre}</strong> como{' '}
+                <strong className="text-[#003770]">
+                  {aulaPorConfirmar.estado === 'Mantenimiento' ? 'disponible' : 'en mantenimiento'}
+                </strong>?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col-reverse gap-2 border-t border-[#E2E8F0] bg-[#F7F7F7] px-6 py-4 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setAulaPorConfirmar(null)}
+                disabled={changingId === aulaPorConfirmar.id}
+                className="min-h-11 rounded-lg border border-[#E2E8F0] bg-white px-4 text-sm font-semibold text-[#003770] disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void toggleMaintenance(aulaPorConfirmar)}
+                disabled={changingId === aulaPorConfirmar.id}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#0056B3] px-4 text-sm font-semibold text-white hover:bg-[#003770] disabled:cursor-wait disabled:opacity-50"
+              >
+                {changingId === aulaPorConfirmar.id && <LoaderCircle className="h-4 w-4 animate-spin" />}
+                Confirmar
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </MainLayout>
   )

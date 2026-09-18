@@ -36,11 +36,6 @@ const fullName = (student: Estudiante) =>
     .filter(Boolean)
     .join(' ')
 
-const ESTADO_BADGE_STYLES: Record<string, string> = {
-  Activo: 'bg-emerald-100 text-emerald-700',
-  Inactivo: 'bg-slate-100 text-slate-600',
-}
-
 export default function EstudiantesPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -140,7 +135,12 @@ export default function EstudiantesPage() {
       (student) =>
         student.codigo_sis.toLocaleLowerCase() ===
           payload.codigo_sis.toLocaleLowerCase() &&
-        student.id !== editingStudent?.id,
+        student.id !== editingStudent?.id &&
+        (student.ci.toLocaleUpperCase() !== payload.ci.toLocaleUpperCase() ||
+          (student.ci_extension ?? '').toLocaleUpperCase() !==
+            (payload.ci_extension ?? '').toLocaleUpperCase() ||
+          student.email_institucional.toLocaleLowerCase() !==
+            payload.email_institucional.toLocaleLowerCase()),
     )
     if (duplicateSis) {
       throw new ApiError('El código SIS ya está registrado.', 422, {
@@ -154,7 +154,9 @@ export default function EstudiantesPage() {
         student.ci.toLocaleUpperCase() === payload.ci.toLocaleUpperCase() &&
         (student.ci_extension ?? '').toLocaleUpperCase() ===
           (payload.ci_extension ?? '').toLocaleUpperCase() &&
-        student.id !== editingStudent?.id,
+        student.id !== editingStudent?.id &&
+        student.codigo_sis.toLocaleLowerCase() !==
+          payload.codigo_sis.toLocaleLowerCase(),
     )
     if (duplicateCi) {
       throw new ApiError('El CI y complemento ya están registrados.', 422, {
@@ -166,16 +168,11 @@ export default function EstudiantesPage() {
   const saveStudent = async (payload: InscripcionPayload) => {
     await ensureNoRealDuplicate(payload)
 
-    const response = examId
-      ? await estudiantesService.enroll(examId, payload)
-      : await estudiantesService.create(payload)
-
-    setSuccess(
-      response.message ||
-        (examId
-          ? 'Estudiante vinculado al examen correctamente.'
-          : 'Estudiante registrado correctamente.'),
-    )
+    if (!examId || !exam) {
+      throw new ApiError('Selecciona un examen antes de registrar estudiantes.', 422)
+    }
+    const response = await estudiantesService.enroll(examId, payload)
+    setSuccess(response.message || 'Estudiante vinculado al examen correctamente.')
     await loadStudents()
   }
 
@@ -198,14 +195,14 @@ export default function EstudiantesPage() {
             <p className="mt-2 max-w-2xl text-sm text-[#64748B]">
               {exam
                 ? `${exam.nombre} · ${exam.materia?.nombre ?? 'Asignatura'} · ${exam.aula?.nombre ?? 'Aula asignada'}`
-                : 'Registra y consulta los datos académicos de los estudiantes.'}
+                : 'Consulta el padrón. Para registrar, abre un examen y selecciona Estudiantes.'}
             </p>
           </div>
 
-          {canManage && (
+          {canManage && examId && exam && (
             <button type="button" onClick={openCreate} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#0056B3] px-5 py-3 text-sm font-semibold text-white hover:bg-[#003770]">
               <UserPlus className="h-5 w-5" />
-              {examId ? 'Agregar al examen' : 'Registrar estudiante'}
+              Agregar al examen
             </button>
           )}
         </header>
@@ -269,7 +266,7 @@ export default function EstudiantesPage() {
           <div className="flex flex-col gap-3 text-sm text-[#64748B] sm:flex-row sm:items-center sm:justify-between"><span>Página {page} de {lastPage} · {total} estudiantes</span><div className="flex gap-2"><button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1} className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-[#E2E8F0] bg-white px-3 font-semibold text-[#003770] disabled:opacity-40"><ChevronLeft className="h-4 w-4" />Anterior</button><button type="button" onClick={() => setPage((current) => Math.min(lastPage, current + 1))} disabled={page >= lastPage} className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-[#E2E8F0] bg-white px-3 font-semibold text-[#003770] disabled:opacity-40">Siguiente<ChevronRight className="h-4 w-4" /></button></div></div>
         )}
 
-        {modalOpen && (
+        {modalOpen && examId && exam && (
           <EstudianteFormModal
             key={editingStudent?.id ?? 'new'}
             estudiante={editingStudent}
