@@ -51,6 +51,11 @@ interface ExamenMutationResponse {
   examen: Examen
 }
 
+interface MateriaMutationResponse {
+  message: string
+  materia: CatalogItem
+}
+
 interface ExamenFilters {
   search?: string
   estado?: ExamenEstado | ''
@@ -97,6 +102,13 @@ export const examenesService = {
 
   listMaterias() {
     return apiRequest<CatalogItem[]>('/materias?all=1')
+  },
+
+  createMateria(nombre: string) {
+    return apiRequest<MateriaMutationResponse>('/materias', {
+      method: 'POST',
+      body: JSON.stringify({ nombre }),
+    })
   },
 
   listDocentes() {
