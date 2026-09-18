@@ -162,7 +162,7 @@ export const AuditoriaPage: React.FC = () => {
       }
 
       if (!data?.data?.length) {
-        alert('No hay registros para exportar con los filtros actuales.')
+        setError('No hay registros para exportar con los filtros actuales.')
         return
       }
 
@@ -214,7 +214,6 @@ export const AuditoriaPage: React.FC = () => {
 
       URL.revokeObjectURL(url)
 
-      alert(`Exportación completada: ${data.data.length} registros.`)
     } catch (err: unknown) {
       console.error('Error al exportar auditoría:', err)
       setError(

@@ -10,9 +10,13 @@ import {
   ChevronLeft,
   ChevronRight,
   MoreVertical,
+  Check,
 } from 'lucide-react'
 import { MainLayout } from '../layouts/MainLayout'
+import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
 import { ConfirmModal } from '../components/ConfirmModal'
+import { Button } from '@/components/ui/button'
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
@@ -116,6 +120,7 @@ export default function UsuariosPage() {
     useState<Record<string, string>>({})
 
   const [guardando, setGuardando] = useState(false)
+  const [resultadoFormulario, setResultadoFormulario] = useState('')
 
   // ==========================================================
   // MODAL ACTIVAR / DESACTIVAR
@@ -129,6 +134,9 @@ export default function UsuariosPage() {
 
   const [cambiandoEstado, setCambiandoEstado] =
     useState(false)
+
+  const [resultadoEstado, setResultadoEstado] =
+    useState('')
 
   // ==========================================================
   // MENÚ DE ACCIONES EN MÓVIL
@@ -364,6 +372,7 @@ export default function UsuariosPage() {
     setUsuarioEditando(null)
     setFormulario(formularioInicial)
     setErroresFormulario({})
+    setResultadoFormulario('')
     setMostrarModal(true)
   }
 
@@ -394,6 +403,7 @@ export default function UsuariosPage() {
     })
 
     setErroresFormulario({})
+    setResultadoFormulario('')
     setMostrarModal(true)
   }
 
@@ -411,6 +421,7 @@ export default function UsuariosPage() {
     setUsuarioEditando(null)
     setFormulario(formularioInicial)
     setErroresFormulario({})
+    setResultadoFormulario('')
   }
 
   // ==========================================================
@@ -846,16 +857,14 @@ export default function UsuariosPage() {
         )
       }
 
-      alert(
+      await recargarUsuarios(
+        token
+      )
+
+      setResultadoFormulario(
         modoEdicion
           ? 'Usuario actualizado correctamente.'
           : 'Usuario creado correctamente.'
-      )
-
-      cerrarModal()
-
-      await recargarUsuarios(
-        token
       )
     } catch (error) {
       console.error(
@@ -883,6 +892,7 @@ export default function UsuariosPage() {
   ) => {
     setMenuAbiertoId(null)
     setUsuarioEstado(usuario)
+    setResultadoEstado('')
     setMostrarConfirmacion(true)
   }
 
@@ -893,6 +903,7 @@ export default function UsuariosPage() {
 
     setMostrarConfirmacion(false)
     setUsuarioEstado(null)
+    setResultadoEstado('')
   }
 
   // ==========================================================
@@ -977,28 +988,20 @@ export default function UsuariosPage() {
           )
         }
 
-        alert(
+        setResultadoEstado(
           usuarioEstado.activo
             ? 'Usuario desactivado correctamente.'
             : 'Usuario activado correctamente.'
         )
 
-        setMostrarConfirmacion(
-          false
-        )
-
-        setUsuarioEstado(null)
-
-        await recargarUsuarios(
-          token
-        )
+        await recargarUsuarios(token)
       } catch (error) {
         console.error(
           'Error al cambiar estado:',
           error
         )
 
-        alert(
+        setResultadoEstado(
           error instanceof Error
             ? error.message
             : 'No se pudo cambiar el estado del usuario.'
@@ -1037,8 +1040,10 @@ export default function UsuariosPage() {
 
           </div>
 
-          <button
+          <Button
             type="button"
+            variant="default"
+            size="lg"
             onClick={
               abrirModalNuevoUsuario
             }
@@ -1046,7 +1051,7 @@ export default function UsuariosPage() {
           >
             <Plus className="h-5 w-5" />
             Nuevo usuario
-          </button>
+          </Button>
 
         </div>
 
@@ -1062,27 +1067,13 @@ export default function UsuariosPage() {
 
             <div>
 
-              <label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">
-                Buscar
-              </label>
+              <Label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">Buscar</Label>
 
               <div className="relative">
 
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B]" />
 
-                <input
-                  type="text"
-                  value={
-                    busqueda
-                  }
-                  onChange={(e) =>
-                    setBusqueda(
-                      e.target.value
-                    )
-                  }
-                  placeholder="Nombre, apellido o CI..."
-                  className="h-10 w-full rounded-lg border border-[#E2E8F0] bg-white pl-9 pr-3 text-sm outline-none focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/20"
-                />
+                <Input type="text" value={ busqueda } onChange={(e) => setBusqueda( e.target.value ) } placeholder="Nombre, apellido o CI..." className="h-10 w-full rounded-lg border border-[#E2E8F0] bg-white pl-9 pr-3 text-sm outline-none focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/20" />
 
               </div>
 
@@ -1092,9 +1083,7 @@ export default function UsuariosPage() {
 
             <div>
 
-              <label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">
-                Rol
-              </label>
+              <Label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">Rol</Label>
 
               <select
                 value={rol}
@@ -1148,9 +1137,7 @@ export default function UsuariosPage() {
 
             <div>
 
-              <label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">
-                Estado
-              </label>
+              <Label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">Estado</Label>
 
               <select
                 value={
@@ -1325,8 +1312,10 @@ export default function UsuariosPage() {
 
                           {/* EDITAR */}
 
-                          <button
+                          <Button
                             type="button"
+                            variant="outline"
+                            size="lg"
                             onClick={() =>
                               abrirModalEditarUsuario(
                                 usuario
@@ -1335,12 +1324,14 @@ export default function UsuariosPage() {
                             className="min-h-11 rounded-lg border border-[#E2E8F0] px-4 py-2 text-sm font-semibold text-[#64748B] transition hover:bg-[#F7F7F7] hover:text-[#0056B3]"
                           >
                             Editar
-                          </button>
+                          </Button>
 
                           {/* ACTIVAR / DESACTIVAR */}
 
-                          <button
+                          <Button
                             type="button"
+                            variant="ghost"
+                            size="lg"
                             onClick={() =>
                               abrirConfirmacionEstado(
                                 usuario
@@ -1360,7 +1351,7 @@ export default function UsuariosPage() {
                                 ? 'Desactivar'
                                 : 'Activar'
                             }
-                          </button>
+                          </Button>
 
                         </div>
 
@@ -1368,8 +1359,10 @@ export default function UsuariosPage() {
 
                         <div className="relative md:hidden">
 
-                          <button
+                          <Button
                             type="button"
+                            variant="ghost"
+                            size="icon-lg"
                             onClick={() =>
                               setMenuAbiertoId(
                                 menuAbiertoId === usuario.id
@@ -1384,13 +1377,15 @@ export default function UsuariosPage() {
                             }
                           >
                             <MoreVertical className="h-5 w-5" />
-                          </button>
+                          </Button>
 
                           {menuAbiertoId === usuario.id && (
                             <div className="absolute right-0 top-full z-30 mt-2 w-48 overflow-hidden rounded-lg border border-[#E2E8F0] bg-white p-1.5 shadow-lg">
 
-                              <button
+                              <Button
                                 type="button"
+                                variant="ghost"
+                                size="lg"
                                 onClick={() =>
                                   abrirModalEditarUsuario(
                                     usuario
@@ -1399,10 +1394,12 @@ export default function UsuariosPage() {
                                 className="flex min-h-11 w-full items-center rounded-md px-3 py-2 text-left text-sm font-semibold text-[#1E293B] transition hover:bg-[#F7F7F7] hover:text-[#0056B3]"
                               >
                                 Editar
-                              </button>
+                              </Button>
 
-                              <button
+                              <Button
                                 type="button"
+                                variant="ghost"
+                                size="lg"
                                 onClick={() =>
                                   abrirConfirmacionEstado(
                                     usuario
@@ -1422,7 +1419,7 @@ export default function UsuariosPage() {
                                     ? 'Desactivar'
                                     : 'Activar'
                                 }
-                              </button>
+                              </Button>
 
                             </div>
                           )}
@@ -1490,8 +1487,10 @@ export default function UsuariosPage() {
 
                 {/* ANTERIOR */}
 
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="lg"
                   onClick={() =>
                     setPaginaActual(
                       (pagina) =>
@@ -1511,7 +1510,7 @@ export default function UsuariosPage() {
 
                   Anterior
 
-                </button>
+                </Button>
 
                 {/* PAGINA ACTUAL */}
 
@@ -1528,8 +1527,10 @@ export default function UsuariosPage() {
 
                 {/* SIGUIENTE */}
 
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="lg"
                   onClick={() =>
                     setPaginaActual(
                       (pagina) =>
@@ -1550,7 +1551,7 @@ export default function UsuariosPage() {
 
                   <ChevronRight className="h-4 w-4" />
 
-                </button>
+                </Button>
 
               </div>
 
@@ -1596,8 +1597,10 @@ export default function UsuariosPage() {
 
               </div>
 
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={
                   cerrarModal
                 }
@@ -1608,11 +1611,43 @@ export default function UsuariosPage() {
                 aria-label="Cerrar"
               >
                 <X className="h-5 w-5" />
-              </button>
+              </Button>
 
             </div>
 
-            {/* FORMULARIO */}
+            {/* CONTENIDO DEL MODAL */}
+
+            {resultadoFormulario ? (
+
+              <div className="px-6 py-10 text-center">
+
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50">
+                  <Check className="h-7 w-7 text-emerald-600" />
+                </div>
+
+                <h3 className="mt-4 font-['Poppins'] text-lg font-bold text-[#1E293B]">
+                  Operación completada
+                </h3>
+
+                <p className="mt-2 text-sm text-[#64748B]">
+                  {resultadoFormulario}
+                </p>
+
+                <div className="mt-7 flex justify-center">
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="lg"
+                    onClick={cerrarModal}
+                    className="min-h-11 rounded-lg bg-[#0056B3] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#003770]"
+                  >
+                    Aceptar
+                  </Button>
+                </div>
+
+              </div>
+
+            ) : (
 
             <form
               onSubmit={
@@ -1643,28 +1678,9 @@ export default function UsuariosPage() {
 
                 <div>
 
-                  <label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">
-                    Nombre *
-                  </label>
+                  <Label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">Nombre *</Label>
 
-                  <input
-                    type="text"
-                    value={
-                      formulario.nombre
-                    }
-                    onChange={(e) =>
-                      actualizarCampo(
-                        'nombre',
-                        e.target.value
-                      )
-                    }
-                    placeholder="Ej. Juan"
-                    className={`h-11 w-full rounded-lg border px-3 text-sm outline-none ${
-                      erroresFormulario.nombre
-                        ? 'border-[#E30613]'
-                        : 'border-[#E2E8F0]'
-                    } focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/20`}
-                  />
+                  <Input type="text" value={ formulario.nombre } onChange={(e) => actualizarCampo( 'nombre', e.target.value ) } placeholder="Ej. Juan" className={`h-11 w-full rounded-lg border px-3 text-sm outline-none ${ erroresFormulario.nombre ? 'border-[#E30613]' : 'border-[#E2E8F0]' } focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/20`} />
 
                   {erroresFormulario.nombre && (
                     <p className="mt-1 text-xs text-[#E30613]">
@@ -1680,28 +1696,9 @@ export default function UsuariosPage() {
 
                 <div>
 
-                  <label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">
-                    Apellido paterno *
-                  </label>
+                  <Label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">Apellido paterno *</Label>
 
-                  <input
-                    type="text"
-                    value={
-                      formulario.apellido_paterno
-                    }
-                    onChange={(e) =>
-                      actualizarCampo(
-                        'apellido_paterno',
-                        e.target.value
-                      )
-                    }
-                    placeholder="Ej. Pérez"
-                    className={`h-11 w-full rounded-lg border px-3 text-sm outline-none ${
-                      erroresFormulario.apellido_paterno
-                        ? 'border-[#E30613]'
-                        : 'border-[#E2E8F0]'
-                    } focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/20`}
-                  />
+                  <Input type="text" value={ formulario.apellido_paterno } onChange={(e) => actualizarCampo( 'apellido_paterno', e.target.value ) } placeholder="Ej. Pérez" className={`h-11 w-full rounded-lg border px-3 text-sm outline-none ${ erroresFormulario.apellido_paterno ? 'border-[#E30613]' : 'border-[#E2E8F0]' } focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/20`} />
 
                   {erroresFormulario.apellido_paterno && (
                     <p className="mt-1 text-xs text-[#E30613]">
@@ -1719,24 +1716,9 @@ export default function UsuariosPage() {
 
               <div>
 
-                <label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">
-                  Apellido materno
-                </label>
+                <Label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">Apellido materno</Label>
 
-                <input
-                  type="text"
-                  value={
-                    formulario.apellido_materno
-                  }
-                  onChange={(e) =>
-                    actualizarCampo(
-                      'apellido_materno',
-                      e.target.value
-                    )
-                  }
-                  placeholder="Ej. García"
-                  className="h-11 w-full rounded-lg border border-[#E2E8F0] px-3 text-sm outline-none focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/20"
-                />
+                <Input type="text" value={ formulario.apellido_materno } onChange={(e) => actualizarCampo( 'apellido_materno', e.target.value ) } placeholder="Ej. García" className="h-11 w-full rounded-lg border border-[#E2E8F0] px-3 text-sm outline-none focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/20" />
 
               </div>
 
@@ -1746,28 +1728,9 @@ export default function UsuariosPage() {
 
                 <div>
 
-                  <label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">
-                    CI *
-                  </label>
+                  <Label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">CI *</Label>
 
-                  <input
-                    type="text"
-                    value={
-                      formulario.ci
-                    }
-                    onChange={(e) =>
-                      actualizarCampo(
-                        'ci',
-                        e.target.value
-                      )
-                    }
-                    placeholder="Ej. 1234567"
-                    className={`h-11 w-full rounded-lg border px-3 text-sm outline-none ${
-                      erroresFormulario.ci
-                        ? 'border-[#E30613]'
-                        : 'border-[#E2E8F0]'
-                    } focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/20`}
-                  />
+                  <Input type="text" value={ formulario.ci } onChange={(e) => actualizarCampo( 'ci', e.target.value ) } placeholder="Ej. 1234567" className={`h-11 w-full rounded-lg border px-3 text-sm outline-none ${ erroresFormulario.ci ? 'border-[#E30613]' : 'border-[#E2E8F0]' } focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/20`} />
 
                   {erroresFormulario.ci && (
                     <p className="mt-1 text-xs text-[#E30613]">
@@ -1781,24 +1744,9 @@ export default function UsuariosPage() {
 
                 <div>
 
-                  <label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">
-                    Extensión
-                  </label>
+                  <Label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">Extensión</Label>
 
-                  <input
-                    type="text"
-                    value={
-                      formulario.ci_extension
-                    }
-                    onChange={(e) =>
-                      actualizarCampo(
-                        'ci_extension',
-                        e.target.value
-                      )
-                    }
-                    placeholder="Ej. LP"
-                    className="h-11 w-full rounded-lg border border-[#E2E8F0] px-3 text-sm outline-none focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/20"
-                  />
+                  <Input type="text" value={ formulario.ci_extension } onChange={(e) => actualizarCampo( 'ci_extension', e.target.value ) } placeholder="Ej. LP" className="h-11 w-full rounded-lg border border-[#E2E8F0] px-3 text-sm outline-none focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/20" />
 
                 </div>
 
@@ -1811,28 +1759,9 @@ export default function UsuariosPage() {
 
                 <div>
 
-                  <label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">
-                    Correo electrónico *
-                  </label>
+                  <Label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">Correo electrónico *</Label>
 
-                  <input
-                    type="email"
-                    value={
-                      formulario.email
-                    }
-                    onChange={(e) =>
-                      actualizarCampo(
-                        'email',
-                        e.target.value
-                      )
-                    }
-                    placeholder="correo@ejemplo.com"
-                    className={`h-11 w-full rounded-lg border px-3 text-sm outline-none ${
-                      erroresFormulario.email
-                        ? 'border-[#E30613]'
-                        : 'border-[#E2E8F0]'
-                    } focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/20`}
-                  />
+                  <Input type="email" value={ formulario.email } onChange={(e) => actualizarCampo( 'email', e.target.value ) } placeholder="correo@ejemplo.com" className={`h-11 w-full rounded-lg border px-3 text-sm outline-none ${ erroresFormulario.email ? 'border-[#E30613]' : 'border-[#E2E8F0]' } focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/20`} />
 
                   {erroresFormulario.email && (
                     <p className="mt-1 text-xs text-[#E30613]">
@@ -1850,35 +1779,12 @@ export default function UsuariosPage() {
 
               <div>
 
-                <label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">
-                  Contraseña{' '}
+                <Label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">Contraseña{' '}
                   {modoEdicion
                     ? ''
-                    : '*'}
-                </label>
+                    : '*'}</Label>
 
-                <input
-                  type="password"
-                  value={
-                    formulario.password
-                  }
-                  onChange={(e) =>
-                    actualizarCampo(
-                      'password',
-                      e.target.value
-                    )
-                  }
-                  placeholder={
-                    modoEdicion
-                      ? 'Dejar vacío para conservar la actual'
-                      : 'Mínimo 8 caracteres'
-                  }
-                  className={`h-11 w-full rounded-lg border px-3 text-sm outline-none ${
-                    erroresFormulario.password
-                      ? 'border-[#E30613]'
-                      : 'border-[#E2E8F0]'
-                  } focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/20`}
-                />
+                <Input type="password" value={ formulario.password } onChange={(e) => actualizarCampo( 'password', e.target.value ) } placeholder={ modoEdicion ? 'Dejar vacío para conservar la actual' : 'Mínimo 8 caracteres' } className={`h-11 w-full rounded-lg border px-3 text-sm outline-none ${ erroresFormulario.password ? 'border-[#E30613]' : 'border-[#E2E8F0]' } focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/20`} />
 
                 {erroresFormulario.password && (
                   <p className="mt-1 text-xs text-[#E30613]">
@@ -1900,9 +1806,7 @@ export default function UsuariosPage() {
 
               <div>
 
-                <label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">
-                  Rol *
-                </label>
+                <Label className="mb-1.5 block text-sm font-semibold text-[#1E293B]">Rol *</Label>
 
                 <select
                   value={
@@ -1963,8 +1867,10 @@ export default function UsuariosPage() {
 
               <div className="flex flex-col-reverse gap-3 border-t border-[#E2E8F0] pt-5 sm:flex-row sm:justify-end">
 
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="lg"
                   onClick={
                     cerrarModal
                   }
@@ -1974,10 +1880,12 @@ export default function UsuariosPage() {
                   className="min-h-11 rounded-lg border border-[#E2E8F0] px-5 py-3 text-sm font-semibold text-[#64748B] transition hover:bg-[#F7F7F7] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Cancelar
-                </button>
+                </Button>
 
-                <button
+                <Button
                   type="submit"
+                  variant="default"
+                  size="lg"
                   disabled={
                     guardando
                   }
@@ -1990,11 +1898,13 @@ export default function UsuariosPage() {
                     : modoEdicion
                       ? 'Guardar cambios'
                       : 'Crear usuario'}
-                </button>
+                </Button>
 
               </div>
 
             </form>
+
+            )}
 
           </div>
 
@@ -2025,29 +1935,37 @@ export default function UsuariosPage() {
           }}
 
           title={
-            usuarioEstado.activo
-              ? 'Desactivar usuario'
-              : 'Activar usuario'
+            resultadoEstado
+              ? 'Operación completada'
+              : usuarioEstado.activo
+                ? 'Desactivar usuario'
+                : 'Activar usuario'
           }
 
           description={
-            usuarioEstado.activo
-              ? `¿Está seguro de que desea desactivar la cuenta de ${obtenerNombreCompleto(usuarioEstado)}? El usuario no podrá iniciar sesión mientras su cuenta esté inactiva.`
-              : `¿Está seguro de que desea activar nuevamente la cuenta de ${obtenerNombreCompleto(usuarioEstado)}? El usuario podrá iniciar sesión nuevamente.`
+            resultadoEstado
+              ? resultadoEstado
+              : usuarioEstado.activo
+                ? `¿Está seguro de que desea desactivar la cuenta de ${obtenerNombreCompleto(usuarioEstado)}? El usuario no podrá iniciar sesión mientras su cuenta esté inactiva.`
+                : `¿Está seguro de que desea activar nuevamente la cuenta de ${obtenerNombreCompleto(usuarioEstado)}? El usuario podrá iniciar sesión nuevamente.`
           }
 
           confirmText={
-            cambiandoEstado
-              ? 'Procesando...'
-              : usuarioEstado.activo
-                ? 'Desactivar'
-                : 'Activar'
+            resultadoEstado
+              ? 'Aceptar'
+              : cambiandoEstado
+                ? 'Procesando...'
+                : usuarioEstado.activo
+                  ? 'Desactivar'
+                  : 'Activar'
           }
 
           cancelText="Cancelar"
 
           onConfirm={
-            cambiarEstadoUsuario
+            resultadoEstado
+              ? cerrarConfirmacionEstado
+              : cambiarEstadoUsuario
           }
 
           onCancel={
@@ -2061,7 +1979,7 @@ export default function UsuariosPage() {
           }
 
           showCancel={
-            !cambiandoEstado
+            !cambiandoEstado && !resultadoEstado
           }
         />
 
