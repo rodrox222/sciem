@@ -10,7 +10,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Tag,
 } from 'lucide-react'
 
 import { NormaFormModal } from '../components/normas/NormaFormModal'
@@ -19,7 +18,6 @@ import {
   normasService,
   type Norma,
   type NormaPayload,
-  type NormaTipo,
 } from '../services/normas.service'
 import { ApiError } from '../services/apiClient'
 
@@ -47,7 +45,6 @@ export default function NormasPage() {
   const [normas, setNormas] = useState<Norma[]>([])
   const [searchInput, setSearchInput] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
-  const [tipo, setTipo] = useState<NormaTipo | ''>('')
   const [page, setPage] = useState(1)
   const [lastPage, setLastPage] = useState(1)
   const [total, setTotal] = useState(0)
@@ -64,7 +61,7 @@ export default function NormasPage() {
     try {
       const response = await normasService.list({
         search: searchTerm,
-        tipo,
+        tipo: 'General',
         page,
       })
       setNormas(response.data)
@@ -75,7 +72,7 @@ export default function NormasPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, searchTerm, tipo])
+  }, [page, searchTerm])
 
   useEffect(() => {
     const requestId = window.setTimeout(() => void loadNormas(), 0)
@@ -85,7 +82,6 @@ export default function NormasPage() {
   const visibleCounts = useMemo(
     () => ({
       general: normas.filter((norma) => norma.tipo === 'General').length,
-      particular: normas.filter((norma) => norma.tipo === 'Particular').length,
     }),
     [normas],
   )
@@ -132,8 +128,8 @@ export default function NormasPage() {
               Catálogo de normas
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-[#64748B]">
-              Registra y reutiliza lineamientos generales o particulares al
-              programar evaluaciones.
+              El administrador registra normas generales para programar cada examen.
+              Las normas particulares se agregan dentro de un examen.
             </p>
           </div>
 
@@ -143,11 +139,11 @@ export default function NormasPage() {
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#0056B3] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#003770]"
           >
             <Plus className="h-5 w-5" />
-            Registrar norma
+            Registrar norma general
           </button>
         </header>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <article className="rounded-xl border border-[#E2E8F0] bg-white p-4">
             <div className="flex items-center gap-3">
               <span className="grid h-11 w-11 place-items-center rounded-lg bg-[#0056B3]/10 text-[#0056B3]">
@@ -174,26 +170,14 @@ export default function NormasPage() {
             </div>
           </article>
 
-          <article className="rounded-xl border border-[#E2E8F0] bg-white p-4">
-            <div className="flex items-center gap-3">
-              <span className="grid h-11 w-11 place-items-center rounded-lg bg-[#D59A18]/10 text-[#D59A18]">
-                <Tag className="h-5 w-5" />
-              </span>
-              <div>
-                <p className="text-xs text-[#64748B]">Particulares en esta página</p>
-                <p className="text-2xl font-bold text-[#003770]">
-                  {visibleCounts.particular}
-                </p>
-              </div>
-            </div>
-          </article>
+
         </div>
 
         <section className="rounded-xl border border-[#E2E8F0] bg-white shadow-sm">
           <div className="border-b border-[#E2E8F0] p-4 sm:p-5">
             <form
               onSubmit={applySearch}
-              className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]"
+              className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]"
             >
               <label className="relative block">
                 <span className="sr-only">Buscar norma</span>
@@ -207,21 +191,7 @@ export default function NormasPage() {
                 />
               </label>
 
-              <label>
-                <span className="sr-only">Filtrar por tipo</span>
-                <select
-                  value={tipo}
-                  onChange={(event) => {
-                    setTipo(event.target.value as NormaTipo | '')
-                    setPage(1)
-                  }}
-                  className="h-11 w-full rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm text-[#1E293B] outline-none transition focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/15"
-                >
-                  <option value="">Todos los tipos</option>
-                  <option value="General">General</option>
-                  <option value="Particular">Particular</option>
-                </select>
-              </label>
+
 
               <button
                 type="submit"

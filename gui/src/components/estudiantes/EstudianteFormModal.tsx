@@ -68,8 +68,8 @@ export function EstudianteFormModal({
     }
     if (!form.email_institucional.trim()) {
       nextErrors.email_institucional = 'El correo institucional es obligatorio.'
-    } else if (!/^[^\s@]+@est\.umss\.edu$/i.test(form.email_institucional.trim())) {
-      nextErrors.email_institucional = 'Ingresa un correo institucional @est.umss.edu.'
+    } else if (!/^[0-9]+@est\.umss\.edu$/i.test(form.email_institucional.trim())) {
+      nextErrors.email_institucional = 'Ingresa el código SIS numérico seguido de @est.umss.edu.'
     }
 
     setErrors(nextErrors)

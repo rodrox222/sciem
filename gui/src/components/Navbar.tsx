@@ -20,9 +20,12 @@ interface NavItem {
 // Configuración de los menús por rol
 const NAV_ITEMS_BY_ROLE: Record<string, NavItem[]> = {
   admin: [
-    { name: 'Inicio', href: '#' },
+    { name: 'Inicio', href: '/dashboard' },
     { name: 'Usuarios', href: '/usuarios' },
-    { name: 'Ambientes', href: '#' },
+    { name: 'Ambientes', href: '/aulas' },
+    { name: 'Normativas', href: '/normas' },
+    { name: 'Exámenes', href: '/examenes' },
+    { name: 'Estudiantes', href: '/estudiantes' },
     { name: 'Auditoría', href: '/dashboard/auditoria' },
     { name: 'Logs', href: '#' },
     { name: 'Configuración', href: '#' },
@@ -31,9 +34,8 @@ const NAV_ITEMS_BY_ROLE: Record<string, NavItem[]> = {
   docente: [
     { name: 'Inicio', href: '/dashboard' },
     { name: 'Mis exámenes', href: '/examenes' },
-    { name: 'Estudiantes', href: '/estudiantes?rol=docente' },
+    { name: 'Estudiantes', href: '/estudiantes' },
     { name: 'Cronograma', href: '#' },
-    { name: 'Normativas', href: '/normas' },
     { name: 'Perfil', href: '#' },
   ],
   auxiliar: [
