@@ -4,9 +4,9 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute'
 import { HomePage } from './pages/HomePage'
-import { IdleTimer } from './components/IdleTimer'
 
-// Páginas de HU4-front
+// Páginas de HU1, HU4, HU5, HU6 y HU7
+import UsuariosPage from './pages/UsuariosPage'
 import AulasPage from './pages/AulasPage'
 import NormasPage from './pages/NormasPage'
 import ProgramarExamenPage from './pages/ProgramarExamenPage'
@@ -15,61 +15,114 @@ import ProgramarExamenAdminPage from './pages/ProgramarExamenAdminPage'
 import MisExamenesPage from './pages/MisExamenesPage'
 import EstudiantesPage from './pages/EstudiantesPage'
 
-// Páginas de auditoría
+// Página de HU3
 import { AuditoriaPage } from './pages/AuditoriaPage'
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Landing Público general */}
-        <Route path="/" element={<HomePage />} />
 
-        {/* Rutas Públicas, osea sin iniciar session*/}
+        {/* ==================== LANDING PÚBLICO ==================== */}
+        <Route
+          path="/"
+          element={<HomePage />}
+        />
+
+        {/* ==================== RUTAS PÚBLICAS ==================== */}
         <Route element={<PublicRoute />}>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/recuperar-contrasena" element={<ForgotPasswordPage />} />
+          <Route
+            path="/login"
+            element={<LoginPage />}
+          />
+
+          <Route
+            path="/recuperar-contrasena"
+            element={<ForgotPasswordPage />}
+          />
         </Route>
 
-        {/* Rutas compartidas por cualquier usuario logueado (Admin, Docente, Auxiliar) */}
+        {/* ==================== RUTAS COMPARTIDAS ==================== */}
+        {/* Admin, Docente y Auxiliar */}
         <Route element={<ProtectedRoute />}>
+
           <Route
             path="/dashboard"
-            element={
-              <>
-                <IdleTimer />
-                <DashboardPage />
-              </>
-            }
+            element={<DashboardPage />}
           />
-          <Route path="/examenes" element={<ExamenesPage />} />
-          <Route path="/mis-examenes" element={<MisExamenesPage />} />
-          <Route path="/estudiantes" element={<EstudiantesPage />} />
+
+          <Route
+            path="/examenes"
+            element={<ExamenesPage />}
+          />
+
+          <Route
+            path="/mis-examenes"
+            element={<MisExamenesPage />}
+          />
+
+          <Route
+            path="/estudiantes"
+            element={<EstudiantesPage />}
+          />
+
         </Route>
 
-        {/* Rutas EXCLUSIVAS de ADMINISTRADOR */}
+        {/* ==================== RUTAS EXCLUSIVAS DE ADMIN ==================== */}
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
-          <Route path="/normas" element={<NormasPage />} />
-          <Route path="/aulas" element={<AulasPage />} />
-          <Route path="/programar-examen-admin" element={<ProgramarExamenAdminPage />} />
+
+          {/* HU1 - Gestión de usuarios */}
+          <Route
+            path="/usuarios"
+            element={<UsuariosPage />}
+          />
+
+          {/* HU4 - Aulas */}
+          <Route
+            path="/aulas"
+            element={<AulasPage />}
+          />
+
+          {/* HU5 - Normas */}
+          <Route
+            path="/normas"
+            element={<NormasPage />}
+          />
+
+          {/* HU6 - Programar examen como administrador */}
+          <Route
+            path="/programar-examen-admin"
+            element={<ProgramarExamenAdminPage />}
+          />
+
+          {/* HU3 - Auditoría */}
           <Route
             path="/dashboard/auditoria"
-            element={
-              <>
-                <IdleTimer />
-                <AuditoriaPage />
-              </>
-            }
+            element={<AuditoriaPage />}
           />
+
         </Route>
 
-        {/* Rutas exclusivas para docente y admin */}
-        <Route element={<ProtectedRoute allowedRoles={['admin', 'docente']} />}>
-          <Route path="/programar-examen" element={<ProgramarExamenPage />} />
+        {/* ==================== DOCENTE Y ADMIN ==================== */}
+        <Route
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'docente']} />
+          }
+        >
+
+          <Route
+            path="/programar-examen"
+            element={<ProgramarExamenPage />}
+          />
+
         </Route>
 
-        {/* Redirección por defecto */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* ==================== RUTA POR DEFECTO ==================== */}
+        <Route
+          path="*"
+          element={<Navigate to="/" replace />}
+        />
+
       </Routes>
     </BrowserRouter>
   )

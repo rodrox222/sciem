@@ -12,15 +12,18 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     localStorage.removeItem('auth_token')
     localStorage.removeItem('user_role')
     localStorage.removeItem('user_data')
+    localStorage.removeItem('sciem_last_activity')
     window.location.href = '/login'
   }
 
   const role = localStorage.getItem('user_role') || 'Docente'
+
   let displayName = role
 
   try {
     const userDataRaw = localStorage.getItem('user_data')
     const userData = userDataRaw ? JSON.parse(userDataRaw) : null
+
     if (userData?.nombre) {
       displayName = `${userData.nombre} ${userData.apellido || ''}`.trim()
     }
