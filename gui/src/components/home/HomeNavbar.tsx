@@ -147,14 +147,13 @@ export const HomeNavbar: React.FC<HomeNavbarProps> = ({
             );
           }) : (
             <>
-              <button type="button" onClick={() => goTo('/')} className="py-2.5 px-5 text-blue-950 bg-sky-50/70 border-b-2 border-sky-600 font-bold rounded-t-md cursor-pointer">
+              <button type="button" onClick={() => goTo('/')} aria-current={location.pathname === '/' ? 'page' : undefined}
+                className={'rounded-t-md border-b-2 px-5 py-2.5 font-bold transition-colors ' + (location.pathname === '/' ? 'border-sky-600 bg-sky-50/70 text-blue-950' : 'border-transparent text-slate-600 hover:text-blue-950')}>
                 Inicio
               </button>
-              <button type="button" className="py-2.5 px-4 text-slate-600 hover:text-blue-950 transition-colors cursor-pointer">
+              <button type="button" onClick={() => goTo('/cronograma')} aria-current={location.pathname === '/cronograma' ? 'page' : undefined}
+                className={'rounded-t-md border-b-2 px-4 py-2.5 transition-colors ' + (location.pathname === '/cronograma' ? 'border-sky-600 bg-sky-50/70 font-bold text-blue-950' : 'border-transparent text-slate-600 hover:text-blue-950')}>
                 Cronograma de exámenes
-              </button>
-              <button type="button" className="py-2.5 px-4 text-slate-600 hover:text-blue-950 transition-colors cursor-pointer">
-                Noticias
               </button>
             </>
           )}
