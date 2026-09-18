@@ -21,7 +21,7 @@ interface NavItem {
 const NAV_ITEMS_BY_ROLE: Record<string, NavItem[]> = {
   admin: [
     { name: 'Inicio', href: '#' },
-    { name: 'Usuarios', href: '#' },
+    { name: 'Usuarios', href: '/usuarios' },
     { name: 'Ambientes', href: '#' },
     { name: 'Auditoría', href: '/dashboard/auditoria' },
     { name: 'Logs', href: '#' },
