@@ -371,14 +371,16 @@ export default function ProgramarExamenPage() {
                     <label htmlFor="examen-materia" className="flex items-center gap-2 text-sm font-semibold text-[#1E293B]">
                       <BookOpenCheck className="h-4 w-4 text-[#168FBD]" /> Asignatura *
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setMateriaModalOpen(true)}
-                      disabled={saving}
-                      className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-[#0056B3] hover:bg-[#0056B3]/5"
-                    >
-                      <Plus className="h-4 w-4" /> Crear materia
-                    </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setMateriaModalOpen(true)}
+                        disabled={saving}
+                        className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-[#0056B3] hover:bg-[#0056B3]/5"
+                      >
+                        <Plus className="h-4 w-4" /> Crear materia
+                      </button>
+                    )}
                   </div>
                   <select
                     id="examen-materia"
@@ -557,7 +559,7 @@ export default function ProgramarExamenPage() {
             </div>
           </form>
         )}
-        {materiaModalOpen && (
+        {isAdmin && materiaModalOpen && (
           <CrearMateriaModal
             onOpenChange={setMateriaModalOpen}
             onCreated={(materia) => {
