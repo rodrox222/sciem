@@ -29,7 +29,7 @@ export function AdminNavbar({
     { name: 'Normas', href: '/normas' },
     { name: 'Exámenes', href: '/examenes' },
     { name: 'Estudiantes', href: '/estudiantes?rol=admin' },
-    { name: 'Auditoría', href: '/auditoria' },
+   { name: 'Auditoría', href: '/dashboard/auditoria' },
     { name: 'Logs', href: '/logs' },
     { name: 'Configuración', href: '/configuracion' },
     { name: 'Perfil', href: '/perfil' },
