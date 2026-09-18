@@ -20,6 +20,9 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,
 Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLink']);
 Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword']);
 
+Route::get('examenes', [ExamenController::class, 'index']);
+Route::get('examenes/{id}', [ExamenController::class, 'show']);
+
 // --- RUTAS PROTEGIDAS (Sanctum) ---
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -76,11 +79,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('aulas/{id}', [AulaController::class, 'destroy']);
     });
 
-    // --- EXÁMENES ---
+    /*// --- EXÁMENES ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('examenes', [ExamenController::class, 'index']);
         Route::get('examenes/{id}', [ExamenController::class, 'show']);
-    });
+    }); */
 
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::post('examenes', [ExamenController::class, 'store']);
