@@ -10,7 +10,6 @@ import {
   Clock3,
   GraduationCap,
   MapPin,
-  ShieldCheck,
   UsersRound,
 } from 'lucide-react'
 
@@ -135,14 +134,6 @@ export function AdminDashboard() {
   }, [])
 
   const now = new Date()
-  const checks = [
-    { name: 'Usuarios', ok: data?.checks[0] },
-    { name: 'Ambientes', ok: data?.checks[1] },
-    { name: 'Exámenes', ok: data?.checks[2] },
-    { name: 'Estudiantes', ok: data?.checks[3] },
-    { name: 'Auditoría', ok: data?.checks[4] },
-  ]
-
   return (
     <div className="space-y-5 text-[#193657]">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -168,36 +159,7 @@ export function AdminDashboard() {
         <MetricCard title="Estudiantes" value={data?.students ?? null} subtitle="registrados" icon={<GraduationCap className="h-6 w-6" />} accent="border-l-rose-500" loading={loading} onClick={() => navigate('/estudiantes')} />
       </div>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-          <h2 className="flex items-center gap-2 text-base font-bold"><CalendarDays className="h-5 w-5 text-[#0056B3]" /> Próximos exámenes</h2>
-          <button type="button" onClick={() => navigate('/examenes')} className="min-h-10 text-xs font-semibold text-[#0056B3]">Ver todos →</button>
-        </div>
-        {loading ? <p className="py-5 text-sm text-slate-500">Cargando exámenes…</p> : !data?.checks[2] ? (
-          <p className="py-5 text-sm text-slate-500">No se pudieron consultar los exámenes.</p>
-        ) : data.upcoming.length === 0 ? (
-          <p className="py-5 text-sm text-slate-500">No hay próximos exámenes en la lista consultada.</p>
-        ) : (
-          <div className="divide-y divide-slate-200">
-            {data.upcoming.map((exam) => (
-              <button key={exam.id} type="button" onClick={() => navigate('/examenes')} className="flex min-h-16 w-full items-center gap-3 py-3 text-left">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-50 text-[#0056B3]"><BookOpenCheck className="h-4 w-4" /></span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-bold">{exam.nombre}</span>
-                  <span className="block text-xs text-slate-500">{exam.materia?.nombre ?? 'Materia sin detalle'}</span>
-                  <span className="mt-1 flex flex-wrap gap-x-3 text-xs text-slate-500">
-                    <span className="inline-flex items-center gap-1"><Clock3 className="h-3 w-3" />{dateLabel(exam.fecha)} · {exam.hora_ini.slice(0, 5)}</span>
-                    <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />{exam.aula?.nombre ?? 'Sin aula'}</span>
-                  </span>
-                </span>
-                <ChevronRight className="h-4 w-4 text-[#0056B3]" />
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <div className="grid gap-5 lg:grid-cols-[1.65fr_1fr]">
+      <div className="grid gap-5 lg:grid-cols-2">
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="flex items-center justify-between border-b border-slate-200 pb-3">
             <h2 className="flex items-center gap-2 text-base font-bold"><Clock3 className="h-5 w-5 text-[#0056B3]" /> Actividad reciente</h2>
@@ -224,22 +186,32 @@ export function AdminDashboard() {
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-          <div className="border-b border-slate-200 pb-3">
-            <h2 className="flex items-center gap-2 text-base font-bold"><ShieldCheck className="h-5 w-5 text-[#0056B3]" /> Estado del sistema</h2>
-            <p className="mt-1 text-xs text-slate-500">Disponibilidad de las consultas del panel.</p>
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+            <h2 className="flex items-center gap-2 text-base font-bold"><CalendarDays className="h-5 w-5 text-[#0056B3]" /> Próximos exámenes</h2>
+            <button type="button" onClick={() => navigate('/examenes')} className="min-h-10 text-xs font-semibold text-[#0056B3]">Ver todos →</button>
           </div>
-          <div className="divide-y divide-slate-200">
-            {checks.map((check) => (
-              <div key={check.name} className="flex min-h-11 items-center justify-between gap-3 py-2 text-sm">
-                <span className="font-semibold">{check.name}</span>
-                <span className={'rounded-full px-3 py-1 text-xs font-semibold ' + (
-                  loading ? 'bg-slate-100 text-slate-600' : check.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-                )}>
-                  {loading ? 'Consultando' : check.ok ? 'Disponible' : 'Sin respuesta'}
-                </span>
-              </div>
-            ))}
-          </div>
+          {loading ? <p className="py-5 text-sm text-slate-500">Cargando exámenes…</p> : !data?.checks[2] ? (
+            <p className="py-5 text-sm text-slate-500">No se pudieron consultar los exámenes.</p>
+          ) : data.upcoming.length === 0 ? (
+            <p className="py-5 text-sm text-slate-500">No hay próximos exámenes en la lista consultada.</p>
+          ) : (
+            <div className="divide-y divide-slate-200">
+              {data.upcoming.map((exam) => (
+                <button key={exam.id} type="button" onClick={() => navigate('/examenes')} className="flex min-h-16 w-full items-center gap-3 py-3 text-left">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-50 text-[#0056B3]"><BookOpenCheck className="h-4 w-4" /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-bold">{exam.nombre}</span>
+                    <span className="block text-xs text-slate-500">{exam.materia?.nombre ?? 'Materia sin detalle'}</span>
+                    <span className="mt-1 flex flex-wrap gap-x-3 text-xs text-slate-500">
+                      <span className="inline-flex items-center gap-1"><Clock3 className="h-3 w-3" />{dateLabel(exam.fecha)} · {exam.hora_ini.slice(0, 5)}</span>
+                      <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />{exam.aula?.nombre ?? 'Sin aula'}</span>
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-[#0056B3]" />
+                </button>
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </div>
