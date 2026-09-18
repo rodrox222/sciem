@@ -5,44 +5,60 @@ interface ProtectedRouteProps {
   allowedRoles?: string[]
 }
 
-const TIMEOUT_MS = 5 * 60 * 1000 // 5 minutos
+const TIMEOUT_MS = 5 * 60 * 1000
+const ACTIVITY_KEY = 'sciem_last_activity'
 
-export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('auth_token'))
-  const userRole = localStorage.getItem('user_role')
-  const location = useLocation()
+interface AuthState {
+  checked: boolean
+  token: string | null
+}
 
-  // 1. Verificación inmediata de inactividad antes de procesar el render
-  const lastActivity = localStorage.getItem('sciem_last_activity')
+const readValidToken = () => {
+  const token = localStorage.getItem('auth_token')
+  const lastActivity = localStorage.getItem(ACTIVITY_KEY)
+
   if (token && lastActivity) {
-    const elapsed = Date.now() - parseInt(lastActivity, 10)
+    const elapsed = Date.now() - Number.parseInt(lastActivity, 10)
     if (elapsed >= TIMEOUT_MS) {
       localStorage.removeItem('auth_token')
       localStorage.removeItem('user_role')
-      localStorage.removeItem('sciem_last_activity')
-      return <Navigate to="/login" replace state={{ from: location }} />
+      localStorage.removeItem('user_data')
+      localStorage.removeItem(ACTIVITY_KEY)
+      return null
     }
   }
 
-  useEffect(() => {
-    setToken(localStorage.getItem('auth_token'))
+  return token
+}
 
-    const handlePageShow = (event: PageTransitionEvent) => {
-      if (event.persisted || !localStorage.getItem('auth_token')) {
-        setToken(null)
-      }
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
+  const [auth, setAuth] = useState<AuthState>({ checked: false, token: null })
+  const location = useLocation()
+
+  useEffect(() => {
+    const checkAuth = () => {
+      setAuth({ checked: true, token: readValidToken() })
     }
 
+    const initialCheckId = window.setTimeout(checkAuth, 0)
+    const handlePageShow = () => checkAuth()
     window.addEventListener('pageshow', handlePageShow)
-    return () => window.removeEventListener('pageshow', handlePageShow)
-  }, [location])
 
-  if (!token) {
+    return () => {
+      window.clearTimeout(initialCheckId)
+      window.removeEventListener('pageshow', handlePageShow)
+    }
+  }, [])
+
+  if (!auth.checked) return null
+
+  if (!auth.token) {
     return <Navigate to="/login" replace state={{ from: location }} />
   }
 
-  if (allowedRoles && userRole && !allowedRoles.includes(userRole.toLowerCase())) {
-    return <Navigate to="/login" replace />
+  const userRole = (localStorage.getItem('user_role') ?? '').toLowerCase()
+  if (allowedRoles && !allowedRoles.includes(userRole)) {
+    return <Navigate to="/dashboard" replace />
   }
 
   return <Outlet />
@@ -50,10 +66,5 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) 
 
 export const PublicRoute: React.FC = () => {
   const token = localStorage.getItem('auth_token')
-
-  if (token) {
-    return <Navigate to="/dashboard" replace />
-  }
-
-  return <Outlet />
+  return token ? <Navigate to="/dashboard" replace /> : <Outlet />
 }

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use App\Models\Estudiante;
 
 
 class Examen extends Model
@@ -53,5 +54,11 @@ class Examen extends Model
     public function normas(): BelongsToMany
     {
     return $this->belongsToMany(Norma::class, 'examen_norma', 'id_examen', 'id_norma');
+    }
+
+    public function estudiantes(): BelongsToMany
+    {
+    return $this->belongsToMany(Estudiante::class, 'estudiante_examen', 'id_examen', 'id_estudiante')
+        ->withPivot('estado', 'created_at');
     }
 }

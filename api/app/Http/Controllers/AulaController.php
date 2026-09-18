@@ -4,7 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreAulaRequest;
 use App\Http\Requests\UpdateAulaRequest;
+use App\Models\Admin;
 use App\Models\Aula;
+use App\Models\Auxiliar;
+use App\Models\Docente;
 use App\Models\LogAuditoria;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -36,23 +39,17 @@ class AulaController extends Controller
     }
 
     /**
-     * Registrar una nueva aula (Solo Administrador).
+     * Registrar una nueva aula.
      */
     public function store(StoreAulaRequest $request): JsonResponse
     {
         $data = $request->validated();
         $aula = Aula::create($data);
 
-        LogAuditoria::create([
-            'user_type' => get_class($request->user()),
-            'user_id'   => $request->user()->id,
-            'accion'    => 'AULA_CREADA',
-            'ip_origen' => $request->ip(),
-            'detalles'  => [
-                'aula_id'   => $aula->id,
-                'nombre'    => $aula->nombre,
-                'capacidad' => $aula->capacidad,
-            ],
+        $this->registrarAuditoria($request, 'AULA_CREADA', [
+            'aula_id'   => $aula->id,
+            'nombre'    => $aula->nombre,
+            'capacidad' => $aula->capacidad,
         ]);
 
         return response()->json([
@@ -76,7 +73,7 @@ class AulaController extends Controller
     }
 
     /**
-     * Actualizar los datos de un aula (Solo Administrador).
+     * Actualizar los datos de un aula.
      */
     public function update(UpdateAulaRequest $request, string $id): JsonResponse
     {
@@ -89,15 +86,9 @@ class AulaController extends Controller
         $data = $request->validated();
         $aula->update($data);
 
-        LogAuditoria::create([
-            'user_type' => get_class($request->user()),
-            'user_id'   => $request->user()->id,
-            'accion'    => 'AULA_ACTUALIZADA',
-            'ip_origen' => $request->ip(),
-            'detalles'  => [
-                'aula_id'             => $aula->id,
-                'campos_actualizados' => array_keys($data),
-            ],
+        $this->registrarAuditoria($request, 'AULA_ACTUALIZADA', [
+            'aula_id'             => $aula->id,
+            'campos_actualizados' => array_keys($data),
         ]);
 
         return response()->json([
@@ -107,7 +98,7 @@ class AulaController extends Controller
     }
 
     /**
-     * Eliminar un aula (Solo Administrador).
+     * Eliminar un aula.
      */
     public function destroy(Request $request, string $id): JsonResponse
     {
@@ -124,14 +115,38 @@ class AulaController extends Controller
 
         $aula->delete();
 
-        LogAuditoria::create([
-            'user_type' => get_class($request->user()),
-            'user_id'   => $request->user()->id,
-            'accion'    => 'AULA_ELIMINADA',
-            'ip_origen' => $request->ip(),
-            'detalles'  => $detalles,
-        ]);
+        $this->registrarAuditoria($request, 'AULA_ELIMINADA', $detalles);
 
         return response()->json(['message' => 'Aula eliminada exitosamente.']);
+    }
+
+    /**
+     * Registra el evento en logs_auditoria con todos los campos requeridos por el modelo.
+     */
+    private function registrarAuditoria(Request $request, string $accion, array $detalles = []): void
+    {
+        $user = $request->user();
+
+        $rol = match (get_class($user)) {
+            Admin::class    => 'admin',
+            Docente::class  => 'docente',
+            Auxiliar::class => 'auxiliar',
+            default         => 'desconocido',
+        };
+
+        $nombreCompleto = trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}");
+
+        LogAuditoria::create([
+            'user_type'          => get_class($user),
+            'user_id'            => $user->id,
+            'rol_en_el_momento'  => $rol,
+            'usuario_nombre'     => $nombreCompleto !== '' ? $nombreCompleto : $user->nombre,
+            'usuario_email'      => $user->email ?? null,
+            'modulo'             => 'AULAS',
+            'accion'             => $accion,
+            'ip_origen'          => $request->ip() ?? '127.0.0.1',
+            'user_agent'         => $request->userAgent(),
+            'detalles'           => $detalles,
+        ]);
     }
 }

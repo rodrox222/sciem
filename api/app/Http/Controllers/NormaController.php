@@ -6,11 +6,15 @@ use App\Http\Requests\StoreNormaRequest;
 use App\Http\Requests\SyncNormasExamenRequest;
 use App\Http\Requests\UpdateNormaRequest;
 use App\Models\Admin;
+use App\Models\Auxiliar;
+use App\Models\Docente;
 use App\Models\Examen;
 use App\Models\LogAuditoria;
 use App\Models\Norma;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class NormaController extends Controller
 {
@@ -47,16 +51,10 @@ class NormaController extends Controller
         $data = $request->validated();
         $norma = Norma::create($data);
 
-        LogAuditoria::create([
-            'user_type' => get_class($request->user()),
-            'user_id'   => $request->user()->id,
-            'accion'    => 'NORMA_CREADA',
-            'ip_origen' => $request->ip(),
-            'detalles'  => [
-                'norma_id' => $norma->id,
-                'titulo'   => $norma->titulo,
-                'tipo'     => $norma->tipo,
-            ],
+        $this->registrarAuditoria($request, 'NORMA_CREADA', [
+            'norma_id' => $norma->id,
+            'titulo'   => $norma->titulo,
+            'tipo'     => $norma->tipo,
         ]);
 
         return response()->json([
@@ -99,17 +97,14 @@ class NormaController extends Controller
         }
 
         $data = $request->validated();
+        if (isset($data['tipo']) && $data['tipo'] !== $norma->tipo) {
+            throw ValidationException::withMessages(['tipo' => 'El tipo de una norma existente no puede cambiarse.']);
+        }
         $norma->update($data);
 
-        LogAuditoria::create([
-            'user_type' => get_class($request->user()),
-            'user_id'   => $request->user()->id,
-            'accion'    => 'NORMA_ACTUALIZADA',
-            'ip_origen' => $request->ip(),
-            'detalles'  => [
-                'norma_id'            => $norma->id,
-                'campos_actualizados' => array_keys($data),
-            ],
+        $this->registrarAuditoria($request, 'NORMA_ACTUALIZADA', [
+            'norma_id'            => $norma->id,
+            'campos_actualizados' => array_keys($data),
         ]);
 
         return response()->json([
@@ -144,15 +139,61 @@ class NormaController extends Controller
 
         $norma->delete();
 
-        LogAuditoria::create([
-            'user_type' => get_class($request->user()),
-            'user_id'   => $request->user()->id,
-            'accion'    => 'NORMA_ELIMINADA',
-            'ip_origen' => $request->ip(),
-            'detalles'  => $detalles,
-        ]);
+        $this->registrarAuditoria($request, 'NORMA_ELIMINADA', $detalles);
 
         return response()->json(['message' => 'Norma eliminada exitosamente.']);
+    }
+
+    /** Crea normas particulares dentro de un examen, sin dejar normas sueltas. */
+    public function crearParticularesParaExamen(Request $request, string $id): JsonResponse
+    {
+        $examen = Examen::find($id);
+        if (!$examen) {
+            return response()->json(['message' => 'Examen no encontrado.'], 404);
+        }
+
+        if ($request->user() instanceof Docente && $examen->id_docente !== $request->user()->id) {
+            return response()->json(['message' => 'Este examen pertenece a otro docente.'], 403);
+        }
+
+        $data = $request->validate([
+            'particulares' => ['required', 'array', 'min:1', 'max:20'],
+            'particulares.*.titulo' => ['required', 'string', 'max:150'],
+            'particulares.*.descripcion' => ['required', 'string'],
+        ]);
+
+        $normas = DB::transaction(function () use ($examen, $data) {
+            $creadas = collect();
+            foreach ($data['particulares'] as $particular) {
+                $existente = $examen->normas()
+                    ->where('tipo', 'Particular')
+                    ->where('titulo', trim($particular['titulo']))
+                    ->where('descripcion', trim($particular['descripcion']))
+                    ->first();
+                if ($existente) {
+                    $creadas->push($existente);
+                    continue;
+                }
+                $norma = Norma::create([
+                    'titulo' => trim($particular['titulo']),
+                    'descripcion' => trim($particular['descripcion']),
+                    'tipo' => 'Particular',
+                ]);
+                $examen->normas()->attach($norma->id);
+                $creadas->push($norma);
+            }
+            return $creadas;
+        });
+
+        $this->registrarAuditoria($request, 'NORMAS_PARTICULARES_CREADAS_EXAMEN', [
+            'examen_id' => $examen->id,
+            'normas_ids' => $normas->pluck('id')->all(),
+        ]);
+
+        return response()->json([
+            'message' => 'Normas particulares vinculadas al examen.',
+            'normas' => $normas,
+        ], 201);
     }
 
     /**
@@ -166,23 +207,62 @@ class NormaController extends Controller
             return response()->json(['message' => 'Examen no encontrado.'], 404);
         }
 
-        // Sincroniza los UUIDs en la tabla examen_norma (añade los nuevos y desvincula los que no estén en la lista)
-        $examen->normas()->sync($request->validated('normas'));
+        if ($request->user() instanceof Docente && $examen->id_docente !== $request->user()->id) {
+            return response()->json(['message' => 'Este examen pertenece a otro docente.'], 403);
+        }
 
-        LogAuditoria::create([
-            'user_type' => get_class($request->user()),
-            'user_id'   => $request->user()->id,
-            'accion'    => 'NORMAS_ASIGNADAS_EXAMEN',
-            'ip_origen' => $request->ip(),
-            'detalles'  => [
-                'examen_id' => $examen->id,
-                'normas_ids' => $request->validated('normas'),
-            ],
+        $ids = array_values(array_unique($request->validated('normas')));
+        $permitidas = Norma::whereIn('id', $ids)
+            ->where(function ($query) use ($examen) {
+                $query->where('tipo', 'General')
+                    ->orWhereHas('examenes', fn ($q) => $q->where('examenes.id', $examen->id));
+            })->count();
+        if ($permitidas !== count($ids)) {
+            throw ValidationException::withMessages([
+                'normas' => 'Solo pueden asignarse normas generales o particulares de este examen.',
+            ]);
+        }
+
+        $examen->normas()->sync($ids);
+
+        $this->registrarAuditoria($request, 'NORMAS_ASIGNADAS_EXAMEN', [
+            'examen_id'  => $examen->id,
+            'normas_ids' => $request->validated('normas'),
         ]);
 
         return response()->json([
             'message' => 'Normas asignadas al examen correctamente.',
             'normas'  => $examen->normas()->get(),
+        ]);
+    }
+
+    /**
+     * Registra el evento en logs_auditoria con el nuevo esquema centralizado.
+     */
+    private function registrarAuditoria(Request $request, string $accion, array $detalles = []): void
+    {
+        $user = $request->user();
+
+        $rol = match (get_class($user)) {
+            Admin::class    => 'admin',
+            Docente::class  => 'docente',
+            Auxiliar::class => 'auxiliar',
+            default         => 'desconocido',
+        };
+
+        $nombreCompleto = trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}");
+
+        LogAuditoria::create([
+            'user_type'         => get_class($user),
+            'user_id'           => $user->id,
+            'rol_en_el_momento' => $rol,
+            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : $user->nombre,
+            'usuario_email'     => $user->email ?? null,
+            'modulo'            => 'NORMAS',
+            'accion'            => $accion,
+            'ip_origen'         => $request->ip() ?? '127.0.0.1',
+            'user_agent'        => $request->userAgent(),
+            'detalles'          => $detalles,
         ]);
     }
 }

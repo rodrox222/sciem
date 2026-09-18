@@ -13,11 +13,15 @@ use App\Http\Controllers\NormaController;
 use App\Models\Admin;
 use App\Models\Docente;
 use App\Models\Auxiliar;
+use App\Http\Controllers\EstudianteController;
 
 // --- RUTAS PÚBLICAS ---
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLink']);
 Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword']);
+
+Route::get('examenes', [ExamenController::class, 'index']);
+Route::get('examenes/{id}', [ExamenController::class, 'show']);
 
 // --- RUTAS PROTEGIDAS (Sanctum) ---
 Route::middleware('auth:sanctum')->group(function () {
@@ -75,11 +79,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('aulas/{id}', [AulaController::class, 'destroy']);
     });
 
-    // --- EXÁMENES ---
+    /*// --- EXÁMENES ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('examenes', [ExamenController::class, 'index']);
         Route::get('examenes/{id}', [ExamenController::class, 'show']);
-    });
+    }); */
 
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::post('examenes', [ExamenController::class, 'store']);
@@ -100,15 +104,29 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // --- NORMAS ---
+    Route::middleware('role:admin,administrador')->post('normas', [NormaController::class, 'store']);
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('normas', [NormaController::class, 'index']);
         Route::get('normas/{id}', [NormaController::class, 'show']);
     });
 
     Route::middleware('role:admin,administrador,docente')->group(function () {
-        Route::post('normas', [NormaController::class, 'store']);
         Route::put('normas/{id}', [NormaController::class, 'update']);
         Route::delete('normas/{id}', [NormaController::class, 'destroy']);
         Route::post('examenes/{id}/normas', [NormaController::class, 'syncExamenNormas']);
+        Route::post('examenes/{id}/normas/particulares', [NormaController::class, 'crearParticularesParaExamen']);
+    });
+
+    // Lectura de estudiantes (admin, docente y auxiliar)
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::get('estudiantes', [EstudianteController::class, 'index']);
+        Route::get('estudiantes/{identificador}', [EstudianteController::class, 'show']);
+        Route::get('examenes/{id}/estudiantes', [EstudianteController::class, 'estudiantesPorExamen']);
+    });
+
+    // Escritura e inscripción (admin y docente)
+    Route::middleware('role:admin,administrador,docente')->group(function () {
+        Route::post('examenes/{id}/estudiantes', [EstudianteController::class, 'inscribirAExamen']);
+        Route::delete('examenes/{id}/estudiantes/{idEstudiante}', [EstudianteController::class, 'desvincularDeExamen']);
     });
 });

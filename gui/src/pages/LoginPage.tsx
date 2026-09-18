@@ -1,9 +1,7 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LoginView } from '../components/LoginView'
 import { AuthLayout } from '../layouts/AuthLayout'
-import { useEffect } from 'react'
-
 
 export const LoginPage: React.FC = () => {
   useEffect(() => {
@@ -14,7 +12,16 @@ export const LoginPage: React.FC = () => {
 
   const handleLoginSuccess = (role: string) => {
     localStorage.setItem('user_role', role)
-    navigate('/dashboard')
+
+    // Revisar si venimos rebotados por inactividad
+    const idleRedirect = localStorage.getItem('sciem_idle_redirect')
+
+    if (idleRedirect) {
+      localStorage.removeItem('sciem_idle_redirect') 
+      navigate(idleRedirect, { replace: true })
+    } else {
+      navigate('/dashboard', { replace: true })
+    }
   }
 
   return (

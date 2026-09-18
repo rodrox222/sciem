@@ -71,12 +71,9 @@ export const useIdleTimer = () => {
 
   // Montaje inicial y eventos de usuario
   useEffect(() => {
-    // Primero comprobamos si el tiempo expiró mientras la pestaña estuvo cerrada
-    const sessionActive = checkSession()
-    if (!sessionActive) return
-
-    // Si está activa, arrancamos el temporizador local
-    resetTimer()
+    const initialCheckId = window.setTimeout(() => {
+      if (checkSession()) resetTimer()
+    }, 0)
 
     const events = ['mousemove', 'keydown', 'scroll', 'click']
     const handler = () => resetTimer()
@@ -92,6 +89,7 @@ export const useIdleTimer = () => {
     document.addEventListener('visibilitychange', handleVisibility)
 
     return () => {
+      window.clearTimeout(initialCheckId)
       events.forEach((ev) => window.removeEventListener(ev, handler))
       document.removeEventListener('visibilitychange', handleVisibility)
       if (timerRef.current) clearTimeout(timerRef.current)
