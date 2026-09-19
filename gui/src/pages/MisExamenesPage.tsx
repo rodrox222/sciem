@@ -10,8 +10,7 @@ import {
   XCircle,
 } from 'lucide-react'
 
-import { Navbar } from '../components/Navbar'
-import { Footer } from '../components/Footer'
+import { MainLayout } from '../layouts/MainLayout'
 
 type EstadoExamen = 'Programado' | 'Cancelado' | 'Finalizado'
 
@@ -67,19 +66,19 @@ const misExamenesIniciales: Examen[] = [
   },
 ]
 
+const ESTADO_BADGE_STYLES: Record<EstadoExamen, string> = {
+  Programado: 'bg-green-100 text-green-700',
+  Finalizado: 'bg-blue-100 text-blue-700',
+  Cancelado: 'bg-red-100 text-red-700',
+}
+
 export default function MisExamenesPage() {
   const navigate = useNavigate()
 
   const [examenes] = useState<Examen[]>(misExamenesIniciales)
-
   const [busqueda, setBusqueda] = useState('')
-
-  const [filtroEstado, setFiltroEstado] = useState<
-    'Todos' | EstadoExamen
-  >('Todos')
-
-  const [examenSeleccionado, setExamenSeleccionado] =
-    useState<Examen | null>(null)
+  const [filtroEstado, setFiltroEstado] = useState<'Todos' | EstadoExamen>('Todos')
+  const [examenSeleccionado, setExamenSeleccionado] = useState<Examen | null>(null)
 
   const examenesFiltrados = examenes.filter((examen) => {
     const texto = busqueda.trim().toLowerCase()
@@ -90,38 +89,32 @@ export default function MisExamenesPage() {
       examen.aula.toLowerCase().includes(texto)
 
     const coincideEstado =
-      filtroEstado === 'Todos' ||
-      examen.estado === filtroEstado
+      filtroEstado === 'Todos' || examen.estado === filtroEstado
 
     return coincideBusqueda && coincideEstado
   })
 
   return (
-    <div className="min-h-screen bg-slate-100/60 flex flex-col">
-      <Navbar />
-
-      <main className="flex-1 px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
+    <MainLayout>
+      <div className="space-y-6">
         {/* Encabezado */}
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-[#003770]">
               Gestión académica
             </p>
-
-            <h1 className="mt-1 text-2xl font-bold text-slate-900 sm:text-3xl">
+            <h1 className="mt-1 text-2xl font-bold text-slate-900 sm:text-3xl tracking-tight">
               Mis exámenes
             </h1>
-
-            <p className="mt-2 max-w-2xl text-sm text-slate-500">
-              Consulta y administra los exámenes que tienes
-              programados o que ya fueron realizados.
+            <p className="mt-1 max-w-2xl text-sm text-slate-500">
+              Consulta y administra los exámenes que tienes programados o que ya fueron realizados.
             </p>
           </div>
 
           <button
             type="button"
             onClick={() => navigate('/programar-examen')}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#003770] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#002b5b]"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#003770] px-4 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-[#002b5b] whitespace-nowrap"
           >
             <Plus className="h-4 w-4" />
             Programar examen
@@ -129,58 +122,40 @@ export default function MisExamenesPage() {
         </div>
 
         {/* Resumen */}
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
             <p className="text-sm font-medium text-slate-500">
               Total de mis exámenes
             </p>
-
             <p className="mt-1 text-2xl font-bold text-slate-900">
               {examenes.length}
             </p>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">
-              Programados
-            </p>
-
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+            <p className="text-sm font-medium text-slate-500">Programados</p>
             <p className="mt-1 text-2xl font-bold text-green-600">
-              {
-                examenes.filter(
-                  (examen) => examen.estado === 'Programado',
-                ).length
-              }
+              {examenes.filter((examen) => examen.estado === 'Programado').length}
             </p>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">
-              Finalizados
-            </p>
-
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+            <p className="text-sm font-medium text-slate-500">Finalizados</p>
             <p className="mt-1 text-2xl font-bold text-blue-600">
-              {
-                examenes.filter(
-                  (examen) => examen.estado === 'Finalizado',
-                ).length
-              }
+              {examenes.filter((examen) => examen.estado === 'Finalizado').length}
             </p>
           </div>
         </div>
 
         {/* Filtros */}
-        <section className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
           <div className="flex flex-col gap-3 lg:flex-row">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-
               <input
                 type="text"
                 value={busqueda}
-                onChange={(event) =>
-                  setBusqueda(event.target.value)
-                }
+                onChange={(event) => setBusqueda(event.target.value)}
                 placeholder="Buscar por asignatura o aula..."
                 className="h-10 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-[#003770] focus:ring-2 focus:ring-[#003770]/20"
               />
@@ -189,11 +164,7 @@ export default function MisExamenesPage() {
             <select
               value={filtroEstado}
               onChange={(event) =>
-                setFiltroEstado(
-                  event.target.value as
-                    | 'Todos'
-                    | EstadoExamen,
-                )
+                setFiltroEstado(event.target.value as 'Todos' | EstadoExamen)
               }
               className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#003770] focus:ring-2 focus:ring-[#003770]/20"
             >
@@ -206,12 +177,11 @@ export default function MisExamenesPage() {
         </section>
 
         {/* Lista */}
-        <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <section className="rounded-xl border border-slate-200 bg-white shadow-xs">
           <div className="border-b border-slate-200 px-4 py-4 sm:px-6">
             <h2 className="text-lg font-bold text-slate-900">
               Mis exámenes registrados
             </h2>
-
             <p className="mt-1 text-sm text-slate-500">
               Historial de exámenes asociados al docente.
             </p>
@@ -234,11 +204,7 @@ export default function MisExamenesPage() {
 
                           <span
                             className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                              examen.estado === 'Programado'
-                                ? 'bg-green-100 text-green-700'
-                                : examen.estado === 'Finalizado'
-                                  ? 'bg-blue-100 text-blue-700'
-                                  : 'bg-red-100 text-red-700'
+                              ESTADO_BADGE_STYLES[examen.estado] || 'bg-slate-100 text-slate-700'
                             }`}
                           >
                             {examen.estado}
@@ -275,9 +241,7 @@ export default function MisExamenesPage() {
                       <div className="flex shrink-0 gap-2">
                         <button
                           type="button"
-                          onClick={() =>
-                            setExamenSeleccionado(examen)
-                          }
+                          onClick={() => setExamenSeleccionado(examen)}
                           className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                         >
                           <Eye className="h-4 w-4" />
@@ -301,11 +265,9 @@ export default function MisExamenesPage() {
             ) : (
               <div className="py-12 text-center">
                 <CalendarDays className="mx-auto h-10 w-10 text-slate-400" />
-
                 <p className="mt-4 text-sm font-semibold text-slate-600">
                   No se encontraron exámenes.
                 </p>
-
                 <p className="mt-1 text-xs text-slate-400">
                   Prueba modificando los filtros de búsqueda.
                 </p>
@@ -313,20 +275,17 @@ export default function MisExamenesPage() {
             )}
           </div>
         </section>
-      </main>
+      </div>
 
-      <Footer />
-
-      {/* Detalle del examen */}
+      {/* Modal Detalle del examen */}
       {examenSeleccionado && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6 backdrop-blur-xs">
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
             <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">
                   Detalle del examen
                 </h2>
-
                 <p className="mt-1 text-sm text-slate-500">
                   Información registrada del examen.
                 </p>
@@ -347,7 +306,6 @@ export default function MisExamenesPage() {
                 <p className="text-xs font-semibold uppercase text-slate-400">
                   Asignatura
                 </p>
-
                 <p className="mt-1 text-sm font-semibold text-slate-800">
                   {examenSeleccionado.asignatura}
                 </p>
@@ -357,7 +315,6 @@ export default function MisExamenesPage() {
                 <p className="text-xs font-semibold uppercase text-slate-400">
                   Fecha
                 </p>
-
                 <p className="mt-1 text-sm text-slate-700">
                   {examenSeleccionado.fecha}
                 </p>
@@ -367,10 +324,8 @@ export default function MisExamenesPage() {
                 <p className="text-xs font-semibold uppercase text-slate-400">
                   Horario
                 </p>
-
                 <p className="mt-1 text-sm text-slate-700">
-                  {examenSeleccionado.horaInicio} -{' '}
-                  {examenSeleccionado.horaFin}
+                  {examenSeleccionado.horaInicio} - {examenSeleccionado.horaFin}
                 </p>
               </div>
 
@@ -378,7 +333,6 @@ export default function MisExamenesPage() {
                 <p className="text-xs font-semibold uppercase text-slate-400">
                   Aula
                 </p>
-
                 <p className="mt-1 text-sm text-slate-700">
                   {examenSeleccionado.aula}
                 </p>
@@ -388,7 +342,6 @@ export default function MisExamenesPage() {
                 <p className="text-xs font-semibold uppercase text-slate-400">
                   Duración
                 </p>
-
                 <p className="mt-1 text-sm text-slate-700">
                   {examenSeleccionado.duracion} minutos
                 </p>
@@ -398,7 +351,6 @@ export default function MisExamenesPage() {
                 <p className="text-xs font-semibold uppercase text-slate-400">
                   Normas asociadas
                 </p>
-
                 <p className="mt-1 text-sm text-slate-700">
                   {examenSeleccionado.normas}
                 </p>
@@ -408,7 +360,6 @@ export default function MisExamenesPage() {
                 <p className="text-xs font-semibold uppercase text-slate-400">
                   Estado
                 </p>
-
                 <p className="mt-1 text-sm font-semibold text-slate-700">
                   {examenSeleccionado.estado}
                 </p>
@@ -417,6 +368,6 @@ export default function MisExamenesPage() {
           </div>
         </div>
       )}
-    </div>
+    </MainLayout>
   )
 }

@@ -12,6 +12,7 @@ use App\Models\Examen;
 use App\Models\LogAuditoria;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class EstudianteController extends Controller
 {
@@ -104,11 +105,16 @@ class EstudianteController extends Controller
             return response()->json(['message' => 'Examen no encontrado.'], 404);
         }
 
+        if ($request->user() instanceof Docente && $examen->id_docente !== $request->user()->id) {
+            return response()->json(['message' => 'Este examen pertenece a otro docente.'], 403);
+        }
+
         $data = $request->validated();
         $estado = $data['estado'] ?? 'Habilitado';
 
-        // Busca por codigo_sis, si existe actualiza datos; si no existe, lo crea
-        $estudiante = Estudiante::updateOrCreate(
+        // El alta y la vinculación se confirman juntas.
+        $estudiante = DB::transaction(function () use ($examen, $data, $estado) {
+            $estudiante = Estudiante::updateOrCreate(
             ['codigo_sis' => $data['codigo_sis']],
             [
                 'ci'                  => $data['ci'],
@@ -125,6 +131,8 @@ class EstudianteController extends Controller
         $examen->estudiantes()->syncWithoutDetaching([
             $estudiante->id => ['estado' => $estado],
         ]);
+            return $estudiante;
+        });
 
         $this->registrarAuditoria($request, 'ESTUDIANTE_INSCRITO_EXAMEN', [
             'examen_id'     => $examen->id,

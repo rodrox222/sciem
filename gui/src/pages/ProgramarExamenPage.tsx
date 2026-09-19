@@ -1,886 +1,576 @@
-import React, { useMemo, useState } from 'react'
-import { ArrowLeft, ArrowRight, CheckCircle2, Clock, FileText, MapPin, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import {
+  AlertCircle,
+  ArrowLeft,
+  BookOpenCheck,
+  CalendarDays,
+  Check,
+  Clock3,
+  LoaderCircle,
+  Plus,
+  MapPin,
+  Save,
+  UserRound,
+} from 'lucide-react'
 
-import { Navbar } from '../components/Navbar'
-import { AdminNavbar } from '../components/AdminNavbar'
-import { AdminFooter } from '../components/AdminFooter'
-import { NormaSelector } from '../components/normas/NormaSelector'
-import type { Norma } from '../components/normas/NormaFormModal'
+import { MainLayout } from '../layouts/MainLayout'
+import { CrearMateriaModal } from '../components/examenes/CrearMateriaModal'
+import { aulasService, type Aula } from '../services/aulas.service'
+import { ApiError, apiRequest } from '../services/apiClient'
+import {
+  examenesService,
+  type CatalogItem,
+  type DocenteItem,
+  type ExamenPayload,
+} from '../services/examenes.service'
+import { normasService, type Norma } from '../services/normas.service'
 
-type Paso = 1 | 2 | 3 | 4
-
-interface Aula {
-  id: number
+interface FormState {
   nombre: string
-  capacidad: number
-  disponible: boolean
+  id_materia: string
+  fecha: string
+  hora_ini: string
+  duracion: string
+  id_aula: string
+  id_docente: string
 }
 
-const normasIniciales: Norma[] = [
-  {
-    id: 1,
-    descripcion:
-      'El estudiante deberá presentar su identificación institucional antes de iniciar el examen.',
-    tipo: 'General',
-    estado: 'Activo',
-  },
-  {
-    id: 2,
-    descripcion:
-      'No está permitido utilizar teléfonos celulares u otros dispositivos electrónicos durante el examen.',
-    tipo: 'General',
-    estado: 'Activo',
-  },
-  {
-    id: 3,
-    descripcion:
-      'El estudiante deberá permanecer en el ambiente asignado durante todo el desarrollo del examen.',
-    tipo: 'General',
-    estado: 'Activo',
-  },
-  {
-    id: 4,
-    descripcion:
-      'Los estudiantes seleccionados deberán presentarse 15 minutos antes de la hora programada.',
-    tipo: 'Particular',
-    estado: 'Activo',
-  },
-]
+const emptyForm: FormState = {
+  nombre: '',
+  id_materia: '',
+  fecha: '',
+  hora_ini: '',
+  duracion: '90',
+  id_aula: '',
+  id_docente: '',
+}
 
-const asignaturasIniciales = [
-  {
-    id: 1,
-    nombre: 'Sistemas Operativos',
-  },
-  {
-    id: 2,
-    nombre: 'Ingeniería de Software',
-  },
-  {
-    id: 3,
-    nombre: 'Redes de Computadoras',
-  },
-  {
-    id: 4,
-    nombre: 'Bases de Datos',
-  },
-  {
-    id: 5,
-    nombre: 'Simulación de Sistemas',
-  },
-]
+const todayLocal = () => {
+  const now = new Date()
+  const offset = now.getTimezoneOffset() * 60_000
+  return new Date(now.getTime() - offset).toISOString().slice(0, 10)
+}
 
-const aulasIniciales: Aula[] = [
-  {
-    id: 1,
-    nombre: 'Aula A-101',
-    capacidad: 30,
-    disponible: true,
-  },
-  {
-    id: 2,
-    nombre: 'Aula A-203',
-    capacidad: 40,
-    disponible: true,
-  },
-  {
-    id: 3,
-    nombre: 'Laboratorio L-01',
-    capacidad: 25,
-    disponible: true,
-  },
-  {
-    id: 4,
-    nombre: 'Aula B-105',
-    capacidad: 35,
-    disponible: false,
-  },
-]
+const normalizeDate = (date: string) => date.slice(0, 10)
+const normalizeTime = (time: string) => time.slice(0, 5)
+const formatTeacherName = (teacher: DocenteItem) =>
+  [teacher.nombre, teacher.apellido ?? [teacher.apellido_paterno, teacher.apellido_materno].filter(Boolean).join(' ')]
+    .filter(Boolean)
+    .join(' ')
 
-const pasos = [
-  {
-    numero: 1,
-    titulo: 'Datos del examen',
-    descripcion: 'Información de la asignatura',
-    icono: FileText,
-  },
-  {
-    numero: 2,
-    titulo: 'Horario',
-    descripcion: 'Fecha y duración',
-    icono: Clock,
-  },
-  {
-    numero: 3,
-    titulo: 'Ambiente y normas',
-    descripcion: 'Aula y normas',
-    icono: MapPin,
-  },
-  {
-    numero: 4,
-    titulo: 'Confirmación',
-    descripcion: 'Revisar información',
-    icono: CheckCircle2,
-  },
-]
+const addMinutes = (time: string, duration: number) => {
+  if (!/^\d{2}:\d{2}$/.test(time) || duration <= 0) return ''
+  const [hours, minutes] = time.split(':').map(Number)
+  const total = hours * 60 + minutes + duration
+  if (total >= 24 * 60) return ''
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
 
+const minutesBetween = (start: string, end: string) => {
+  const [startHour, startMinute] = normalizeTime(start).split(':').map(Number)
+  const [endHour, endMinute] = normalizeTime(end).split(':').map(Number)
+  return endHour * 60 + endMinute - (startHour * 60 + startMinute)
+}
 
+const getErrorMessage = (error: unknown) =>
+  error instanceof ApiError
+    ? error.message
+    : 'Ocurrió un error inesperado. Intenta nuevamente.'
 
-export const ProgramarExamenPage: React.FC = () => {
-  const role = localStorage.getItem('user_role') || 'Docente'
-  const usuario = localStorage.getItem('user_data') || role
+export default function ProgramarExamenPage() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const editId = searchParams.get('edit')
+  const role = (localStorage.getItem('user_role') ?? '').toLowerCase()
+  const isAdmin = role === 'admin' || role === 'administrador'
 
-  const esAdministrador =
-    role.toLowerCase() === 'administrador' ||
-    role.toLowerCase() === 'admin'
-
-  const [pasoActual, setPasoActual] = useState<Paso>(1)
-
-  const [asignatura, setAsignatura] = useState('')
-  const [fecha, setFecha] = useState('')
-  const [horaInicio, setHoraInicio] = useState('')
-  const [duracion, setDuracion] = useState('')
-
-  const [aulaId, setAulaId] = useState<number | null>(null)
-  const [normasSeleccionadas, setNormasSeleccionadas] = useState<number[]>([])
-  const [normas, setNormas] = useState<Norma[]>(normasIniciales)
-
+  const [form, setForm] = useState<FormState>(emptyForm)
+  const [materias, setMaterias] = useState<CatalogItem[]>([])
+  const [materiaModalOpen, setMateriaModalOpen] = useState(false)
+  const [aulas, setAulas] = useState<Aula[]>([])
+  const [docentes, setDocentes] = useState<DocenteItem[]>([])
+  const selectedTeacher = docentes.find((teacher) => teacher.id === form.id_docente)
+  const [normas, setNormas] = useState<Norma[]>([])
+  const [selectedNorms, setSelectedNorms] = useState<string[]>([])
+  const [particulares, setParticulares] = useState<{ titulo: string; descripcion: string }[]>([])
+  const [particularTitulo, setParticularTitulo] = useState('')
+  const [particularDescripcion, setParticularDescripcion] = useState('')
+  const [savedExamId, setSavedExamId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [mensajeExito, setMensajeExito] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
-  const aulasDisponibles = useMemo(
-    () => aulasIniciales.filter((aula) => aula.disponible),
-    [],
+  const endTime = useMemo(
+    () => addMinutes(form.hora_ini, Number(form.duracion)),
+    [form.duracion, form.hora_ini],
   )
 
-  const horaFin = useMemo(() => {
-    if (!horaInicio || !duracion) return ''
-
-    const minutosDuracion = Number(duracion)
-
-    if (!Number.isFinite(minutosDuracion) || minutosDuracion <= 0) {
-      return ''
-    }
-
-    const [horas, minutos] = horaInicio.split(':').map(Number)
-
-    if (
-      Number.isNaN(horas) ||
-      Number.isNaN(minutos)
-    ) {
-      return ''
-    }
-
-    const fechaHora = new Date()
-    fechaHora.setHours(horas, minutos, 0, 0)
-    fechaHora.setMinutes(fechaHora.getMinutes() + minutosDuracion)
-
-    const horasFin = String(fechaHora.getHours()).padStart(2, '0')
-    const minutosFin = String(fechaHora.getMinutes()).padStart(2, '0')
-
-    return `${horasFin}:${minutosFin}`
-  }, [horaInicio, duracion])
-
-  const fechaMinima = useMemo(() => {
-    const hoy = new Date()
-
-    const year = hoy.getFullYear()
-    const month = String(hoy.getMonth() + 1).padStart(2, '0')
-    const day = String(hoy.getDate()).padStart(2, '0')
-
-    return `${year}-${month}-${day}`
-  }, [])
-
-  const aulaSeleccionada = aulasIniciales.find(
-    (aula) => aula.id === aulaId,
-  )
-
-  const normasSeleccionadasData = normas.filter((norma) =>
-  normasSeleccionadas.includes(norma.id),
-)
-
-  const limpiarMensajes = () => {
+  const loadData = useCallback(async () => {
+    setLoading(true)
     setError('')
-    setMensajeExito('')
+
+    try {
+      const currentUser = isAdmin ? null : await apiRequest<DocenteItem>('/me')
+      const [subjects, rooms, rules, teachers, exam] = await Promise.all([
+        examenesService.listMaterias(),
+        aulasService.list({ estado: 'Disponible', perPage: 100 }),
+        normasService.listAll({ tipo: 'General' }),
+        isAdmin
+          ? examenesService.listDocentes().then((response) => response.data)
+          : Promise.resolve(currentUser?.id ? [currentUser] : []),
+        editId ? examenesService.get(editId) : Promise.resolve(null),
+      ])
+
+      setMaterias(subjects)
+      setAulas(
+        exam?.aula && !rooms.data.some((room) => room.id === exam.id_aula)
+          ? [
+              ...rooms.data,
+              {
+                id: exam.id_aula,
+                nombre: exam.aula.nombre,
+                ubicacion: 'Ubicación registrada',
+                capacidad: 0,
+                estado: 'Disponible',
+              },
+            ]
+          : rooms.data,
+      )
+      setNormas([
+        ...rules,
+        ...(exam?.normas ?? []).filter((norma) => norma.tipo === 'Particular'),
+      ])
+      setDocentes(
+        !isAdmin && exam?.docente && !teachers.some((teacher) => teacher.id === exam.docente?.id)
+          ? [...teachers, exam.docente]
+          : teachers,
+      )
+
+      if (exam) {
+        setForm({
+          nombre: exam.nombre,
+          id_materia: exam.id_materia,
+          fecha: normalizeDate(exam.fecha),
+          hora_ini: normalizeTime(exam.hora_ini),
+          duracion: String(minutesBetween(exam.hora_ini, exam.hora_fin)),
+          id_aula: exam.id_aula,
+          id_docente: exam.id_docente,
+        })
+        setSelectedNorms((exam.normas ?? []).map((norma) => norma.id))
+      } else if (!isAdmin && currentUser?.id) {
+        setForm((current) => ({ ...current, id_docente: currentUser.id }))
+      }
+    } catch (loadError) {
+      setError(getErrorMessage(loadError))
+    } finally {
+      setLoading(false)
+    }
+  }, [editId, isAdmin])
+
+  useEffect(() => {
+    const requestId = window.setTimeout(() => void loadData(), 0)
+    return () => window.clearTimeout(requestId)
+  }, [loadData])
+
+  const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+    setForm((current) => ({ ...current, [key]: value }))
+    setFieldErrors((current) => ({ ...current, [key]: '' }))
   }
 
-  const crearNormaParticular = (descripcion: string) => {
-  const nuevaNorma: Norma = {
-    id: Date.now(),
-    descripcion,
-    tipo: 'Particular',
-    estado: 'Activo',
+  const toggleNorm = (id: string) => {
+    setSelectedNorms((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    )
+    setFieldErrors((current) => ({ ...current, normas: '' }))
   }
 
-  setNormas((normasActuales) => [...normasActuales, nuevaNorma])
-
-  setNormasSeleccionadas((seleccionadas) => [
-    ...seleccionadas,
-    nuevaNorma.id,
-  ])
-}
-
-  const validarPaso1 = () => {
-    if (!asignatura.trim()) {
-      setError('Debes ingresar la asignatura del examen.')
-      return false
-    }
-
-    return true
-  }
-
-  const validarPaso2 = () => {
-    if (!fecha) {
-      setError('Debes seleccionar la fecha del examen.')
-      return false
-    }
-
-    if (fecha < fechaMinima) {
-      setError('La fecha del examen no puede ser anterior a la fecha actual.')
-      return false
-    }
-
-    if (!horaInicio) {
-      setError('Debes seleccionar la hora de inicio.')
-      return false
-    }
-
-    if (!duracion.trim()) {
-      setError('Debes ingresar la duración del examen.')
-      return false
-    }
-
-    const minutosDuracion = Number(duracion)
-
-    if (!Number.isFinite(minutosDuracion) || minutosDuracion <= 0) {
-      setError('La duración del examen debe ser mayor a 0 minutos.')
-      return false
-    }
-
-    if (!horaFin) {
-      setError('No fue posible calcular la hora de finalización.')
-      return false
-    }
-
-    return true
-  }
-
-  const validarPaso3 = () => {
-    if (!aulaId) {
-      setError('Debes seleccionar un aula para el examen.')
-      return false
-    }
-
-    if (normasSeleccionadas.length === 0) {
-      setError('Debes seleccionar al menos una norma para el examen.')
-      return false
-    }
-
-    return true
-  }
-
-  const cambiarPaso = (destino: Paso) => {
-  limpiarMensajes()
-
-  if (destino === pasoActual) {
-    return
-  }
-
-  // Si intenta avanzar directamente a otro paso,
-  // validamos primero los pasos anteriores.
-  if (destino > pasoActual) {
-    if (destino >= 2 && !validarPaso1()) {
-      setPasoActual(1)
+  const addParticular = () => {
+    const titulo = particularTitulo.trim()
+    const descripcion = particularDescripcion.trim()
+    if (!titulo || !descripcion) {
+      setFieldErrors((current) => ({ ...current, particular: 'Completa el título y la descripción.' }))
       return
     }
-
-    if (destino >= 3 && !validarPaso2()) {
-      setPasoActual(2)
-      return
-    }
-
-    if (destino >= 4 && !validarPaso3()) {
-      setPasoActual(3)
-      return
-    }
+    setParticulares((current) => [...current, { titulo, descripcion }])
+    setParticularTitulo('')
+    setParticularDescripcion('')
+    setFieldErrors((current) => ({ ...current, particular: '', normas: '' }))
   }
 
-  setPasoActual(destino)
-}
+  const validate = () => {
+    const errors: Record<string, string> = {}
+    const duration = Number(form.duracion)
 
-  const irSiguiente = () => {
-    limpiarMensajes()
-
-    if (pasoActual === 1) {
-      if (!validarPaso1()) return
-      setPasoActual(2)
-      return
+    if (!form.nombre.trim()) errors.nombre = 'Ingresa un nombre para el examen.'
+    if (!form.id_materia) errors.id_materia = 'Selecciona una asignatura.'
+    if (!form.fecha) errors.fecha = 'Selecciona la fecha.'
+    else if (form.fecha < todayLocal()) errors.fecha = 'La fecha no puede ser anterior a hoy.'
+    if (!form.hora_ini) errors.hora_ini = 'Selecciona la hora de inicio.'
+    if (!Number.isInteger(duration) || duration <= 0) {
+      errors.duracion = 'La duración debe ser un número entero mayor a 0.'
+    } else if (!endTime) {
+      errors.duracion = 'La evaluación debe finalizar antes de las 24:00.'
+    }
+    if (!form.id_aula) errors.id_aula = 'Selecciona un aula disponible.'
+    if (!form.id_docente) errors.id_docente = 'Selecciona el docente responsable.'
+    if (selectedNorms.length === 0 && particulares.length === 0) {
+      errors.normas = 'Selecciona una norma general o agrega una particular.'
+    }
+    if (particularTitulo.trim() || particularDescripcion.trim()) {
+      errors.particular = 'Pulsa Agregar norma particular para incluir el borrador.'
     }
 
-    if (pasoActual === 2) {
-      if (!validarPaso2()) return
-      setPasoActual(3)
-      return
-    }
-
-    if (pasoActual === 3) {
-      if (!validarPaso3()) return
-      setPasoActual(4)
-    }
+    setFieldErrors(errors)
+    return Object.keys(errors).length === 0
   }
 
-  const irAnterior = () => {
-    limpiarMensajes()
-
-    if (pasoActual > 1) {
-      setPasoActual((pasoActual - 1) as Paso)
-    }
-  }
-
-  const cancelarFormulario = () => {
-    setAsignatura('')
-    setFecha('')
-    setHoraInicio('')
-    setDuracion('')
-    setAulaId(null)
-    setNormasSeleccionadas([])
-    setPasoActual(1)
-    limpiarMensajes()
-  }
-
-  const confirmarProgramacion = () => {
-    limpiarMensajes()
-
-    if (!validarPaso1() || !validarPaso2() || !validarPaso3()) {
-      return
-    }
-
-    /*
-     * IMPORTANTE:
-     * Aquí posteriormente conectaremos el formulario con el API.
-     *
-     * El backend deberá validar nuevamente:
-     * - fecha válida
-     * - duración > 0
-     * - aula seleccionada
-     * - al menos una norma
-     * - conflictos de horario/aula
-     *
-     * Por ahora solo simulamos la confirmación visual.
-     */
-
-    setMensajeExito(
-      'El examen fue validado correctamente. La conexión con el API se integrará posteriormente.',
+  const checkScheduleConflict = async () => {
+    const response = await examenesService.list({ fecha: form.fecha, perPage: 100 })
+    return response.data.find(
+      (exam) =>
+        exam.id !== editId &&
+        exam.id_aula === form.id_aula &&
+        exam.estado !== 'Terminado' &&
+        form.hora_ini < normalizeTime(exam.hora_fin) &&
+        endTime > normalizeTime(exam.hora_ini),
     )
   }
 
-  const renderPasoActual = () => {
-    switch (pasoActual) {
-      case 1:
-        return (
-          <section className="space-y-6">
-            <div>
-              <h2 className="text-lg font-bold text-[#003770]">
-                Datos del examen
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Ingresa la información básica del examen que deseas programar.
-              </p>
-            </div>
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setError('')
+    if (!validate()) return
 
-            <div>
-  <label className="mb-2 block text-sm font-semibold text-slate-700">
-    Asignatura <span className="text-[#E30613]">*</span>
-  </label>
+    setSaving(true)
+    let createdId: string | null = null
 
-  <p className="mb-3 text-sm text-slate-500">
-    Selecciona la asignatura correspondiente al examen.
-  </p>
+    try {
+      const conflict = await checkScheduleConflict()
+      if (conflict) {
+        throw new ApiError(
+          `El aula ya está reservada para “${conflict.nombre}” de ${normalizeTime(conflict.hora_ini)} a ${normalizeTime(conflict.hora_fin)}.`,
+          422,
+        )
+      }
 
-  <div className="space-y-2">
-    {asignaturasIniciales.map((asignaturaItem) => {
-      const seleccionada = asignatura === asignaturaItem.nombre
+      const payload: ExamenPayload = {
+        nombre: form.nombre.trim(),
+        id_materia: form.id_materia,
+        estado: 'Programado',
+        fecha: form.fecha,
+        hora_ini: form.hora_ini,
+        hora_fin: endTime,
+        id_aula: form.id_aula,
+        id_docente: form.id_docente,
+      }
 
-      return (
-        <button
-          key={asignaturaItem.id}
-          type="button"
-          onClick={() => setAsignatura(asignaturaItem.nombre)}
-          className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition ${
-            seleccionada
-              ? 'border-[#003770] bg-blue-50'
-              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-          }`}
-        >
-          <span
-            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
-              seleccionada
-                ? 'border-[#003770] bg-[#003770]'
-                : 'border-slate-300 bg-white'
-            }`}
-          >
-            {seleccionada && (
-              <CheckCircle2 className="h-3.5 w-3.5 text-white" />
-            )}
-          </span>
+      const currentId = editId ?? savedExamId
+      const response = currentId
+        ? await examenesService.update(currentId, payload)
+        : await examenesService.create(payload)
+      if (!currentId) {
+        createdId = response.examen.id
+        setSavedExamId(createdId)
+      }
 
-          <span className="text-sm font-medium text-slate-700">
-            {asignaturaItem.nombre}
-          </span>
-        </button>
+      await normasService.assignToExam(response.examen.id, selectedNorms)
+      if (particulares.length > 0) {
+        await normasService.createParticularForExam(response.examen.id, particulares)
+        setParticulares([])
+      }
+      navigate('/examenes', {
+        replace: true,
+        state: {
+          success: editId
+            ? 'Examen reprogramado correctamente.'
+            : 'Examen programado correctamente.',
+        },
+      })
+    } catch (submitError) {
+      setError(
+        (createdId || savedExamId)
+          ? `El examen ya se guardó. Completa la asignación de normas sin crear otro examen: ${getErrorMessage(submitError)}`
+          : getErrorMessage(submitError),
       )
-    })}
-  </div>
-</div>
-          </section>
-        )
-
-      case 2:
-        return (
-          <section className="space-y-6">
-            <div>
-              <h2 className="text-lg font-bold text-[#003770]">
-                Horario del examen
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Define la fecha, hora de inicio y duración. La hora de
-                finalización se calculará automáticamente.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 gap-5">
-              <div>
-                <label
-                  htmlFor="fecha"
-                  className="mb-2 block text-sm font-semibold text-slate-700"
-                >
-                  Fecha <span className="text-[#E30613]">*</span>
-                </label>
-
-                <input
-                  id="fecha"
-                  type="date"
-                  min={fechaMinima}
-                  value={fecha}
-                  onChange={(event) => setFecha(event.target.value)}
-                  className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-[#003770] focus:ring-2 focus:ring-[#003770]/20"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="horaInicio"
-                  className="mb-2 block text-sm font-semibold text-slate-700"
-                >
-                  Hora de inicio <span className="text-[#E30613]">*</span>
-                </label>
-
-                <input
-                  id="horaInicio"
-                  type="time"
-                  value={horaInicio}
-                  onChange={(event) => setHoraInicio(event.target.value)}
-                  className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-[#003770] focus:ring-2 focus:ring-[#003770]/20"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="duracion"
-                  className="mb-2 block text-sm font-semibold text-slate-700"
-                >
-                  Duración en minutos{' '}
-                  <span className="text-[#E30613]">*</span>
-                </label>
-
-               <input
-  id="duracion"
-  type="text"
-  inputMode="numeric"
-  value={duracion}
-  maxLength={3}
-  onChange={(event) => {
-    const valor = event.target.value.replace(/\D/g, '')
-
-    if (valor === '') {
-      setDuracion('')
-      return
-    }
-
-    const minutos = Number(valor)
-
-    if (minutos <= 270) {
-      setDuracion(valor)
-    }
-  }}
-  placeholder="Ej. 90"
-  className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-[#003770] focus:ring-2 focus:ring-[#003770]/20"
-/>
-
-<p className="mt-1.5 text-xs text-slate-400">
-  La duración debe estar entre 1 y 270 minutos (máximo 4 horas y 30 minutos).
-</p>
-              </div>
-
-              <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-[#003770]">
-                      Hora de finalización
-                    </p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Calculada automáticamente
-                    </p>
-                  </div>
-
-                  <span className="text-xl font-bold text-[#003770]">
-                    {horaFin || '--:--'}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </section>
-        )
-
-      case 3:
-        return (
-          <section className="space-y-8">
-            <div>
-              <h2 className="text-lg font-bold text-[#003770]">
-                Ambiente y normas
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Selecciona el aula donde se realizará el examen y las normas
-                que deberán cumplirse.
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label
-                  htmlFor="aula"
-                  className="mb-2 block text-sm font-semibold text-slate-700"
-                >
-                  Aula <span className="text-[#E30613]">*</span>
-                </label>
-
-                <select
-                  id="aula"
-                  value={aulaId ?? ''}
-                  onChange={(event) =>
-                    setAulaId(
-                      event.target.value
-                        ? Number(event.target.value)
-                        : null,
-                    )
-                  }
-                  className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-[#003770] focus:ring-2 focus:ring-[#003770]/20"
-                >
-                  <option value="">Selecciona un aula disponible</option>
-
-                  {aulasDisponibles.map((aula) => (
-                    <option key={aula.id} value={aula.id}>
-                      {aula.nombre} · Capacidad: {aula.capacidad}
-                    </option>
-                  ))}
-                </select>
-
-                <p className="mt-1.5 text-xs text-slate-400">
-                  Solo se muestran ambientes actualmente disponibles.
-                </p>
-              </div>
-
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-  <NormaSelector
-    normas={normas}
-    selectedIds={normasSeleccionadas}
-    onChange={setNormasSeleccionadas}
-    permitirNormaParticular={!esAdministrador}
-    onCrearNormaParticular={crearNormaParticular}
-  />
-</div>
-            </div>
-          </section>
-        )
-
-      case 4:
-        return (
-          <section className="space-y-6">
-            <div>
-              <h2 className="text-lg font-bold text-[#003770]">
-                Confirmar programación
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Revisa la información antes de confirmar el examen.
-              </p>
-            </div>
-
-            <div className="overflow-hidden rounded-xl border border-slate-200">
-              <div className="divide-y divide-slate-200">
-                <div className="flex flex-col gap-1 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <span className="text-sm font-medium text-slate-500">
-                    Asignatura
-                  </span>
-                  <span className="text-sm font-semibold text-slate-900">
-                    {asignatura}
-                  </span>
-                </div>
-
-                <div className="flex flex-col gap-1 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <span className="text-sm font-medium text-slate-500">
-                    Fecha
-                  </span>
-                  <span className="text-sm font-semibold text-slate-900">
-                    {fecha}
-                  </span>
-                </div>
-
-                <div className="flex flex-col gap-1 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <span className="text-sm font-medium text-slate-500">
-                    Horario
-                  </span>
-                  <span className="text-sm font-semibold text-slate-900">
-                    {horaInicio} - {horaFin}
-                  </span>
-                </div>
-
-                <div className="flex flex-col gap-1 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <span className="text-sm font-medium text-slate-500">
-                    Duración
-                  </span>
-                  <span className="text-sm font-semibold text-slate-900">
-                    {duracion} minutos
-                  </span>
-                </div>
-
-                <div className="flex flex-col gap-1 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <span className="text-sm font-medium text-slate-500">
-                    Aula
-                  </span>
-                  <span className="text-sm font-semibold text-slate-900">
-                    {aulaSeleccionada?.nombre || 'No seleccionada'}
-                  </span>
-                </div>
-
-                <div className="px-4 py-4">
-                  <span className="text-sm font-medium text-slate-500">
-                    Normas seleccionadas
-                  </span>
-
-                  <div className="mt-3 space-y-2">
-                    {normasSeleccionadasData.map((norma) => (
-                      <div
-                        key={norma.id}
-                        className="rounded-lg border border-slate-200 bg-slate-50 p-3"
-                      >
-                        <span
-                          className={`mb-2 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                            norma.tipo === 'General'
-                              ? 'border-blue-200 bg-blue-50 text-[#002b5b]'
-                              : 'border-purple-200 bg-purple-50 text-purple-700'
-                          }`}
-                        >
-                          {norma.tipo}
-                        </span>
-
-                        <p className="text-sm leading-relaxed text-slate-700">
-                          {norma.descripcion}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-              <p className="text-sm leading-relaxed text-amber-800">
-                Al confirmar, el sistema deberá verificar nuevamente la
-                disponibilidad del aula y que no exista un conflicto de
-                horario antes de guardar el examen.
-              </p>
-            </div>
-          </section>
-        )
-
-      default:
-        return null
+    } finally {
+      setSaving(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-slate-100/60 flex flex-col">
-      {esAdministrador ? (
-        <AdminNavbar rol={role} usuario={usuario} />
-      ) : (
-        <Navbar rol={role} usuario={usuario} />
-      )}
-
-      <main className="flex-1 w-full px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto w-full max-w-5xl">
-          <div className="mb-8">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500">
-                  Programación de exámenes
-                </p>
-
-                <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#003770] sm:text-3xl">
-                  Programar examen
-                </h1>
-
-                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-                  Completa la información requerida para programar un examen.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={cancelarFormulario}
-                className="inline-flex items-center justify-center gap-2 self-start rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-400 hover:bg-slate-50"
-              >
-                <X className="h-4 w-4" />
-                Limpiar
-              </button>
-            </div>
-          </div>
-
-          <div className="mb-6 overflow-x-auto">
-  <div className="min-w-[680px] rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-    <div className="flex items-start">
-      {pasos.map((paso, index) => {
-        const Icon = paso.icono
-        const completado = paso.numero < pasoActual
-        const activo = paso.numero === pasoActual
-
-        return (
-          <React.Fragment key={paso.numero}>
+    <MainLayout>
+      <section className="mx-auto max-w-5xl space-y-6">
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
             <button
               type="button"
-              onClick={() => cambiarPaso(paso.numero as Paso)}
-              className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-lg p-2 text-left transition hover:bg-slate-50"
+              onClick={() => navigate('/examenes')}
+              className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-[#0056B3] hover:text-[#003770]"
             >
-              <div
-                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 ${
-                  completado
-                    ? 'border-[#003770] bg-[#003770] text-white'
-                    : activo
-                      ? 'border-[#003770] bg-blue-50 text-[#003770]'
-                      : 'border-slate-200 bg-white text-slate-400'
-                }`}
-              >
-                {completado ? (
-                  <CheckCircle2 className="h-5 w-5" />
-                ) : (
-                  <Icon className="h-5 w-5" />
-                )}
-              </div>
-
-              <div className="min-w-0">
-                <p
-                  className={`text-sm font-semibold ${
-                    activo || completado
-                      ? 'text-[#003770]'
-                      : 'text-slate-400'
-                  }`}
-                >
-                  {paso.titulo}
-                </p>
-
-                <p className="mt-0.5 text-xs text-slate-400">
-                  {paso.descripcion}
-                </p>
-              </div>
+              <ArrowLeft className="h-4 w-4" />
+              Volver a exámenes
             </button>
+            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.16em] text-[#168FBD]">
+              Gestión académica
+            </p>
+            <h1 className="mt-1 text-3xl font-extrabold text-[#003770]">
+              {editId ? 'Reprogramar examen' : 'Programar examen'}
+            </h1>
+          </div>
 
-            {index < pasos.length - 1 && (
-              <div
-                className={`mt-5 h-0.5 w-10 shrink-0 ${
-                  paso.numero < pasoActual
-                    ? 'bg-[#003770]'
-                    : 'bg-slate-200'
-                }`}
-              />
-            )}
-          </React.Fragment>
-        )
-      })}
-    </div>
-  </div>
-</div>
-
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="p-5 sm:p-8">
-              {error && (
-                <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-                  <p className="text-sm font-medium leading-relaxed text-red-700">
-                    {error}
-                  </p>
-                </div>
-              )}
-
-              {mensajeExito && (
-                <div className="mb-6 flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
-                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
-
-                  <div>
-                    <p className="text-sm font-semibold text-green-800">
-                      Programación validada
-                    </p>
-
-                    <p className="mt-1 text-sm leading-relaxed text-green-700">
-                      {mensajeExito}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {renderPasoActual()}
+          {endTime && (
+            <div className="rounded-xl border border-[#168FBD]/25 bg-[#168FBD]/8 px-5 py-3 text-sm">
+              <p className="text-[#64748B]">Horario calculado</p>
+              <p className="mt-1 font-bold text-[#003770]">
+                {form.hora_ini} - {endTime}
+              </p>
             </div>
+          )}
+        </header>
 
-            <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-              <div>
-                {pasoActual > 1 && (
-                  <button
-                    type="button"
-                    onClick={irAnterior}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 sm:w-auto"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    Anterior
-                  </button>
-                )}
-              </div>
+        {error && (
+          <div
+            className="flex items-start gap-3 rounded-xl border border-[#E30613]/25 bg-[#E30613]/5 px-4 py-4 text-sm leading-relaxed text-[#B0040E]"
+            role="alert"
+          >
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
 
-              <div>
-                {pasoActual < 4 ? (
-                  <button
-                    type="button"
-                    onClick={irSiguiente}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#003770] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#002b5b] sm:w-auto"
-                  >
-                    Siguiente
-                    <ArrowRight className="h-4 w-4" />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={confirmarProgramacion}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#E30613] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#c90511] sm:w-auto"
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    Confirmar programación
-                  </button>
-                )}
-              </div>
+        {loading ? (
+          <div className="grid min-h-96 place-items-center rounded-xl border border-[#E2E8F0] bg-white">
+            <div className="text-center text-[#64748B]">
+              <LoaderCircle className="mx-auto h-9 w-9 animate-spin text-[#168FBD]" />
+              <p className="mt-3 text-sm">Preparando el formulario...</p>
             </div>
           </div>
-        </div>
-      </main>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <fieldset className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-6">
+              <legend className="px-2 text-base font-bold text-[#003770]">
+                Datos del examen
+              </legend>
+              <div className="grid gap-5 md:grid-cols-2">
+                <label className="space-y-2 md:col-span-2">
+                  <span className="text-sm font-semibold text-[#1E293B]">Nombre *</span>
+                  <input
+                    value={form.nombre}
+                    maxLength={150}
+                    onChange={(event) => setField('nombre', event.target.value)}
+                    placeholder="Ej. Primer parcial de Álgebra II"
+                    className="h-11 w-full rounded-lg border border-[#E2E8F0] px-3 text-sm outline-none focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/15"
+                  />
+                  {fieldErrors.nombre && <p className="text-sm text-[#E30613]">{fieldErrors.nombre}</p>}
+                </label>
 
-      <AdminFooter />
-    </div>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label htmlFor="examen-materia" className="flex items-center gap-2 text-sm font-semibold text-[#1E293B]">
+                      <BookOpenCheck className="h-4 w-4 text-[#168FBD]" /> Asignatura *
+                    </label>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setMateriaModalOpen(true)}
+                        disabled={saving}
+                        className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-[#0056B3] hover:bg-[#0056B3]/5"
+                      >
+                        <Plus className="h-4 w-4" /> Crear materia
+                      </button>
+                    )}
+                  </div>
+                  <select
+                    id="examen-materia"
+                    value={form.id_materia}
+                    onChange={(event) => setField('id_materia', event.target.value)}
+                    className="h-11 w-full rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm outline-none focus:border-[#0056B3]"
+                  >
+                    <option value="">Seleccionar asignatura</option>
+                    {materias.map((subject) => <option key={subject.id} value={subject.id}>{subject.nombre}</option>)}
+                  </select>
+                  {fieldErrors.id_materia && <p className="text-sm text-[#E30613]">{fieldErrors.id_materia}</p>}
+                </div>
+
+                <label className="space-y-2">
+                  <span className="flex items-center gap-2 text-sm font-semibold text-[#1E293B]">
+                    <UserRound className="h-4 w-4 text-[#168FBD]" /> Docente responsable *
+                  </span>
+                  {isAdmin ? (
+                    <select
+                      value={form.id_docente}
+                      onChange={(event) => setField('id_docente', event.target.value)}
+                      className="h-11 w-full rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm outline-none focus:border-[#0056B3]"
+                    >
+                      <option value="">Seleccionar docente</option>
+                      {docentes.map((teacher) => (
+                        <option key={teacher.id} value={teacher.id}>
+                          {formatTeacherName(teacher)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <>
+                      <input
+                        type="text"
+                        readOnly
+                        value={selectedTeacher ? formatTeacherName(selectedTeacher) : ''}
+                        className="h-11 w-full cursor-default rounded-lg border border-[#E2E8F0] bg-[#F7F7F7] px-3 text-sm text-[#1E293B] outline-none"
+                      />
+                      <p className="text-xs text-[#64748B]">Se asigna automáticamente desde tu sesión.</p>
+                    </>
+                  )}
+                  {fieldErrors.id_docente && <p className="text-sm text-[#E30613]">{fieldErrors.id_docente}</p>}
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-6">
+              <legend className="px-2 text-base font-bold text-[#003770]">Horario y ambiente</legend>
+              <div className="grid gap-5 md:grid-cols-2">
+                <label className="space-y-2">
+                  <span className="flex items-center gap-2 text-sm font-semibold text-[#1E293B]">
+                    <CalendarDays className="h-4 w-4 text-[#168FBD]" /> Fecha *
+                  </span>
+                  <input
+                    type="date"
+                    min={todayLocal()}
+                    value={form.fecha}
+                    onChange={(event) => setField('fecha', event.target.value)}
+                    className="h-11 w-full rounded-lg border border-[#E2E8F0] px-3 text-sm outline-none focus:border-[#0056B3]"
+                  />
+                  {fieldErrors.fecha && <p className="text-sm text-[#E30613]">{fieldErrors.fecha}</p>}
+                </label>
+
+                <label className="space-y-2">
+                  <span className="flex items-center gap-2 text-sm font-semibold text-[#1E293B]">
+                    <MapPin className="h-4 w-4 text-[#168FBD]" /> Aula disponible *
+                  </span>
+                  <select
+                    value={form.id_aula}
+                    onChange={(event) => setField('id_aula', event.target.value)}
+                    className="h-11 w-full rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm outline-none focus:border-[#0056B3]"
+                  >
+                    <option value="">Seleccionar aula</option>
+                    {aulas.map((room) => (
+                      <option key={room.id} value={room.id}>
+                        {room.nombre} · {room.ubicacion} · {room.capacidad || '—'} lugares
+                      </option>
+                    ))}
+                  </select>
+                  {fieldErrors.id_aula && <p className="text-sm text-[#E30613]">{fieldErrors.id_aula}</p>}
+                </label>
+
+                <label className="space-y-2">
+                  <span className="flex items-center gap-2 text-sm font-semibold text-[#1E293B]">
+                    <Clock3 className="h-4 w-4 text-[#168FBD]" /> Hora de inicio *
+                  </span>
+                  <input
+                    type="time"
+                    value={form.hora_ini}
+                    onChange={(event) => setField('hora_ini', event.target.value)}
+                    className="h-11 w-full rounded-lg border border-[#E2E8F0] px-3 text-sm outline-none focus:border-[#0056B3]"
+                  />
+                  {fieldErrors.hora_ini && <p className="text-sm text-[#E30613]">{fieldErrors.hora_ini}</p>}
+                </label>
+
+                <label className="space-y-2">
+                  <span className="text-sm font-semibold text-[#1E293B]">Duración en minutos *</span>
+                  <input
+                    type="number"
+                    onWheel={(event) => event.currentTarget.blur()}
+                    min="1"
+                    step="1"
+                    value={form.duracion}
+                    onChange={(event) => setField('duracion', event.target.value)}
+                    className="h-11 w-full rounded-lg border border-[#E2E8F0] px-3 text-sm outline-none focus:border-[#0056B3]"
+                  />
+                  {fieldErrors.duracion && <p className="text-sm text-[#E30613]">{fieldErrors.duracion}</p>}
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-6">
+              <legend className="px-2 text-base font-bold text-[#003770]">Normas aplicables *</legend>
+              <p className="mb-4 text-sm text-[#64748B]">Selecciona normas generales del catálogo o agrega normas particulares para este examen.</p>
+              <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+                {normas.map((rule) => {
+                  const selected = selectedNorms.includes(rule.id)
+                  return (
+                    <button
+                      key={rule.id}
+                      type="button"
+                      onClick={() => toggleNorm(rule.id)}
+                      className={`flex min-h-14 w-full items-start gap-3 rounded-lg border p-3 text-left transition ${
+                        selected
+                          ? 'border-[#0056B3] bg-[#0056B3]/5'
+                          : 'border-[#E2E8F0] hover:border-[#168FBD]'
+                      }`}
+                    >
+                      <span className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded border ${selected ? 'border-[#0056B3] bg-[#0056B3] text-white' : 'border-[#E2E8F0] bg-white'}`}>
+                        {selected && <Check className="h-4 w-4" />}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <strong className="text-sm text-[#003770]">{rule.titulo}</strong>
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${rule.tipo === 'General' ? 'bg-[#168FBD]/10 text-[#08759E]' : 'bg-[#D59A18]/10 text-[#946807]'}`}>{rule.tipo}</span>
+                        </span>
+                        <span className="mt-1 block text-xs leading-relaxed text-[#64748B]">{rule.descripcion}</span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+              {fieldErrors.normas && <p className="mt-3 text-sm text-[#E30613]">{fieldErrors.normas}</p>}
+              <div className="mt-5 space-y-3 border-t border-[#E2E8F0] pt-4">
+                <h3 className="text-sm font-bold text-[#003770]">Agregar norma particular de este examen</h3>
+                <input type="text" maxLength={150} value={particularTitulo} onChange={(event) => setParticularTitulo(event.target.value)} placeholder="Título de la norma" aria-label="Título de la norma particular" className="h-11 w-full rounded-lg border border-[#E2E8F0] px-3 text-sm" />
+                <textarea value={particularDescripcion} onChange={(event) => setParticularDescripcion(event.target.value)} placeholder="Descripción de la norma" aria-label="Descripción de la norma particular" rows={3} className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm" />
+                <button type="button" onClick={addParticular} className="min-h-11 rounded-lg border border-[#0056B3] px-4 text-sm font-semibold text-[#0056B3]">Agregar norma particular</button>
+                {fieldErrors.particular && <p className="text-sm text-[#E30613]">{fieldErrors.particular}</p>}
+                {particulares.map((norma, index) => (
+                  <div key={index} className="flex items-center justify-between gap-3 rounded-lg border border-[#E2E8F0] p-3 text-sm">
+                    <span><strong>{norma.titulo}</strong> · {norma.descripcion}</span>
+                    <button type="button" onClick={() => setParticulares((current) => current.filter((_, item) => item !== index))} className="min-h-10 text-[#B0040E]">Quitar</button>
+                  </div>
+                ))}
+              </div>
+            </fieldset>
+
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => navigate('/examenes')}
+                disabled={saving}
+                className="h-11 rounded-lg border border-[#E2E8F0] bg-white px-5 text-sm font-semibold text-[#1E293B] hover:bg-[#F7F7F7]"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#0056B3] px-6 text-sm font-semibold text-white hover:bg-[#003770] disabled:cursor-wait disabled:opacity-60"
+              >
+                {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {saving ? 'Guardando...' : editId ? 'Guardar reprogramación' : 'Programar examen'}
+              </button>
+            </div>
+          </form>
+        )}
+        {isAdmin && materiaModalOpen && (
+          <CrearMateriaModal
+            onOpenChange={setMateriaModalOpen}
+            onCreated={(materia) => {
+              setMaterias((current) => [...current.filter((item) => item.id !== materia.id), materia]
+                .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')))
+              setField('id_materia', materia.id)
+              setMateriaModalOpen(false)
+            }}
+          />
+        )}
+      </section>
+    </MainLayout>
   )
 }
-
-export default ProgramarExamenPage
