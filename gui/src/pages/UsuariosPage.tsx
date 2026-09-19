@@ -1959,9 +1959,7 @@ export default function UsuariosPage() {
                   ? 'Desactivar'
                   : 'Activar'
           }
-
           cancelText="Cancelar"
-
           onConfirm={
             resultadoEstado
               ? cerrarConfirmacionEstado
