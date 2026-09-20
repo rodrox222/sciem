@@ -1,12 +1,11 @@
+// src/pages/HomePage.tsx
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { HomeNavbar } from '../components/home/HomeNavbar'
 import { MetricsBar } from '../components/home/MetricsBar'
 import { ExamCard } from '../components/home/ExamCard'
 import { MiniCalendar } from '../components/home/MiniCalendar'
 import { CronogramaCard } from '../components/home/CronogramaCard'
-import { MobileNav } from '../components/home/MobileNav'
-import { Footer } from '../components/Footer'
+import { Button } from '@/components/ui/button'
 import { examenesService, type Examen } from '../services/examenes.service'
 
 const localDate = (date: Date) =>
@@ -27,7 +26,7 @@ export const HomePage = () => {
   const [weekExams, setWeekExams] = useState<Record<string, Examen[]>>({})
   const [failedDates, setFailedDates] = useState<string[]>([])
   const [loadedWeek, setLoadedWeek] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'inicio' | 'modulos' | 'agenda' | 'perfil'>('inicio')
+  
   const weekDays = weekDaysFor(selectedDate)
   const weekKey = localDate(weekDays[0])
   const selectedKey = localDate(selectedDate)
@@ -35,7 +34,6 @@ export const HomePage = () => {
 
   useEffect(() => {
     document.title = 'Inicio | SCI'
-    // Actualiza la selección al cambiar de día si el usuario seguía viendo "hoy".
     let today = localDate(new Date())
     const timer = window.setInterval(() => {
       const next = localDate(new Date())
@@ -77,88 +75,141 @@ export const HomePage = () => {
   const scrollToAgenda = () => document.getElementById('proximos-examenes')?.scrollIntoView({ behavior: 'smooth' })
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#f5f8fc] pb-20 font-sans text-slate-800 sm:pb-0">
-      <HomeNavbar />
-      <section className="relative overflow-hidden bg-gradient-to-r from-[#092f63] via-[#0a4d91] to-[#087db8]">
-        <div className="absolute -left-20 top-0 h-64 w-64 rounded-full bg-[#062650] opacity-70" />
-        <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[#ed1c2e] opacity-90" />
-        <div className="absolute bottom-[-100px] right-32 h-64 w-64 rounded-full bg-[#0877c7] opacity-70" />
+    <div className="w-full">
+      {/* Hero Institucional */}
+      <section className="relative overflow-hidden bg-sci-navy">
         <div className="relative mx-auto max-w-7xl px-5 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-11">
           <div className="grid items-center gap-8 lg:grid-cols-12">
             <div className="lg:col-span-4">
-              <div className="rounded-2xl bg-white p-4 shadow-xl">
-                <MiniCalendar selectedDate={selectedDate} onSelectDate={setSelectedDate} examDates={Object.keys(weekExams).filter((day) => weekExams[day].length > 0)} />
-              </div>
+              <MiniCalendar 
+                selectedDate={selectedDate} 
+                onSelectDate={setSelectedDate} 
+                examDates={Object.keys(weekExams).filter((day) => weekExams[day].length > 0)} 
+              />
             </div>
+            
             <div className="lg:col-span-4">
               <span className="mb-4 inline-flex rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs font-semibold text-white backdrop-blur">
                 Plataforma institucional FCyT
               </span>
-              <h1 className="text-3xl font-black leading-tight tracking-tight text-white sm:text-4xl lg:text-[42px]">
-                Tu información<br />académica,<span className="block text-[#12c4e8]">en un solo lugar.</span>
+              <h1 className="text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl lg:text-[42px]">
+                Tu información<br />académica,<span className="block text-sci-cyan">en un solo lugar.</span>
               </h1>
-              <p className="mt-4 max-w-md text-sm leading-6 text-blue-100 sm:text-base">
+              <p className="mt-4 max-w-md text-sm leading-6 text-slate-200 sm:text-base">
                 Consulta cronogramas, ambientes y comunicados oficiales.
               </p>
+              
               <div className="mt-6 flex flex-wrap gap-3">
-                <button type="button" onClick={() => navigate('/cronograma')} className="rounded-xl bg-[#0878ed] px-5 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-[#066bd4]">
+                <Button 
+                  onClick={() => navigate('/cronograma')} 
+                  className="bg-sci-blue text-white hover:opacity-90 font-semibold shadow-xs cursor-pointer"
+                >
                   Consultar cronograma
-                </button>
-                <button type="button" onClick={scrollToAgenda} className="rounded-xl bg-white px-5 py-3 text-sm font-bold text-[#092f63] shadow-lg transition hover:bg-slate-100">
+                </Button>
+                <Button 
+                  onClick={scrollToAgenda} 
+                  variant="outline"
+                  className="bg-card text-sci-navy hover:bg-muted border-none font-semibold shadow-xs cursor-pointer"
+                >
                   Ver próximos exámenes
-                </button>
+                </Button>
               </div>
             </div>
+            
             <CronogramaCard />
           </div>
         </div>
       </section>
 
-      <main id="proximos-examenes" className="mx-auto w-full max-w-7xl flex-1 scroll-mt-32 px-5 py-8 sm:px-6 sm:py-10 lg:px-8">
+      {/* Indicadores de métricas */}
+      <section className="mx-auto w-full max-w-7xl px-5 py-6 sm:px-6 lg:px-8">
+        <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+          <MetricsBar />
+        </div>
+      </section>
+
+      {/* Agenda de Próximos Exámenes */}
+      <section id="proximos-examenes" className="mx-auto w-full max-w-7xl scroll-mt-32 px-5 py-6 sm:px-6 lg:px-8">
         <div className="mb-7 flex items-end justify-between gap-4">
           <div>
-            <span className="block text-[11px] font-bold uppercase tracking-[0.12em] text-sky-700">Agenda académica</span>
-            <h2 className="mt-1 text-2xl font-extrabold text-[#092f63] sm:text-3xl">Próximos exámenes</h2>
-            <p className="mt-1 text-sm text-slate-600">Selecciona un día del calendario para ver sus evaluaciones.</p>
+            <span className="block text-[11px] font-bold uppercase tracking-[0.12em] text-sci-cyan">
+              Agenda académica
+            </span>
+            <h2 className="mt-1 text-2xl font-bold text-sci-navy sm:text-3xl">
+              Próximos exámenes
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Selecciona un día del calendario para ver sus evaluaciones.
+            </p>
           </div>
-          <button type="button" onClick={() => navigate('/cronograma')} className="shrink-0 text-sm font-semibold text-blue-600 transition hover:text-blue-800">
+          <Button 
+            variant="ghost" 
+            onClick={() => navigate('/cronograma')} 
+            className="text-sci-blue hover:text-sci-navy hover:bg-transparent font-semibold p-0 cursor-pointer"
+          >
             Ver todos →
-          </button>
+          </Button>
         </div>
+
+        {/* Selector de días móvil */}
         <div className="mb-5 flex gap-2.5 overflow-x-auto pb-2 sm:hidden">
           {weekDays.map((day) => {
             const key = localDate(day)
             const selected = key === selectedKey
             return (
-              <button key={key} type="button" onClick={() => setSelectedDate(day)}
+              <button 
+                key={key} 
+                type="button" 
+                onClick={() => setSelectedDate(day)}
                 aria-pressed={selected}
-                className={`flex h-16 w-14 shrink-0 flex-col items-center justify-center rounded-2xl font-bold ${selected ? 'bg-[#092f63] text-white shadow-md' : 'border border-slate-200 bg-white text-slate-700'}`}>
+                className={`flex h-16 w-14 shrink-0 flex-col items-center justify-center rounded-2xl font-bold transition-colors cursor-pointer ${
+                  selected 
+                    ? 'bg-sci-navy text-white shadow-xs' 
+                    : 'border border-border bg-card text-foreground hover:bg-muted'
+                }`}
+              >
                 <span className="text-lg">{day.getDate()}</span>
-                {(weekExams[key]?.length ?? 0) > 0 && <span className={`mt-1 h-1.5 w-1.5 rounded-full ${selected ? 'bg-white' : 'bg-sky-500'}`} />}
+                {(weekExams[key]?.length ?? 0) > 0 && (
+                  <span className={`mt-1 h-1.5 w-1.5 rounded-full ${selected ? 'bg-white' : 'bg-sci-cyan'}`} />
+                )}
               </button>
             )
           })}
         </div>
-        <section aria-live="polite" className="grid gap-4 sm:grid-cols-2">
-          {loading ? <p className="col-span-full rounded-xl bg-white p-8 text-center text-slate-600">Consultando exámenes…</p>
-            : failedDates.includes(selectedKey) ? <p className="col-span-full rounded-xl bg-white p-8 text-center text-slate-600">No se pudieron consultar los exámenes de este día. Inténtalo de nuevo más tarde.</p>
-            : examsForDay.length > 0 ? examsForDay.map((exam) =>
-              <ExamCard key={exam.id} materia={exam.nombre} aula={exam.aula?.nombre ?? 'Aula por confirmar'}
-                horario={hours(exam)} estado={exam.estado} onDetails={() => navigate(`/cronograma?fecha=${selectedKey}`)} />
-            ) : (
-              <div className="col-span-full rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-2xl">📅</div>
-                <h3 className="font-bold text-slate-800">No hay evaluaciones programadas</h3>
-                <p className="mt-2 text-sm text-slate-500">No existen exámenes registrados para esta fecha.</p>
+
+        {/* Lista de tarjetas */}
+        <div aria-live="polite" className="grid gap-4 sm:grid-cols-2">
+          {loading ? (
+            <p className="col-span-full rounded-xl bg-card border border-border p-8 text-center text-muted-foreground">
+              Consultando exámenes…
+            </p>
+          ) : failedDates.includes(selectedKey) ? (
+            <p className="col-span-full rounded-xl bg-card border border-border p-8 text-center text-muted-foreground">
+              No se pudieron consultar los exámenes de este día. Inténtalo de nuevo más tarde.
+            </p>
+          ) : examsForDay.length > 0 ? (
+            examsForDay.map((exam, index) => (
+              <ExamCard 
+                key={exam.id} 
+                materia={exam.nombre} 
+                aula={exam.aula?.nombre ?? 'Aula por confirmar'}
+                horario={hours(exam)} 
+                estado={exam.estado}
+                tipoBorde={index % 2 === 0 ? 'cyan' : 'amber'}
+                onDetails={() => navigate(`/cronograma?fecha=${selectedKey}`)} 
+              />
+            ))
+          ) : (
+            <div className="col-span-full rounded-2xl border border-dashed border-border bg-card p-10 text-center">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-2xl">
+                📅
               </div>
-            )}
-        </section>
-      </main>
-      <section className="mx-auto w-full max-w-7xl px-5 pb-8 sm:px-6 lg:px-8">
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><MetricsBar /></div>
+              <h3 className="font-bold text-foreground">No hay evaluaciones programadas</h3>
+              <p className="mt-2 text-sm text-muted-foreground">No existen exámenes registrados para esta fecha.</p>
+            </div>
+          )}
+        </div>
       </section>
-      <Footer />
-      <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} />
     </div>
   )
 }

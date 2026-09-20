@@ -1,4 +1,4 @@
-import { apiRequest } from './apiClient'
+import { apiRequest } from './api'
 import type { PaginatedResponse } from './aulas.service'
 import type { Norma } from './normas.service'
 
