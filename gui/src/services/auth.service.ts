@@ -1,3 +1,4 @@
+// src/services/auth.service.ts
 import { api } from './api';
 
 export interface LoginResponse {
@@ -9,6 +10,13 @@ export interface LoginResponse {
     email: string;
     rol: string;
   };
+}
+
+export interface ResetPasswordPayload {
+  token: string;
+  email: string;
+  password: string;
+  password_confirmation: string;
 }
 
 export const authService = {
@@ -36,6 +44,14 @@ export const authService = {
     }
   },
 
+  requestPasswordReset: async (email: string): Promise<{ message: string }> => {
+    return api.post<{ message: string }>('/forgot-password', { email: email.trim() });
+  },
+
+  resetPassword: async (payload: ResetPasswordPayload): Promise<{ message: string }> => {
+    return api.post<{ message: string }>('/reset-password', payload);
+  },
+
   getCurrentUser: () => {
     const role = localStorage.getItem('user_role') || '';
     let name = role || 'Usuario';
@@ -47,7 +63,7 @@ export const authService = {
         name = `${data.nombre} ${data.apellido || ''}`.trim();
       }
     } catch {
-      // Respaldo en caso de error de parseo
+      // Respaldo si el parseo falla
     }
 
     return { role, name, isAuthenticated: Boolean(localStorage.getItem('auth_token')) };

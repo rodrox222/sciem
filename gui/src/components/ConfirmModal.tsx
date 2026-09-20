@@ -36,24 +36,26 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 }) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px] border-slate-200">
+      <DialogContent className="sm:max-w-[425px] border-border bg-card text-card-foreground rounded-2xl shadow-xl">
         <DialogHeader>
-          <DialogTitle className="text-slate-900 font-semibold text-lg">{title}</DialogTitle>
-          <DialogDescription className="text-slate-600 text-sm mt-2">
+          <DialogTitle className="text-foreground font-bold text-lg">{title}</DialogTitle>
+          <DialogDescription className="text-muted-foreground text-sm mt-2 leading-relaxed">
             {description}
           </DialogDescription>
         </DialogHeader>
 
-        <DialogFooter className="mt-6 flex gap-2 justify-end">
+        <DialogFooter className="mt-6 flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
           {showCancel && onCancel && (
-            <Button variant="outline" onClick={onCancel}>
+            <Button variant="outline" onClick={onCancel} className="cursor-pointer">
               {cancelText}
             </Button>
           )}
           <Button
             variant={variant}
             onClick={onConfirm}
-            className={variant === 'default' ? 'bg-[#003770] hover:bg-[#002850] text-white' : ''}
+            className={`cursor-pointer ${
+              variant === 'default' ? 'bg-sci-blue hover:opacity-90 text-white font-semibold' : ''
+            }`}
           >
             {confirmText}
           </Button>
@@ -62,3 +64,5 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
     </Dialog>
   )
 }
+
+export default ConfirmModal

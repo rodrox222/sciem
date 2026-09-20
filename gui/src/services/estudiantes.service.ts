@@ -1,5 +1,5 @@
-import { apiRequest } from './apiClient'
-import type { PaginatedResponse } from './aulas.service'
+import { api } from './api'
+import type { PaginatedResponse } from '@/types/api'
 
 export type EstadoInscripcion = 'Habilitado' | 'Inhabilitado'
 
@@ -48,21 +48,18 @@ export const estudiantesService = {
     if (filters.page) params.set('page', String(filters.page))
     if (filters.perPage) params.set('per_page', String(filters.perPage))
     const query = params.toString()
-    return apiRequest<PaginatedResponse<Estudiante>>(
+    return api.get<PaginatedResponse<Estudiante>>(
       `/estudiantes${query ? `?${query}` : ''}`,
     )
   },
 
   listByExam(examId: string, page = 1) {
-    return apiRequest<PaginatedResponse<Estudiante>>(
+    return api.get<PaginatedResponse<Estudiante>>(
       `/examenes/${examId}/estudiantes?page=${page}`,
     )
   },
 
   enroll(examId: string, payload: InscripcionPayload) {
-    return apiRequest<MutationResponse>(`/examenes/${examId}/estudiantes`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    })
+    return api.post<MutationResponse>(`/examenes/${examId}/estudiantes`, payload)
   },
 }

@@ -1,4 +1,5 @@
-import { apiRequest } from './apiClient'
+import { api } from './api'
+import type { PaginatedResponse } from '@/types/api'
 
 export type AulaEstado = 'Disponible' | 'Mantenimiento' | 'Ocupada'
 
@@ -19,22 +20,12 @@ export interface AulaPayload {
   estado: AulaEstado
 }
 
-export interface PaginatedResponse<T> {
-  current_page: number
-  data: T[]
-  last_page: number
-  per_page: number
-  total: number
-  from: number | null
-  to: number | null
-}
-
 interface AulaMutationResponse {
   message: string
   aula: Aula
 }
 
-interface AulaFilters {
+export interface AulaFilters {
   search?: string
   estado?: AulaEstado | ''
   page?: number
@@ -43,7 +34,6 @@ interface AulaFilters {
 
 const buildQuery = (filters: AulaFilters) => {
   const params = new URLSearchParams()
-
   if (filters.search) params.set('search', filters.search)
   if (filters.estado) params.set('estado', filters.estado)
   if (filters.page) params.set('page', String(filters.page))
@@ -55,22 +45,18 @@ const buildQuery = (filters: AulaFilters) => {
 
 export const aulasService = {
   list(filters: AulaFilters = {}) {
-    return apiRequest<PaginatedResponse<Aula>>(
-      `/aulas${buildQuery(filters)}`,
-    )
+    return api.get<PaginatedResponse<Aula>>(`/aulas${buildQuery(filters)}`)
+  },
+
+  get(id: string) {
+    return api.get<Aula>(`/aulas/${id}`)
   },
 
   create(payload: AulaPayload) {
-    return apiRequest<AulaMutationResponse>('/aulas', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    })
+    return api.post<AulaMutationResponse>('/aulas', payload)
   },
 
   update(id: string, payload: AulaPayload) {
-    return apiRequest<AulaMutationResponse>(`/aulas/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    })
+    return api.put<AulaMutationResponse>(`/aulas/${id}`, payload)
   },
 }

@@ -1,7 +1,7 @@
+// src/hooks/useForgotPassword.ts
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8200/api'
+import { authService } from '@/services/auth.service'
 
 interface UseForgotPasswordOptions {
   onSuccess?: () => void
@@ -33,17 +33,7 @@ export const useForgotPassword = (options?: UseForgotPasswordOptions) => {
 
     setIsSubmitting(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/forgot-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ email: email.trim() }),
-      })
-      const data = await res.json().catch(() => ({}))
-
-      if (!res.ok) {
-        throw new Error(data.errors?.email?.[0] || data.message || 'No se pudo procesar la solicitud.')
-      }
-
+      await authService.requestPasswordReset(email)
       setStep('sent')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error al comunicarse con el servidor institucional.')
@@ -67,26 +57,12 @@ export const useForgotPassword = (options?: UseForgotPasswordOptions) => {
 
     setIsSubmitting(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          token: tokenFromUrl,
-          email: email.trim(),
-          password,
-          password_confirmation: confirmPassword,
-        }),
+      await authService.resetPassword({
+        token: tokenFromUrl,
+        email: email.trim(),
+        password,
+        password_confirmation: confirmPassword,
       })
-      const data = await res.json().catch(() => ({}))
-
-      if (!res.ok) {
-        throw new Error(
-          data.errors?.password?.[0] ||
-          data.errors?.token?.[0] ||
-          data.message ||
-          'El enlace ha expirado o es inválido.'
-        )
-      }
 
       if (options?.onSuccess) options.onSuccess()
       else if (options?.onBackToLogin) options.onBackToLogin()
