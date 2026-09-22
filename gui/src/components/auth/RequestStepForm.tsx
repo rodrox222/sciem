@@ -23,7 +23,7 @@ export const RequestStepForm: React.FC<RequestStepFormProps> = ({
   <>
     <h3 className="text-2xl font-bold text-sci-navy mt-1 tracking-tight">Recuperar contraseña</h3>
     <p className="text-xs text-muted-foreground mt-1 mb-6">
-      Ingresa tu correo institucional registrado para recibir el enlace de recuperación.
+      Ingresa tu correo autorizado para recibir el enlace de recuperación de cuenta.
     </p>
 
     {error && (
@@ -35,13 +35,13 @@ export const RequestStepForm: React.FC<RequestStepFormProps> = ({
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="space-y-1.5 text-left">
         <Label htmlFor="req-email" className="text-xs font-semibold text-foreground">
-          Correo institucional
+          Correo electrónico
         </Label>
         <Input
           id="req-email"
           type="email"
           required
-          placeholder="usuario@fcyt.umss.edu.bo"
+          placeholder="ejemplo@fcyt.umss.edu.bo"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="h-11 text-sm bg-background border-input rounded-xl"
@@ -59,7 +59,7 @@ export const RequestStepForm: React.FC<RequestStepFormProps> = ({
       <Alert className="bg-muted/50 border-border text-muted-foreground mt-4 py-2.5">
         <Info className="h-4 w-4 text-sci-cyan" />
         <AlertDescription className="text-[11px] leading-tight ml-2">
-          Si no tienes acceso a tu buzón institucional, contacta a soporte técnico de la facultad.
+          Si no tienes acceso a tu buzón registrado, contacta a soporte técnico de la facultad.
         </AlertDescription>
       </Alert>
     </form>

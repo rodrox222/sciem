@@ -1,4 +1,3 @@
-// src/hooks/useForgotPassword.ts
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { authService } from '@/services/auth.service'
@@ -6,6 +5,17 @@ import { authService } from '@/services/auth.service'
 interface UseForgotPasswordOptions {
   onSuccess?: () => void
   onBackToLogin?: () => void
+}
+
+const DOMINIOS_PERMITIDOS = [
+  '@gmail.com',
+  '@est.umss.edu',
+  '@fcyt.umss.edu.bo',
+]
+
+const esCorreoPermitido = (email: string): boolean => {
+  const correo = email.trim().toLowerCase()
+  return DOMINIOS_PERMITIDOS.some((dominio) => correo.endsWith(dominio))
 }
 
 export const useForgotPassword = (options?: UseForgotPasswordOptions) => {
@@ -26,14 +36,22 @@ export const useForgotPassword = (options?: UseForgotPasswordOptions) => {
     e.preventDefault()
     setError(null)
 
-    if (!email.trim() || !email.includes('@')) {
-      setError('Por favor ingresa un correo institucional válido.')
+    const emailNormalizado = email.trim().toLowerCase()
+
+    if (!emailNormalizado || !emailNormalizado.includes('@')) {
+      setError('Por favor ingresa un correo electrónico válido.')
+      return
+    }
+
+    // Validación exclusiva en frontend para dominios autorizados
+    if (!esCorreoPermitido(emailNormalizado)) {
+      setError('Ingresar un correo valido.')
       return
     }
 
     setIsSubmitting(true)
     try {
-      await authService.requestPasswordReset(email)
+      await authService.requestPasswordReset(emailNormalizado)
       setStep('sent')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error al comunicarse con el servidor institucional.')
