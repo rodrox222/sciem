@@ -25,14 +25,14 @@ class AuthController extends Controller
      */
     public function login(Request $request): JsonResponse
     {
-        
+    /*    
     return response()->json([
             'db_host'     => config('database.connections.pgsql.host'),
             'db_database' => config('database.connections.pgsql.database'),
             'total_docentes' => Docente::count(),
             'docente'     => Docente::where('email', 'docente@fcyt.umss.edu.bo')->first(),
         ]);
-    
+    */
     // Validación estricta de formato: o es correo institucional válido o es CI numérico
         $request->validate([
             'email' => [
