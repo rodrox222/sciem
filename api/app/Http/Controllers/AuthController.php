@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -40,6 +41,16 @@ class AuthController extends Controller
 
         // Resolver tabla y rol según el patrón del identificador
         [$user, $rolDetectado] = $this->identificarYBuscarUsuario($rawIdentifier);
+
+        // REGISTRO DEPURADOR PARA VER EN RENDER LOGS
+        Log::error('DEBUG_LOGIN_RENDER', [
+            'raw_identifier'     => $rawIdentifier,
+            'rol_detectado'      => $rolDetectado,
+            'usuario_encontrado' => $user ? true : false,
+            'user_id'            => $user?->id,
+            'activo'             => $user?->activo,
+            'password_match'     => $user ? Hash::check($request->password, $user->password) : false,
+        ]);
 
         // Validar existencia y verificación de hash de contraseña
         if (!$user || !Hash::check($request->password, $user->password)) {
