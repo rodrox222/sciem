@@ -14,6 +14,7 @@ use App\Models\Admin;
 use App\Models\Docente;
 use App\Models\Auxiliar;
 use App\Http\Controllers\EstudianteController;
+use Illuminate\Support\Facades\Artisan;
 
 // --- RUTAS PÚBLICAS ---
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
@@ -128,5 +129,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::post('examenes/{id}/estudiantes', [EstudianteController::class, 'inscribirAExamen']);
         Route::delete('examenes/{id}/estudiantes/{idEstudiante}', [EstudianteController::class, 'desvincularDeExamen']);
+    });
+
+
+
+    Route::get('/seed-render-now', function () {
+        Artisan::call('db:seed', ['--force' => true]);
+        return response()->json([
+            'output' => Artisan::output(),
+            'total_docentes' => \App\Models\Docente::count(),
+            'docente' => \App\Models\Docente::first(),
+        ]);
     });
 });
