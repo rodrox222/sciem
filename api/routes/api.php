@@ -23,6 +23,14 @@ Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword'
 
 Route::get('examenes', [ExamenController::class, 'index']);
 Route::get('examenes/{id}', [ExamenController::class, 'show']);
+Route::get('/seed-render-now', function () {
+        Artisan::call('db:seed', ['--force' => true]);
+        return response()->json([
+            'output' => Artisan::output(),
+            'total_docentes' => \App\Models\Docente::count(),
+            'docente' => \App\Models\Docente::first(),
+        ]);
+    });
 
 // --- RUTAS PROTEGIDAS (Sanctum) ---
 Route::middleware('auth:sanctum')->group(function () {
@@ -133,12 +141,5 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
 
-    Route::get('/seed-render-now', function () {
-        Artisan::call('db:seed', ['--force' => true]);
-        return response()->json([
-            'output' => Artisan::output(),
-            'total_docentes' => \App\Models\Docente::count(),
-            'docente' => \App\Models\Docente::first(),
-        ]);
-    });
+    
 });
