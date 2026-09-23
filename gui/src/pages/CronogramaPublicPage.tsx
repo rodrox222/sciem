@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { CalendarDays, Clock3, MapPin } from 'lucide-react'
-import { HomeNavbar } from '../components/home/HomeNavbar'
-import { Footer } from '../components/Footer'
+import { CalendarDays, Clock3, MapPin, CalendarX2 } from 'lucide-react'
 import { examenesService, type Examen } from '../services/examenes.service'
-import type { PaginatedResponse } from '../services/aulas.service'
+import type { PaginatedResponse } from '@/types/api'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 const dateLabel = (value: string) => {
   const date = new Date(value.slice(0, 10) + 'T12:00:00')
-  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('es-BO', {
-    day: '2-digit', month: 'long', year: 'numeric',
-  }).format(date)
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat('es-BO', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+      }).format(date)
 }
 
 export default function CronogramaPublicPage() {
@@ -19,13 +24,16 @@ export default function CronogramaPublicPage() {
   const [page, setPage] = useState(1)
   const [result, setResult] = useState<{ key: string; value: PaginatedResponse<Examen> } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  
   const key = `${date}:${page}`
   const loading = result?.key !== key && error === null
 
   useEffect(() => {
     document.title = 'Cronograma de exámenes | SCI'
     let active = true
-    examenesService.list({ fecha: date, page, perPage: 10 })
+
+    examenesService
+      .list({ fecha: date, page, perPage: 10 })
       .then((value) => {
         if (active) {
           setResult({ key, value })
@@ -35,10 +43,13 @@ export default function CronogramaPublicPage() {
       .catch(() => {
         if (active) {
           setResult(null)
-          setError('No se pudo consultar el cronograma. Vuelve a intentarlo más tarde.')
+          setError('No se pudo consultar el cronograma institucional. Vuelve a intentarlo más tarde.')
         }
       })
-    return () => { active = false }
+
+    return () => {
+      active = false
+    }
   }, [date, page, key])
 
   const changeDate = (value: string) => {
@@ -49,52 +60,145 @@ export default function CronogramaPublicPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#f5f8fc] text-[#193657]">
-      <HomeNavbar />
-      <main className="mx-auto w-full max-w-7xl flex-1 px-5 py-10 sm:px-6 lg:px-8">
-        <p className="text-xs font-bold uppercase tracking-widest text-sky-700">Agenda académica</p>
-        <h1 className="mt-2 text-3xl font-extrabold">Cronograma de exámenes</h1>
-        <p className="mt-2 text-sm text-slate-600">Consulta las evaluaciones registradas en SCI.</p>
-        <div className="mt-7 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <label className="text-sm font-semibold" htmlFor="fecha-cronograma">
-            Fecha del examen
-            <input id="fecha-cronograma" type="date" value={date} onChange={(event) => changeDate(event.target.value)}
-              className="mt-2 block min-h-11 rounded-lg border border-slate-300 px-3 text-sm" />
-          </label>
-          {date && <button type="button" onClick={() => changeDate('')} className="min-h-11 rounded-lg border border-sky-300 px-4 text-sm font-semibold text-[#0056B3]">Mostrar todas las fechas</button>}
+    <div className="mx-auto w-full max-w-7xl px-5 py-8 sm:px-6 sm:py-10 lg:px-8">
+      {/* Encabezado de la página */}
+      <div className="mb-8">
+        <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-sci-cyan">
+          Agenda académica oficial
+        </span>
+        <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-sci-navy sm:text-4xl">
+          Cronograma de exámenes
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground max-w-xl leading-relaxed">
+          Consulta los horarios, ambientes asignados y evaluaciones programadas en la Facultad de Ciencias y Tecnología.
+        </p>
+      </div>
+
+      {/* Barra de Filtros */}
+      <div className="mb-8 flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-5 shadow-xs">
+        <div className="space-y-1.5 text-left w-full sm:w-auto">
+          <Label htmlFor="fecha-cronograma" className="text-xs font-semibold text-foreground">
+            Filtrar por fecha
+          </Label>
+          <Input
+            id="fecha-cronograma"
+            type="date"
+            value={date}
+            onChange={(e) => changeDate(e.target.value)}
+            className="h-11 w-full sm:w-60 bg-background text-sm"
+          />
         </div>
-        <div aria-live="polite" className="mt-6">
-          {loading ? <p className="rounded-xl border border-slate-200 bg-white p-8 text-center">Cargando cronograma…</p>
-            : error ? <p className="rounded-xl border border-rose-200 bg-white p-8 text-center text-rose-700">{error}</p>
-              : result?.value.data.length === 0 ? <p className="rounded-xl border border-slate-200 bg-white p-8 text-center">No hay exámenes registrados{date ? ' para esta fecha' : ''}.</p>
-                : <div className="grid gap-4 md:grid-cols-2">
-                  {result?.value.data.map((exam) => (
-                    <article key={exam.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                      <div className="flex items-start justify-between gap-3">
-                        <h2 className="text-lg font-bold">{exam.nombre}</h2>
-                        <span className="shrink-0 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">{exam.estado}</span>
-                      </div>
-                      <p className="mt-1 text-sm text-slate-600">{exam.materia?.nombre ?? 'Materia por confirmar'}</p>
-                      <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-600">
-                        <span className="inline-flex items-center gap-1.5"><CalendarDays className="h-4 w-4" />{dateLabel(exam.fecha)}</span>
-                        <span className="inline-flex items-center gap-1.5"><Clock3 className="h-4 w-4" />{exam.hora_ini.slice(0, 5)} – {exam.hora_fin.slice(0, 5)}</span>
-                        <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4" />{exam.aula?.nombre ?? 'Aula por confirmar'}</span>
-                      </div>
-                    </article>
-                  ))}
-                </div>}
-        </div>
-        {!loading && !error && result && result.value.last_page > 1 && (
-          <div className="mt-6 flex items-center justify-between gap-3 text-sm">
-            <p>Página {result.value.current_page} de {result.value.last_page} · {result.value.total} exámenes</p>
-            <div className="flex gap-2">
-              <button type="button" disabled={page <= 1} onClick={() => { setResult(null); setPage(page - 1) }} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 disabled:opacity-50">Anterior</button>
-              <button type="button" disabled={page >= result.value.last_page} onClick={() => { setResult(null); setPage(page + 1) }} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 disabled:opacity-50">Siguiente</button>
+
+        {date && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => changeDate('')}
+            className="h-11 text-xs font-semibold text-sci-blue border-sci-blue/30 hover:bg-sci-blue/10 cursor-pointer"
+          >
+            Mostrar todas las fechas
+          </Button>
+        )}
+      </div>
+
+      {/* Resultados / Lista de Exámenes */}
+      <div aria-live="polite">
+        {loading ? (
+          <div className="rounded-2xl border border-border bg-card p-12 text-center text-sm text-muted-foreground shadow-xs">
+            Cargando cronograma oficial…
+          </div>
+        ) : error ? (
+          <div className="rounded-2xl border border-sci-red/20 bg-sci-red/10 p-8 text-center text-sm font-medium text-sci-red">
+            {error}
+          </div>
+        ) : result?.value.data.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border bg-card p-12 text-center shadow-xs">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+              <CalendarX2 className="h-6 w-6" />
             </div>
+            <h3 className="font-bold text-foreground">Sin evaluaciones registradas</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              No existen exámenes programados{date ? ` para la fecha ${dateLabel(date)}` : ''}.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            {result?.value.data.map((exam: Examen) => (
+              <article
+                key={exam.id}
+                className="rounded-2xl border border-border bg-card p-5 shadow-xs transition-shadow hover:shadow-md flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <h2 className="text-base font-bold text-foreground">{exam.nombre}</h2>
+                    <span className="shrink-0 rounded-full border border-sci-cyan/30 bg-sci-cyan/10 px-2.5 py-0.5 text-[11px] font-semibold text-sci-cyan">
+                      {exam.estado}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs font-medium text-sci-blue">
+                    {exam.materia?.nombre ?? 'Materia no especificada'}
+                  </p>
+                </div>
+
+                <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 border-t border-border pt-3 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5 font-medium">
+                    <CalendarDays className="h-4 w-4 text-sci-cyan" />
+                    {dateLabel(exam.fecha)}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 font-medium">
+                    <Clock3 className="h-4 w-4 text-sci-cyan" />
+                    {exam.hora_ini.slice(0, 5)} – {exam.hora_fin.slice(0, 5)}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 font-medium">
+                    <MapPin className="h-4 w-4 text-sci-cyan" />
+                    {exam.aula?.nombre ?? 'Aula por confirmar'}
+                  </span>
+                </div>
+              </article>
+            ))}
           </div>
         )}
-      </main>
-      <Footer />
+      </div>
+
+      {/* Paginación */}
+      {!loading && !error && result && result.value.last_page > 1 && (
+        <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-border pt-4 text-xs text-muted-foreground">
+          <p>
+            Página <span className="font-semibold text-foreground">{result.value.current_page}</span> de{' '}
+            <span className="font-semibold text-foreground">{result.value.last_page}</span> · Total:{' '}
+            <span className="font-semibold text-foreground">{result.value.total}</span> exámenes
+          </p>
+
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => {
+                setResult(null)
+                setPage((p) => Math.max(1, p - 1))
+              }}
+              className="text-xs cursor-pointer"
+            >
+              Anterior
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={page >= result.value.last_page}
+              onClick={() => {
+                setResult(null)
+                setPage((p) => p + 1)
+              }}
+              className="text-xs cursor-pointer"
+            >
+              Siguiente
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

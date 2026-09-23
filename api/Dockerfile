@@ -31,4 +31,7 @@ WORKDIR /var/www
 COPY ./ /var/www
 RUN chmod -R 0777 /var/www/storage/ /var/www/bootstrap/cache/
 
-RUN composer config policy.advisories.block false && composer install --no-interaction
+RUN composer config policy.advisories.block false && composer install --no-interaction --no-dev --optimize-autoloader
+
+# Comando de arranque: limpia caché de config e inicia Apache
+CMD sh -c "php artisan config:clear && php artisan migrate --force && apache2-foreground"

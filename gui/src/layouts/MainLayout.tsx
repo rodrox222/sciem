@@ -1,50 +1,24 @@
 import React from 'react'
-import { Footer } from '../components/Footer'
-import { Navbar } from '../components/Navbar'
-import { IdleTimer } from '../components/IdleTimer'
+import { Outlet } from 'react-router-dom'
+import { Header } from '@/components/Header'
+import { Footer } from '@/components/Footer'
+import { IdleTimer } from '@/components/IdleTimer'
 
-interface MainLayoutProps {
-  children: React.ReactNode
-}
-
-export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
-  const handleLogout = () => {
-    localStorage.removeItem('auth_token')
-    localStorage.removeItem('user_role')
-    localStorage.removeItem('user_data')
-    localStorage.removeItem('sciem_last_activity')
-    window.location.href = '/login'
-  }
-
-  const role = localStorage.getItem('user_role') || 'Docente'
-
-  let displayName = role
-
-  try {
-    const userDataRaw = localStorage.getItem('user_data')
-    const userData = userDataRaw ? JSON.parse(userDataRaw) : null
-
-    if (userData?.nombre) {
-      displayName = `${userData.nombre} ${userData.apellido || ''}`.trim()
-    }
-  } catch {
-    // Si el JSON guardado no es válido, se mantiene el rol como respaldo
-  }
-
+export const MainLayout: React.FC = () => {
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
-      {/* Barra de navegación única adaptativa */}
-      <Navbar rol={role} usuario={displayName} onLogout={handleLogout} />
+    <div className="min-h-screen flex flex-col bg-background text-foreground font-sans">
+      {/* Cabecera institucional unificada (detecta sesión activa automáticamente) */}
+      <Header />
 
-      {/* Área principal de contenido */}
-      <main className="flex-1 w-full max-w-7xl mx-auto p-6">
-        {children}
+      {/* Contenedor central donde React Router inyecta la vista actual */}
+      <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6">
+        <Outlet />
       </main>
 
-      {/* Footer institucional */}
+      {/* Pie de página institucional */}
       <Footer />
 
-      {/* Modal único de control de inactividad */}
+      {/* Control global de inactividad de sesión */}
       <IdleTimer />
     </div>
   )

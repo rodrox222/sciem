@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LoginView } from '../components/LoginView'
-import { AuthLayout } from '../layouts/AuthLayout'
 
 export const LoginPage: React.FC = () => {
   useEffect(() => {
@@ -14,10 +13,10 @@ export const LoginPage: React.FC = () => {
     localStorage.setItem('user_role', role)
 
     // Revisar si venimos rebotados por inactividad
-    const idleRedirect = localStorage.getItem('sciem_idle_redirect')
+    const idleRedirect = localStorage.getItem('sci_idle_redirect') // <-- Actualizado a sci
 
     if (idleRedirect) {
-      localStorage.removeItem('sciem_idle_redirect') 
+      localStorage.removeItem('sci_idle_redirect') 
       navigate(idleRedirect, { replace: true })
     } else {
       navigate('/dashboard', { replace: true })
@@ -25,12 +24,10 @@ export const LoginPage: React.FC = () => {
   }
 
   return (
-    <AuthLayout>
-      <LoginView
-        onLoginSuccess={handleLoginSuccess}
-        onForgotPassword={() => navigate('/recuperar-contrasena')}
-      />
-    </AuthLayout>
+    <LoginView
+      onLoginSuccess={handleLoginSuccess}
+      onForgotPassword={() => navigate('/recuperar-contrasena')}
+    />
   )
 }
 

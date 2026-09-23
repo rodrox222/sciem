@@ -1,8 +1,16 @@
 import { useState, type FormEvent } from 'react'
 import { LoaderCircle } from 'lucide-react'
 
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog'
-import { ApiError } from '../../services/apiClient'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog'
+import { Button } from '../ui/button'
+import { Input } from '../ui/input'
+import { Label } from '../ui/label'
 import { examenesService, type CatalogItem } from '../../services/examenes.service'
 
 interface CrearMateriaModalProps {
@@ -32,78 +40,76 @@ export function CrearMateriaModal({ onOpenChange, onCreated }: CrearMateriaModal
       const response = await examenesService.createMateria(trimmedName)
       onCreated(response.materia)
     } catch (error) {
-      if (error instanceof ApiError) {
-        const nameError = error.errors?.nombre?.[0]
-        if (nameError) setFieldError(nameError)
-        else setGeneralError(error.message)
-      } else {
-        setGeneralError('No se pudo crear la materia. Intenta nuevamente.')
-      }
+      setGeneralError(
+        error instanceof Error ? error.message : 'No se pudo crear la materia. Intenta nuevamente.'
+      )
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!saving) onOpenChange(open)
-      }}
-    >
-      <DialogContent
-        showCloseButton={false}
-        className="max-h-[calc(100vh-2rem)] max-w-md gap-0 overflow-y-auto border-t-4 border-[#D59A18] bg-white p-0 text-[#1E293B] shadow-2xl"
-      >
-        <DialogHeader className="gap-2 px-5 py-5 sm:px-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#946807]">
-            Programación de exámenes
-          </p>
-          <DialogTitle className="text-xl font-bold text-[#003770]">Crear materia</DialogTitle>
-          <DialogDescription className="text-sm leading-relaxed text-[#64748B]">
-            La materia quedará disponible en el catálogo y seleccionada para este examen.
+    <Dialog open onOpenChange={(open) => !saving && onOpenChange(open)}>
+      <DialogContent className="max-w-md p-0 overflow-hidden border-border bg-card text-card-foreground shadow-2xl rounded-2xl">
+        <DialogHeader className="border-b border-border px-6 py-5 text-left">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-sci-cyan">
+            Catálogo Académico
+          </span>
+          <DialogTitle className="mt-1 text-xl font-bold text-sci-navy">
+            Crear nueva materia
+          </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            La materia quedará registrada en el sistema y se seleccionará automáticamente para este examen.
           </DialogDescription>
         </DialogHeader>
+
         <form onSubmit={handleSubmit}>
-          <div className="space-y-2 px-5 pb-5 sm:px-6">
-            <label htmlFor="nueva-materia-nombre" className="block text-sm font-semibold">
-              Nombre de la materia *
-            </label>
-            <input
-              id="nueva-materia-nombre"
-              autoFocus
-              maxLength={150}
-              value={nombre}
-              onChange={(event) => {
-                setNombre(event.target.value)
-                setFieldError('')
-                setGeneralError('')
-              }}
-              aria-invalid={Boolean(fieldError)}
-              aria-describedby={fieldError ? 'nueva-materia-error' : undefined}
-              placeholder="Ej. Álgebra II"
-              className="h-11 w-full rounded-lg border border-[#E2E8F0] px-3 text-sm outline-none focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/15"
-            />
-            {fieldError && <p id="nueva-materia-error" className="text-sm text-[#B0040E]" role="alert">{fieldError}</p>}
-            {generalError && <p className="text-sm text-[#B0040E]" role="alert">{generalError}</p>}
+          <div className="space-y-4 px-6 py-5">
+            <div className="space-y-1.5 text-left">
+              <Label htmlFor="nueva-materia-nombre" className="text-xs font-semibold">
+                Nombre de la materia *
+              </Label>
+              <Input
+                id="nueva-materia-nombre"
+                autoFocus
+                maxLength={150}
+                value={nombre}
+                onChange={(event) => {
+                  setNombre(event.target.value)
+                  setFieldError('')
+                  setGeneralError('')
+                }}
+                placeholder="Ej. Álgebra II"
+                className={`h-11 ${fieldError ? 'border-sci-red' : ''}`}
+              />
+              {fieldError && <p className="text-xs text-sci-red font-medium">{fieldError}</p>}
+            </div>
+
+            {generalError && (
+              <div className="rounded-xl border border-sci-red/20 bg-sci-red/10 px-4 py-3 text-xs text-sci-red font-semibold">
+                {generalError}
+              </div>
+            )}
           </div>
-          <div className="flex flex-col-reverse gap-2 border-t border-[#E2E8F0] bg-[#F7F7F7] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
-            <button
+
+          <div className="flex flex-col-reverse gap-2 border-t border-border bg-muted/40 px-6 py-4 sm:flex-row sm:justify-end">
+            <Button
               type="button"
+              variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={saving}
-              className="min-h-11 rounded-lg border border-[#E2E8F0] bg-white px-4 text-sm font-semibold text-[#003770] disabled:opacity-50"
+              className="cursor-pointer"
             >
               Cancelar
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               disabled={saving}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#0056B3] px-4 text-sm font-semibold text-white hover:bg-[#003770] disabled:cursor-wait disabled:opacity-50"
+              className="bg-sci-blue hover:opacity-90 text-white font-semibold cursor-pointer min-w-32"
             >
-              {saving && <LoaderCircle className="h-4 w-4 animate-spin" />}
+              {saving && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
               {saving ? 'Guardando...' : 'Crear materia'}
-            </button>
+            </Button>
           </div>
         </form>
       </DialogContent>

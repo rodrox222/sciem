@@ -1,5 +1,5 @@
-import { apiRequest } from './apiClient'
-import type { PaginatedResponse } from './aulas.service'
+import { api } from './api'
+import type { PaginatedResponse } from '@/types/api'
 
 export type NormaTipo = 'General' | 'Particular'
 
@@ -23,7 +23,7 @@ interface NormaMutationResponse {
   norma: Norma
 }
 
-interface NormaFilters {
+export interface NormaFilters {
   search?: string
   tipo?: NormaTipo | ''
   page?: number
@@ -44,45 +44,35 @@ const buildQuery = (filters: NormaFilters) => {
 
 export const normasService = {
   list(filters: NormaFilters = {}) {
-    return apiRequest<PaginatedResponse<Norma>>(
-      `/normas${buildQuery(filters)}`,
-    )
+    return api.get<PaginatedResponse<Norma>>(`/normas${buildQuery(filters)}`)
   },
 
   listAll(filters: Omit<NormaFilters, 'all' | 'page'> = {}) {
-    return apiRequest<Norma[]>(
-      `/normas${buildQuery({ ...filters, all: true })}`,
-    )
+    return api.get<Norma[]>(`/normas${buildQuery({ ...filters, all: true })}`)
   },
 
   create(payload: NormaPayload) {
-    return apiRequest<NormaMutationResponse>('/normas', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    })
+    return api.post<NormaMutationResponse>('/normas', payload)
   },
 
   update(id: string, payload: NormaPayload) {
-    return apiRequest<NormaMutationResponse>(`/normas/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    })
+    return api.put<NormaMutationResponse>(`/normas/${id}`, payload)
   },
 
-  createParticularForExam(examId: string, particulares: Pick<NormaPayload, 'titulo' | 'descripcion'>[]) {
-    return apiRequest<{ message: string; normas: Norma[] }>(
+  createParticularForExam(
+    examId: string,
+    particulares: Pick<NormaPayload, 'titulo' | 'descripcion'>[],
+  ) {
+    return api.post<{ message: string; normas: Norma[] }>(
       `/examenes/${examId}/normas/particulares`,
-      { method: 'POST', body: JSON.stringify({ particulares }) },
+      { particulares },
     )
   },
 
   assignToExam(examId: string, normIds: string[]) {
-    return apiRequest<{ message: string; normas: Norma[] }>(
+    return api.post<{ message: string; normas: Norma[] }>(
       `/examenes/${examId}/normas`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ normas: normIds }),
-      },
+      { normas: normIds },
     )
   },
 }
