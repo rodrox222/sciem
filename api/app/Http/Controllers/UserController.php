@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 
 class UserController extends Controller
 {
@@ -26,31 +27,26 @@ class UserController extends Controller
 
         $coleccion = collect();
 
-        // Admin (no tiene columna email)
         if (!$tipo || $tipo === 'admin') {
             $query = Admin::query();
             $this->aplicarFiltros($query, $search, $activo, false);
             $coleccion = $coleccion->concat($query->get()->map(fn ($u) => $this->formatearUsuario($u, 'admin')));
         }
 
-        // Docente
         if (!$tipo || $tipo === 'docente') {
             $query = Docente::query();
             $this->aplicarFiltros($query, $search, $activo, true);
             $coleccion = $coleccion->concat($query->get()->map(fn ($u) => $this->formatearUsuario($u, 'docente')));
         }
 
-        // Auxiliar
         if (!$tipo || $tipo === 'auxiliar') {
             $query = Auxiliar::query();
             $this->aplicarFiltros($query, $search, $activo, true);
             $coleccion = $coleccion->concat($query->get()->map(fn ($u) => $this->formatearUsuario($u, 'auxiliar')));
         }
 
-        // Ordenar por fecha de creación más reciente
         $coleccion = $coleccion->sortByDesc('created_at')->values();
 
-        // Paginación manual para mantener el formato de Laravel paginate()
         $page = LengthAwarePaginator::resolveCurrentPage();
         $perPage = 10;
         $items = $coleccion->slice(($page - 1) * $perPage, $perPage)->values();
@@ -114,25 +110,107 @@ class UserController extends Controller
         }
 
         $user = $res['user'];
-        $tipo = $res['tipo'];
+        $tipoActual = $res['tipo'];
         $data = $request->validated();
 
+        // Extraer y remover el rol de los datos a actualizar
+        $nuevoTipo = $data['tipo_usuario'] ?? $tipoActual;
+        unset($data['tipo_usuario']);
+
+        // Si no se envió contraseña nueva, no tocarla
         if (empty($data['password'])) {
             unset($data['password']);
         }
-        unset($data['tipo_usuario']);
 
-        $user->update($data);
+        // Si hay cambio de rol entre tablas distintas
+        if ($nuevoTipo !== $tipoActual) {
+            // Protección: No dejar al sistema sin administradores activos
+            if ($tipoActual === 'admin' && $user->activo) {
+                $adminsActivos = Admin::where('activo', true)->count();
+                if ($adminsActivos <= 1) {
+                    return response()->json([
+                        'message' => 'No se puede cambiar el rol al único administrador activo.'
+                    ], 422);
+                }
+            }
+
+            // Exigir email si el nuevo rol lo requiere y no existe
+            $emailFinal = $data['email'] ?? $user->email ?? null;
+            if (in_array($nuevoTipo, ['docente', 'auxiliar']) && empty($emailFinal)) {
+                return response()->json([
+                    'message' => 'El correo es obligatorio para docentes y auxiliares.'
+                ], 422);
+            }
+
+            try {
+                $user = DB::transaction(function () use ($user, $tipoActual, $nuevoTipo, $data, $emailFinal) {
+                    $claseDestino = $this->obtenerClaseModelo($nuevoTipo);
+
+                    // Extraer los atributos existentes limpios
+                    $atributosBase = $user->getAttributes();
+
+                    // Lista blanca de columnas permitidas comunes en la base de datos
+                    $camposPermitidos = [
+                        'id',
+                        'ci',
+                        'ci_extension',
+                        'nombre',
+                        'apellido_paterno',
+                        'apellido_materno',
+                        'email',
+                        'password',
+                        'activo',
+                        'ultimo_acceso',
+                        'created_at',
+                        'updated_at',
+                    ];
+
+                    $datosLimpios = [];
+                    foreach ($camposPermitidos as $campo) {
+                        if (array_key_exists($campo, $data)) {
+                            $datosLimpios[$campo] = $data[$campo];
+                        } elseif (array_key_exists($campo, $atributosBase)) {
+                            $datosLimpios[$campo] = $atributosBase[$campo];
+                        }
+                    }
+
+                    // Asegurar que si el rol destino es admin, no intente insertar email ni ci_extension
+                    if ($nuevoTipo === 'admin') {
+                        unset($datosLimpios['email'], $datosLimpios['ci_extension']);
+                    } else {
+                        $datosLimpios['email'] = $emailFinal;
+                    }
+
+                    // 1. Eliminar primero el registro de la tabla origen (para liberar CI/Email)
+                    $user->delete();
+
+                    // 2. Crear el registro en la tabla destino con el mismo ID
+                    $nuevoRegistro = new $claseDestino();
+                    $nuevoRegistro->forceFill($datosLimpios);
+                    $nuevoRegistro->save();
+
+                    return $nuevoRegistro;
+                });
+
+                $tipoActual = $nuevoTipo;
+            } catch (\Exception $e) {
+                return response()->json([
+                    'message' => 'Error al migrar de rol: ' . $e->getMessage()
+                ], 422);
+            }
+        } else {
+            $user->update($data);
+        }
 
         $this->registrarLog($request, 'USUARIO_ACTUALIZADO', [
-            'tipo_usuario'        => $tipo,
+            'tipo_usuario'        => $tipoActual,
             'target_id'           => $user->id,
             'campos_actualizados' => array_keys($data),
         ]);
 
         return response()->json([
             'message' => 'Usuario actualizado exitosamente.',
-            'user'    => $this->formatearUsuario($user, $tipo),
+            'user'    => $this->formatearUsuario($user, $tipoActual),
         ]);
     }
 
@@ -168,9 +246,6 @@ class UserController extends Controller
 
     // --- MÉTODOS AUXILIARES ---
 
-    /**
-     * Centraliza la persistencia en logs_auditoria con el nuevo esquema
-     */
     private function registrarLog(Request $request, string $accion, ?array $detalles = null): void
     {
         $actor = $request->user();
@@ -219,17 +294,14 @@ class UserController extends Controller
             'auxiliar' => Auxiliar::class,
         ];
 
-        $resultado = null;
-
         foreach ($mapaModelos as $tipo => $modelo) {
             $user = $modelo::find($id);
             if ($user) {
-                $resultado = ['user' => $user, 'tipo' => $tipo];
-                break;
+                return ['user' => $user, 'tipo' => $tipo];
             }
         }
 
-        return $resultado;
+        return null;
     }
 
     private function formatearUsuario(Model $u, string $tipo): array
