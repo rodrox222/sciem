@@ -1,18 +1,22 @@
 import { useState, type FormEvent } from 'react'
-import { Info, LoaderCircle, X } from 'lucide-react'
+import { Info, LoaderCircle } from 'lucide-react'
 
 import type {
   Norma as ApiNorma,
   NormaPayload,
   NormaTipo as ApiNormaTipo,
 } from '../../services/normas.service'
-import { ApiError } from '../../services/apiClient'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog'
 
-// Compatibilidad temporal con las pantallas de programación existentes.
-// Esas pantallas serán migradas al contrato UUID durante la HU-06.
 export type NormaTipo = ApiNormaTipo
 export type NormaEstado = 'Activo' | 'Inactivo'
 export interface Norma {
@@ -69,68 +73,35 @@ export function NormaFormModal({
       })
       onOpenChange(false)
     } catch (error) {
-      if (error instanceof ApiError) {
-        const apiErrors = Object.fromEntries(
-          Object.entries(error.errors ?? {}).map(([key, messages]) => [
-            key,
-            messages[0] ?? '',
-          ]),
-        )
-        setFieldErrors((current) => ({ ...current, ...apiErrors }))
-        setGeneralError(error.message)
-      } else {
-        setGeneralError('Ocurrió un error inesperado al guardar la norma.')
-      }
+      setGeneralError(
+        error instanceof Error ? error.message : 'Ocurrió un error inesperado al guardar la norma.',
+      )
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[#1E293B]/45 px-4 py-6 backdrop-blur-[2px]"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !saving) onOpenChange(false)
-      }}
-      role="presentation"
-    >
-      <section
-        aria-labelledby="norma-modal-title"
-        aria-modal="true"
-        className="max-h-[94vh] w-full max-w-xl overflow-y-auto rounded-2xl border-t-4 border-[#D59A18] bg-white shadow-2xl"
-        role="dialog"
-      >
+    <Dialog open onOpenChange={(open) => !saving && onOpenChange(open)}>
+      <DialogContent className="max-w-xl p-0 overflow-hidden border-border bg-card text-card-foreground shadow-2xl rounded-2xl">
         <form onSubmit={handleSubmit}>
-          <header className="flex items-start justify-between border-b border-[#E2E8F0] px-5 py-5 sm:px-7">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#D59A18]">
-                Catálogo institucional
-              </p>
-              <h2
-                id="norma-modal-title"
-                className="mt-1 text-2xl font-bold text-[#003770]"
-              >
-                {editando ? 'Editar norma' : 'Registrar norma'}
-              </h2>
-              <p className="mt-1 text-sm text-[#64748B]">
-                Esta norma general quedará disponible para los exámenes.
-              </p>
-            </div>
+          <DialogHeader className="border-b border-border px-6 py-5 text-left">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-sci-cyan">
+              Catálogo institucional
+            </span>
+            <DialogTitle className="mt-1 text-2xl font-bold text-sci-navy">
+              {editando ? 'Editar norma' : 'Registrar norma'}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Esta norma general quedará disponible al programar evaluaciones académicas.
+            </DialogDescription>
+          </DialogHeader>
 
-            <button
-              type="button"
-              onClick={() => onOpenChange(false)}
-              disabled={saving}
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-[#64748B] transition hover:bg-[#F7F7F7] hover:text-[#003770] disabled:opacity-50"
-              aria-label="Cerrar formulario"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </header>
-
-          <div className="space-y-5 px-5 py-5 sm:px-7">
-            <div className="space-y-2">
-              <Label htmlFor="norma-titulo">Título *</Label>
+          <div className="space-y-4 px-6 py-6">
+            <div className="space-y-1.5 text-left">
+              <Label htmlFor="norma-titulo" className="text-xs font-semibold">
+                Título *
+              </Label>
               <Input
                 id="norma-titulo"
                 autoFocus
@@ -141,17 +112,19 @@ export function NormaFormModal({
                   setFieldErrors((current) => ({ ...current, titulo: '' }))
                 }}
                 placeholder="Ej. Normas para exámenes finales"
-                className="h-11"
+                className={`h-11 ${fieldErrors.titulo ? 'border-sci-red' : ''}`}
                 aria-invalid={Boolean(fieldErrors.titulo)}
               />
-              <div className="flex justify-between gap-3">
-                <p className="text-sm text-[#E30613]">{fieldErrors.titulo}</p>
-                <span className="text-xs text-[#64748B]">{titulo.length}/150</span>
+              <div className="flex justify-between items-center text-xs">
+                <p className="text-sci-red font-medium">{fieldErrors.titulo}</p>
+                <span className="text-muted-foreground ml-auto">{titulo.length}/150</span>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="norma-descripcion">Descripción *</Label>
+            <div className="space-y-1.5 text-left">
+              <Label htmlFor="norma-descripcion" className="text-xs font-semibold">
+                Descripción *
+              </Label>
               <textarea
                 id="norma-descripcion"
                 value={descripcion}
@@ -159,60 +132,57 @@ export function NormaFormModal({
                   setDescripcion(event.target.value)
                   setFieldErrors((current) => ({ ...current, descripcion: '' }))
                 }}
-                placeholder="Describe claramente la regla que deberá aplicarse..."
-                rows={6}
-                className="min-h-40 w-full resize-y rounded-md border border-[#E2E8F0] bg-white px-3 py-3 text-sm leading-relaxed text-[#1E293B] outline-none transition placeholder:text-[#64748B] focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/20"
+                placeholder="Describe claramente la regla o lineamiento aplicable..."
+                rows={5}
+                className={`w-full resize-y rounded-xl border border-input bg-background px-3 py-2 text-sm leading-relaxed outline-none transition focus:border-sci-blue focus:ring-2 focus:ring-sci-blue/20 ${
+                  fieldErrors.descripcion ? 'border-sci-red' : ''
+                }`}
                 aria-invalid={Boolean(fieldErrors.descripcion)}
               />
               {fieldErrors.descripcion && (
-                <p className="text-sm text-[#E30613]">{fieldErrors.descripcion}</p>
+                <p className="text-xs text-sci-red font-medium">{fieldErrors.descripcion}</p>
               )}
             </div>
 
-            <p className="text-sm text-[#64748B]">Tipo: General. Las normas particulares se crean dentro de un examen.</p>
+            <p className="text-xs text-muted-foreground">
+              Tipo: <strong className="text-foreground">General</strong>. Las normas particulares se crean dentro de cada examen específico.
+            </p>
 
             {generalError && (
-              <div
-                className="rounded-lg border border-[#E30613]/25 bg-[#E30613]/5 px-4 py-3 text-sm text-[#B0040E]"
-                role="alert"
-              >
+              <div className="rounded-xl border border-sci-red/20 bg-sci-red/10 px-4 py-3 text-xs text-sci-red font-semibold">
                 {generalError}
               </div>
             )}
 
-            <div className="flex gap-3 rounded-lg border border-[#168FBD]/20 bg-[#168FBD]/8 px-4 py-3">
-              <Info className="mt-0.5 h-5 w-5 shrink-0 text-[#168FBD]" />
-              <p className="text-sm text-[#1E536E]">
-                Esta norma general podrá seleccionarse durante la programación de un examen.
+            <div className="flex gap-3 rounded-xl border border-sci-cyan/20 bg-sci-cyan/10 p-3 text-xs text-muted-foreground">
+              <Info className="h-4 w-4 shrink-0 text-sci-cyan mt-0.5" />
+              <p>
+                Esta norma institucional se podrá vincular automáticamente al momento de configurar un nuevo examen.
               </p>
             </div>
           </div>
 
-          <footer className="flex flex-col-reverse gap-3 border-t border-[#E2E8F0] bg-[#F7F7F7] px-5 py-4 sm:flex-row sm:justify-end sm:px-7">
+          <div className="flex flex-col-reverse gap-2 border-t border-border bg-muted/40 px-6 py-4 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={saving}
-              className="h-11"
+              className="cursor-pointer"
             >
               Cancelar
             </Button>
             <Button
               type="submit"
               disabled={saving}
-              className="h-11 min-w-36 bg-[#0056B3] text-white hover:bg-[#003770]"
+              className="bg-sci-blue hover:opacity-90 text-white font-semibold cursor-pointer min-w-32"
             >
               {saving && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
-              {saving
-                ? 'Guardando...'
-                : editando
-                  ? 'Guardar cambios'
-                  : 'Registrar norma'}
+              {saving ? 'Guardando...' : editando ? 'Guardar cambios' : 'Registrar norma'}
             </Button>
-          </footer>
+          </div>
         </form>
-      </section>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

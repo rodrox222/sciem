@@ -6,7 +6,7 @@ interface ProtectedRouteProps {
 }
 
 const TIMEOUT_MS = 5 * 60 * 1000
-const ACTIVITY_KEY = 'sciem_last_activity'
+const ACTIVITY_KEY = 'sci_last_activity' // <-- Actualizado a sci
 
 interface AuthState {
   checked: boolean

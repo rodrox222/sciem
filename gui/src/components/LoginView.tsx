@@ -2,16 +2,18 @@ import React, { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Check, ShieldCheck, Eye, EyeOff } from 'lucide-react'
-import { SciLogoIcon } from './ui/SciLogoIcon'
+import { Eye, EyeOff, Mail, Lock } from 'lucide-react'
+import { authService } from '@/services/auth.service'
+import { LoginBranding } from './login/LoginBranding'
 
 interface LoginViewProps {
   onLoginSuccess: (role: string) => void
   onForgotPassword: () => void
 }
 
-// Dominios oficiales institucionales o número para administradores
-const EMAIL_INSTITUCIONAL_REGEX = /^[a-zA-Z0-9._%+-]+@(est\.umss\.edu|fcyt\.umss\.edu\.bo)$/
+const EMAIL_INSTITUCIONAL_REGEX =
+  /^[a-zA-Z0-9._%+-]+@(est\.umss\.edu|fcyt\.umss\.edu\.bo)$/
+
 const NUMERIC_REGEX = /^\d+$/
 
 export const LoginView: React.FC<LoginViewProps> = ({
@@ -29,43 +31,24 @@ export const LoginView: React.FC<LoginViewProps> = ({
     setError(null)
 
     const cleanIdentifier = email.trim().toLowerCase()
-
     const esInstitucional = EMAIL_INSTITUCIONAL_REGEX.test(cleanIdentifier)
     const esIdentificadorNumerico = NUMERIC_REGEX.test(cleanIdentifier)
 
     if (!esInstitucional && !esIdentificadorNumerico) {
-      setError('Ingrese un correo institucional válido.')
+      setError('Ingrese un correo institucional válido (@fcyt.umss.edu.bo o @est.umss.edu).')
       return
     }
 
     setIsSubmitting(true)
 
     try {
-      const response = await fetch('http://localhost:8200/api/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          email: cleanIdentifier,
-          password,
-        }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Credenciales inválidas')
-      }
-
-      localStorage.setItem('auth_token', data.token)
+      const data = await authService.login(cleanIdentifier, password)
       onLoginSuccess(data.user.rol)
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message)
       } else {
-        setError('Error al procesar el inicio de sesión.')
+        setError('No se pudo procesar el inicio de sesión.')
       }
     } finally {
       setIsSubmitting(false)
@@ -73,151 +56,107 @@ export const LoginView: React.FC<LoginViewProps> = ({
   }
 
   return (
-    <div className="w-full max-w-[1020px] bg-white rounded-3xl lg:rounded-2xl shadow-xl border border-sci-border flex flex-col lg:flex-row overflow-hidden relative font-sans mx-auto">
-      {/* Barra vertical celeste institucional */}
-      <div className="hidden lg:block absolute left-0 top-6 bottom-6 w-1.5 bg-sci-cyan rounded-r-md" />
+    <div className="w-full max-w-[980px] mx-auto bg-card rounded-3xl overflow-hidden border border-border shadow-xl flex flex-col md:flex-row font-sans text-card-foreground">
 
-      {/* Header móvil */}
-      <div className="lg:hidden flex items-center justify-between px-6 py-4 border-b-2 border-sci-cyan bg-white">
-        <div className="flex items-center gap-2.5">
-          <SciLogoIcon className="h-10 w-auto" />
-          <div className="leading-tight">
-            <span className="font-black text-xl text-sci-blue tracking-tight block">
-              SCI
-            </span>
-            <span className="text-[10px] text-sci-muted font-semibold block -mt-1">
-              SISTEMA DE CONTROL INGRESO
-            </span>
-          </div>
-        </div>
+      {/* Panel izquierdo institucional (visible a partir de pantallas medianas md:) */}
+      <div className="hidden md:flex md:w-[46%]">
+        <LoginBranding />
       </div>
 
-      {/* Columna Izquierda: Información Institucional */}
-      <div className="hidden lg:flex lg:w-[45%] bg-slate-50/50 p-10 flex-col justify-between pl-12 border-r border-slate-100">
-        <div>
-          <div className="flex items-center gap-3">
-            <SciLogoIcon className="h-14 w-auto" />
-            <div>
-              <h1 className="font-extrabold text-2xl text-sci-blue tracking-tight leading-none">
-                SCI
-              </h1>
-              <span className="text-[10px] text-sci-muted font-semibold tracking-wider block mt-1">
-                SISTEMA DE CONTROL INGRESO
-              </span>
+      {/* Formulario de acceso */}
+      <div className="w-full md:w-[54%] p-6 sm:p-10 lg:p-12 xl:p-14 flex flex-col justify-center bg-card">
+        <div className="max-w-md w-full mx-auto">
+
+          {/* Encabezado */}
+          <div className="mb-6 sm:mb-8 text-left">
+            <span className="text-[11px] font-bold text-sci-cyan uppercase tracking-wider">
+              Bienvenido a SCI
+            </span>
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-sci-navy mt-1 tracking-tight">
+              Iniciar sesión
+            </h2>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-2 leading-5">
+              Ingresa tus credenciales institucionales para acceder al sistema.
+            </p>
+          </div>
+
+          {/* Mensaje de Error */}
+          {error && (
+            <div className="mb-5 px-4 py-3 bg-sci-red/10 border border-sci-red/20 text-sci-red text-xs font-semibold rounded-xl text-left">
+              {error}
             </div>
-          </div>
+          )}
 
-          <div className="mt-8 inline-block px-3.5 py-1 bg-sky-50 text-sci-cyan text-[11px] font-semibold rounded-full border border-sky-100 tracking-wide">
-            ACCESO INSTITUCIONAL
-          </div>
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
 
-          <h2 className="text-3xl font-bold text-sci-blue mt-4 leading-snug">
-            Gestión segura de evaluaciones académicas.
-          </h2>
-          <p className="text-xs text-sci-muted mt-3 leading-relaxed">
-            Ingresa tus credenciales institucionales asignadas para acceder a la plataforma.
-          </p>
-        </div>
+            {/* Campo Correo */}
+            <div className="space-y-1.5 sm:space-y-2 text-left">
+              <Label htmlFor="login-email" className="text-xs font-semibold text-foreground">
+                Correo institucional
+              </Label>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="login-email"
+                  type="text"
+                  required
+                  placeholder="ejemplo@fcyt.umss.edu.bo"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="h-11 pl-10 text-sm bg-background border-input rounded-xl"
+                />
+              </div>
+            </div>
 
-        <div className="p-3.5 bg-white rounded-xl border border-sci-border flex items-center gap-3 shadow-sm">
-          <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <Check className="w-5 h-5 text-emerald-600 stroke-[2.5]" />
-          </div>
-          <div>
-            <span className="text-xs font-bold text-sci-dark block">Sesión protegida</span>
-            <span className="text-[10px] text-sci-muted block leading-tight">
-              Control de acceso activo y trazabilidad por roles
-            </span>
-          </div>
-        </div>
-      </div>
+            {/* Campo Contraseña */}
+            <div className="space-y-1.5 sm:space-y-2 text-left">
+              <Label htmlFor="login-pass" className="text-xs font-semibold text-foreground">
+                Contraseña
+              </Label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="login-pass"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="h-11 pl-10 pr-10 text-sm bg-background border-input rounded-xl"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
 
-      {/* Columna Derecha */}
-      <div className="w-full lg:w-[55%] p-6 sm:p-10 lg:p-12 flex flex-col justify-center">
-        <span className="text-[11px] font-bold text-sci-cyan tracking-wider uppercase block">
-          BIENVENIDO A SCI
-        </span>
-        <h3 className="text-2xl sm:text-3xl font-extrabold text-sci-blue mt-1">
-          Iniciar sesión
-        </h3>
-        <p className="text-xs text-sci-muted mt-1 mb-8">
-          Ingresa tus credenciales institucionales para ingresar al sistema.
-        </p>
-
-        {error && (
-          <div className="mb-6 p-3.5 bg-red-50 border-l-4 border-sci-red text-sci-red text-xs rounded-xl flex items-center gap-2">
-            <span>{error}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="space-y-1.5 text-left">
-            <Label htmlFor="login-email" className="text-xs font-medium text-sci-dark">
-              Correo institucional
-            </Label>
-            <Input
-              id="login-email"
-              type="text"
-              required
-              placeholder="ingrese correo institucional"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="h-12 text-sm text-sci-dark bg-white border-sci-border rounded-xl focus-visible:ring-sci-blue"
-            />
-          </div>
-
-          <div className="space-y-1.5 text-left">
-            <Label htmlFor="login-pass" className="text-xs font-medium text-sci-dark">
-              Contraseña
-            </Label>
-            <div className="relative">
-              <Input
-                id="login-pass"
-                type={showPassword ? 'text' : 'password'}
-                required
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="h-12 text-sm text-sci-dark bg-white border-sci-border rounded-xl pr-11 focus-visible:ring-sci-blue"
-              />
+            {/* Enlace Olvidaste tu contraseña */}
+            <div className="flex justify-end pt-1">
               <button
                 type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-400 hover:text-sci-blue transition-colors focus:outline-none"
-                aria-label={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                onClick={onForgotPassword}
+                className="text-xs font-semibold text-sci-blue hover:text-sci-navy hover:underline transition-colors cursor-pointer"
               >
-                {showPassword ? (
-                  <EyeOff className="w-5 h-5 stroke-[1.8]" />
-                ) : (
-                  <Eye className="w-5 h-5 stroke-[1.8]" />
-                )}
+                ¿Olvidaste tu contraseña?
               </button>
             </div>
-          </div>
 
-          <div className="flex items-center justify-end text-xs pt-1">
-            <button
-              type="button"
-              onClick={onForgotPassword}
-              className="font-medium text-sci-blue hover:underline text-[11px] sm:text-xs"
+            {/* Botón Ingresar */}
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full h-11 bg-sci-blue hover:opacity-90 text-white font-bold text-sm rounded-xl shadow-xs transition-all cursor-pointer"
             >
-              ¿Olvidaste tu contraseña?
-            </button>
-          </div>
+              {isSubmitting ? 'Verificando credenciales...' : 'Ingresar a SCI'}
+            </Button>
 
-          <Button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full h-12 bg-sci-blue hover:bg-[#002852] text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-sci-blue/15 mt-2 transition-all"
-          >
-            {isSubmitting ? 'Verificando credenciales...' : 'Ingresar a SCI'}
-          </Button>
-
-          <div className="flex items-center gap-2.5 px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sci-muted text-[11px] mt-4">
-            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>Acceso seguro mediante autenticación de token centralizada.</span>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
     </div>
   )
