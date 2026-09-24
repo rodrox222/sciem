@@ -17,8 +17,8 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 // Páginas protegidas generales
 import { DashboardPage } from './pages/DashboardPage'
 import ExamenesPage from './pages/ExamenesPage'
-import MisExamenesPage from './pages/MisExamenesPage'
 import EstudiantesPage from './pages/EstudiantesPage'
+import DetalleExamenPage from './pages/DetalleExamenPage'
 
 // Páginas protegidas por Rol
 import UsuariosPage from './pages/UsuariosPage'
@@ -26,6 +26,7 @@ import AulasPage from './pages/AulasPage'
 import NormasPage from './pages/NormasPage'
 import { AuditoriaPage } from './pages/AuditoriaPage'
 import ProgramarExamenPage from './pages/ProgramarExamenPage'
+
 
 export default function App() {
   return (
@@ -50,8 +51,9 @@ export default function App() {
           <Route element={<MainLayout />}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/examenes" element={<ExamenesPage />} />
-            <Route path="/mis-examenes" element={<MisExamenesPage />} />
             <Route path="/estudiantes" element={<EstudiantesPage />} />
+            <Route path="/examenes" element={<ExamenesPage />} />
+            <Route path="/examenes/:id" element={<DetalleExamenPage />} />
 
             {/* Exclusivo Administrador */}
             <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
