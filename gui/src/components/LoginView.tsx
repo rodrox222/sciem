@@ -11,7 +11,7 @@ interface LoginViewProps {
 }
 
 // Dominios oficiales institucionales o número para administradores
-const EMAIL_INSTITUCIONAL_REGEX = /^[a-zA-Z0-9._%+-]+@(est\.umss\.edu|fcyt\.umss\.edu\.bo)$/
+const EMAIL_INSTITUCIONAL_REGEX = /^[a-zA-Z0-9._%+-]+@(est\.umss\.edu|fcyt\.umss\.edu\.bo|gmail\.com)$/i
 const NUMERIC_REGEX = /^\d+$/
 
 export const LoginView: React.FC<LoginViewProps> = ({
@@ -150,15 +150,17 @@ export const LoginView: React.FC<LoginViewProps> = ({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} autoComplete="off" className="space-y-5">
           <div className="space-y-1.5 text-left">
             <Label htmlFor="login-email" className="text-xs font-medium text-sci-dark">
               Correo institucional
             </Label>
             <Input
               id="login-email"
+              name="login-email"
               type="text"
               required
+              autoComplete="off"
               placeholder="ingrese correo institucional"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
