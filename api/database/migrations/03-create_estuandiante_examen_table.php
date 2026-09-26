@@ -12,6 +12,7 @@ return new class extends Migration
             $table->foreignUuid('id_examen')->constrained('examenes')->onDelete('cascade');
             $table->foreignUuid('id_estudiante')->constrained('estudiantes')->onDelete('cascade');
             $table->enum('estado', ['Habilitado', 'Inhabilitado'])->default('Habilitado');
+            $table->text('motivo_inhabilitacion')->nullable();
             $table->timestamp('created_at')->useCurrent();
 
             $table->primary(['id_examen', 'id_estudiante']);

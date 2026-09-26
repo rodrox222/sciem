@@ -33,9 +33,10 @@ class Estudiante extends Model
         ];
     }
 
-    public function examenes(): BelongsToMany
+    public function estudiantes(): BelongsToMany
     {
-        return $this->belongsToMany(Examen::class, 'estudiante_examen', 'id_estudiante', 'id_examen')
-            ->withPivot('estado', 'created_at');
+        return $this->belongsToMany(Estudiante::class, 'estudiante_examen', 'id_examen', 'id_estudiante')
+            ->withPivot('estado', 'motivo_inhabilitacion')
+            ->withTimestamps();
     }
 }
