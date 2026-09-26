@@ -14,6 +14,7 @@ use App\Models\Admin;
 use App\Models\Docente;
 use App\Models\Auxiliar;
 use App\Http\Controllers\EstudianteController;
+use App\Http\Controllers\HabilitacionExamenController;
 
 // --- RUTAS PÚBLICAS ---
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
