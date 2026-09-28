@@ -29,11 +29,11 @@ class AuthController extends Controller
             'email' => [
                 'required',
                 'string',
-                'regex:/^([a-zA-Z0-9._%+-]+@(est\.umss\.edu|fcyt\.umss\.edu\.bo)|\d+)$/'
+                'regex:/^([a-zA-Z0-9._%+-]+@(est\.umss\.edu|fcyt\.umss\.edu\.bo|gmail\.com)|\d+)$/i'
             ],
             'password' => 'required|string',
         ], [
-            'email.regex' => 'Debe ingresar un correo institucional válido o su cédula de identidad autorizada.'
+            'email.regex' => 'Debe ingresar un correo institucional válido.'
         ]);
 
         $rawIdentifier = trim($request->email);

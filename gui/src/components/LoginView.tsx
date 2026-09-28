@@ -11,9 +11,9 @@ interface LoginViewProps {
   onForgotPassword: () => void
 }
 
+// Dominios oficiales institucionales (o gmail si aplica a la HU)
 const EMAIL_INSTITUCIONAL_REGEX =
-  /^[a-zA-Z0-9._%+-]+@(est\.umss\.edu|fcyt\.umss\.edu\.bo)$/
-
+  /^[a-zA-Z0-9._%+-]+@(est\.umss\.edu|fcyt\.umss\.edu\.bo|gmail\.com)$/i
 const NUMERIC_REGEX = /^\d+$/
 
 export const LoginView: React.FC<LoginViewProps> = ({
@@ -35,7 +35,9 @@ export const LoginView: React.FC<LoginViewProps> = ({
     const esIdentificadorNumerico = NUMERIC_REGEX.test(cleanIdentifier)
 
     if (!esInstitucional && !esIdentificadorNumerico) {
-      setError('Ingrese un correo institucional válido (@fcyt.umss.edu.bo o @est.umss.edu).')
+      setError(
+        'Ingrese un correo institucional válido (@fcyt.umss.edu.bo o @est.umss.edu).'
+      )
       return
     }
 
@@ -57,8 +59,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
   return (
     <div className="w-full max-w-[980px] mx-auto bg-card rounded-3xl overflow-hidden border border-border shadow-xl flex flex-col md:flex-row font-sans text-card-foreground">
-
-      {/* Panel izquierdo institucional (visible a partir de pantallas medianas md:) */}
+      {/* Panel izquierdo institucional */}
       <div className="hidden md:flex md:w-[46%]">
         <LoginBranding />
       </div>
@@ -66,7 +67,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
       {/* Formulario de acceso */}
       <div className="w-full md:w-[54%] p-6 sm:p-10 lg:p-12 xl:p-14 flex flex-col justify-center bg-card">
         <div className="max-w-md w-full mx-auto">
-
           {/* Encabezado */}
           <div className="mb-6 sm:mb-8 text-left">
             <span className="text-[11px] font-bold text-sci-cyan uppercase tracking-wider">
@@ -88,10 +88,12 @@ export const LoginView: React.FC<LoginViewProps> = ({
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
-
             {/* Campo Correo */}
             <div className="space-y-1.5 sm:space-y-2 text-left">
-              <Label htmlFor="login-email" className="text-xs font-semibold text-foreground">
+              <Label
+                htmlFor="login-email"
+                className="text-xs font-semibold text-foreground"
+              >
                 Correo institucional
               </Label>
               <div className="relative">
@@ -110,7 +112,10 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
             {/* Campo Contraseña */}
             <div className="space-y-1.5 sm:space-y-2 text-left">
-              <Label htmlFor="login-pass" className="text-xs font-semibold text-foreground">
+              <Label
+                htmlFor="login-pass"
+                className="text-xs font-semibold text-foreground"
+              >
                 Contraseña
               </Label>
               <div className="relative">
@@ -128,9 +133,15 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
                   className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                  aria-label={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                  aria-label={
+                    showPassword ? 'Ocultar contraseña' : 'Ver contraseña'
+                  }
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
                 </button>
               </div>
             </div>
@@ -154,7 +165,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
             >
               {isSubmitting ? 'Verificando credenciales...' : 'Ingresar a SCI'}
             </Button>
-
           </form>
         </div>
       </div>

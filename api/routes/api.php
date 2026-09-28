@@ -14,6 +14,7 @@ use App\Models\Admin;
 use App\Models\Docente;
 use App\Models\Auxiliar;
 use App\Http\Controllers\EstudianteController;
+use App\Http\Controllers\HabilitacionExamenController;
 use Illuminate\Support\Facades\Artisan;
 
 // --- RUTAS PÚBLICAS ---
@@ -139,6 +140,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('examenes/{id}/estudiantes/{idEstudiante}', [EstudianteController::class, 'desvincularDeExamen']);
     });
 
+    //HU 9 HABILITAR ESTUDIANTES
+    // Listar estudiantes de un examen con su estado
+    Route::get('examenes/{examen}/estudiantes', [HabilitacionExamenController::class, 'index']);
+
+    // Habilitar o inhabilitar a un estudiante específico
+    Route::patch('examenes/{examen}/estudiantes/{estudiante}/habilitacion', [HabilitacionExamenController::class, 'update']);
 
 
     

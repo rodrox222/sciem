@@ -32,16 +32,18 @@ export const RequestStepForm: React.FC<RequestStepFormProps> = ({
       </div>
     )}
 
-    <form onSubmit={onSubmit} className="space-y-4">
+    <form onSubmit={onSubmit} autoComplete="off" className="space-y-4">
       <div className="space-y-1.5 text-left">
         <Label htmlFor="req-email" className="text-xs font-semibold text-foreground">
           Correo electrónico
         </Label>
         <Input
           id="req-email"
+          name="email_recovery"
           type="email"
           required
-          placeholder="ejemplo@fcyt.umss.edu.bo"
+          autoComplete="off"
+          placeholder="usuario@est.umss.edu o docente@umss.edu"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="h-11 text-sm bg-background border-input rounded-xl"
