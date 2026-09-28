@@ -11,7 +11,6 @@ export const MiniCalendar: React.FC<MiniCalendarProps> = ({
   onSelectDate,
   examDates = [],
 }) => {
-  // Helper de fecha local (evita desfase UTC de Bolivia)
   const formatLocalYMD = (d: Date): string => {
     const y = d.getFullYear()
     const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -27,12 +26,10 @@ export const MiniCalendar: React.FC<MiniCalendarProps> = ({
     )
   }
 
-  // Obtener el Lunes de la semana activa
   const getWeekDays = (baseDate: Date) => {
     const d = new Date(baseDate)
-    const day = d.getDay() // 0: Dom, 1: Lun...
+    const day = d.getDay()
     const diffToMonday = day === 0 ? -6 : 1 - day
-
     const monday = new Date(d)
     monday.setDate(d.getDate() + diffToMonday)
 
@@ -44,33 +41,23 @@ export const MiniCalendar: React.FC<MiniCalendarProps> = ({
   }
 
   const weekDays = getWeekDays(selectedDate)
-
-  // Mes y Año dinámico capitalizado (ej. "Septiembre De 2026")
-  const rawLabel = selectedDate.toLocaleDateString('es-BO', {
-    month: 'long',
-    year: 'numeric',
-  })
+  const rawLabel = selectedDate.toLocaleDateString('es-BO', { month: 'long', year: 'numeric' })
   const monthYearLabel = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1)
 
   return (
-    <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-5">
-      <h3 className="text-base font-bold text-[#0a2e5c] text-left">
+    <div className="bg-card rounded-2xl p-6 border border-border shadow-xs space-y-5">
+      <h3 className="text-base font-bold text-sci-navy text-left">
         {monthYearLabel}
       </h3>
 
-      {/* Cabecera Lun - Dom */}
       <div className="grid grid-cols-7 text-center gap-1">
         {['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'].map((day) => (
-          <span
-            key={day}
-            className="text-[11px] font-bold text-slate-400 tracking-wider"
-          >
+          <span key={day} className="text-[11px] font-bold text-muted-foreground tracking-wider">
             {day}
           </span>
         ))}
       </div>
 
-      {/* Fila única de la semana actual */}
       <div className="grid grid-cols-7 text-center gap-1.5 items-center">
         {weekDays.map((dayDate) => {
           const isSelected = isSameDay(dayDate, selectedDate)
@@ -84,15 +71,15 @@ export const MiniCalendar: React.FC<MiniCalendarProps> = ({
               onClick={() => onSelectDate(dayDate)}
               className={`h-11 w-full rounded-xl flex flex-col items-center justify-center relative font-bold text-sm transition-all cursor-pointer ${
                 isSelected
-                  ? 'bg-[#0a2e5c] text-white shadow-sm'
-                  : 'text-slate-700 hover:bg-slate-100'
+                  ? 'bg-sci-navy text-white shadow-xs'
+                  : 'text-foreground hover:bg-muted'
               }`}
             >
               <span>{dayDate.getDate()}</span>
               {hasExam && (
                 <span
                   className={`w-1.5 h-1.5 rounded-full mt-0.5 ${
-                    isSelected ? 'bg-white' : 'bg-sky-500'
+                    isSelected ? 'bg-white' : 'bg-sci-cyan'
                   }`}
                 />
               )}

@@ -1,24 +1,21 @@
 import React, { useEffect } from 'react'
-import { MainLayout } from '../layouts/MainLayout'
+import { AdminDashboard } from '../components/dashboard/AdminDashboard'
 
 export const DashboardPage: React.FC = () => {
   useEffect(() => {
-    // Título de la pestaña
     document.title = 'Dashboard | SCI'
 
-    // Colocar un estado en el historial para detectar el botón volver
     window.history.pushState({ dashboard: true }, '', window.location.href)
 
     const handleBackNavigation = () => {
-      // Limpiar credenciales y expulsar al login
       localStorage.removeItem('auth_token')
       localStorage.removeItem('user_role')
-      localStorage.removeItem('sciem_last_activity')
+      localStorage.removeItem('user_data')
+      localStorage.removeItem('sci_last_activity')
 
       window.location.replace('/login')
     }
 
-    // aldar volver
     window.addEventListener('popstate', handleBackNavigation)
 
     return () => {
@@ -28,25 +25,30 @@ export const DashboardPage: React.FC = () => {
 
   const role = localStorage.getItem('user_role') || 'Docente'
 
-  return (
-    <MainLayout>
-      <div className="space-y-4">
-        <div>
-          <h2 className="text-2xl font-bold text-[#003770]">
-            Panel Principal - {role}
-          </h2>
-          <p className="text-sm text-slate-500 mt-1">
-            Bienvenido al Sistema de Control Institucional (SCI).
-          </p>
-        </div>
+  if (['admin', 'administrador'].includes(role.toLowerCase())) {
+    return <AdminDashboard />
+  }
 
-        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-slate-600">
-            Selecciona una opción del menú para comenzar a gestionar el módulo.
-          </p>
-        </div>
+  return (
+    <div className="space-y-6">
+      <div>
+        <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-sci-cyan">
+          Panel de Control
+        </span>
+        <h1 className="mt-1 text-2xl sm:text-3xl font-extrabold tracking-tight text-sci-navy capitalize">
+          Bienvenido, {role}
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Sistema de Control de Ingreso (SCI) · Facultad de Ciencias y Tecnología
+        </p>
       </div>
-    </MainLayout>
+
+      <div className="rounded-2xl border border-border bg-card p-6 shadow-xs">
+        <p className="text-sm text-muted-foreground">
+          Selecciona un módulo en la barra de navegación superior para comenzar tus actividades académicas.
+        </p>
+      </div>
+    </div>
   )
 }
 

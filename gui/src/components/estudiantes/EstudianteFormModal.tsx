@@ -1,12 +1,21 @@
 import { useState, type FormEvent } from 'react'
-import { Info, LoaderCircle, X } from 'lucide-react'
+import { Info, LoaderCircle } from 'lucide-react'
 
-import { ApiError } from '../../services/apiClient'
 import type {
   EstadoInscripcion,
   Estudiante,
   InscripcionPayload,
 } from '../../services/estudiantes.service'
+import { Button } from '../ui/button'
+import { Input } from '../ui/input'
+import { Label } from '../ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog'
 
 interface EstudianteFormModalProps {
   estudiante?: Estudiante | null
@@ -96,134 +105,202 @@ export function EstudianteFormModal({
       })
       onClose()
     } catch (error) {
-      if (error instanceof ApiError) {
-        const apiErrors = Object.fromEntries(
-          Object.entries(error.errors ?? {}).map(([key, messages]) => [
-            key,
-            messages[0] ?? '',
-          ]),
-        )
-        setErrors((current) => ({ ...current, ...apiErrors }))
-        setGeneralError(error.message)
-      } else {
-        setGeneralError('Ocurrió un error inesperado al guardar al estudiante.')
-      }
+      setGeneralError(
+        error instanceof Error
+          ? error.message
+          : 'Ocurrió un error inesperado al guardar al estudiante.',
+      )
     } finally {
       setSaving(false)
     }
   }
 
-  const inputClass = (field: string) =>
-    `min-h-11 w-full rounded-lg border bg-white px-3 py-2 text-sm text-[#1E293B] outline-none transition ${
-      errors[field]
-        ? 'border-[#E30613] focus:ring-2 focus:ring-[#E30613]/10'
-        : 'border-[#E2E8F0] focus:border-[#0056B3] focus:ring-2 focus:ring-[#0056B3]/15'
-    }`
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[#1E293B]/45 p-4 backdrop-blur-[2px]"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !saving) onClose()
-      }}
-    >
-      <section
-        className="max-h-[94vh] w-full max-w-2xl overflow-y-auto rounded-2xl border-t-4 border-[#E30613] bg-white shadow-2xl"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="student-modal-title"
-      >
+    <Dialog open onOpenChange={(open) => !saving && !open && onClose()}>
+      <DialogContent className="max-w-2xl p-0 overflow-hidden border-border bg-card text-card-foreground shadow-2xl rounded-2xl">
         <form onSubmit={handleSubmit} noValidate>
-          <header className="sticky top-0 z-10 flex items-start justify-between border-b border-[#E2E8F0] bg-white px-5 py-5 sm:px-7">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#E30613]">
-                Gestión de estudiantes
-              </p>
-              <h2 id="student-modal-title" className="mt-1 text-2xl font-bold text-[#003770]">
-                {editing ? 'Actualizar estudiante' : 'Registrar estudiante'}
-              </h2>
-              <p className="mt-1 text-sm text-[#64748B]">
-                {examMode
-                  ? 'Los datos quedarán vinculados al examen seleccionado.'
-                  : 'El registro se almacenará en el padrón institucional.'}
-              </p>
+          <DialogHeader className="border-b border-border px-6 py-5 text-left">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-sci-cyan">
+              Gestión de estudiantes
+            </span>
+            <DialogTitle className="mt-1 text-2xl font-bold text-sci-navy">
+              {editing ? 'Actualizar estudiante' : 'Registrar estudiante'}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {examMode
+                ? 'Los datos quedarán vinculados al examen seleccionado.'
+                : 'El registro se almacenará en el padrón institucional.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 px-6 py-6 max-h-[65vh] overflow-y-auto">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5 text-left">
+                <Label htmlFor="std-nombre" className="text-xs font-semibold">
+                  Nombre *
+                </Label>
+                <Input
+                  id="std-nombre"
+                  autoFocus
+                  value={form.nombre}
+                  maxLength={100}
+                  onChange={(event) => setField('nombre', event.target.value)}
+                  placeholder="Ej. Carlos"
+                  className={`h-11 ${errors.nombre ? 'border-sci-red' : ''}`}
+                />
+                {errors.nombre && <p className="text-xs text-sci-red font-medium">{errors.nombre}</p>}
+              </div>
+
+              <div className="space-y-1.5 text-left">
+                <Label htmlFor="std-paterno" className="text-xs font-semibold">
+                  Apellido paterno *
+                </Label>
+                <Input
+                  id="std-paterno"
+                  value={form.apellido_paterno}
+                  maxLength={100}
+                  onChange={(event) => setField('apellido_paterno', event.target.value)}
+                  placeholder="Ej. Vargas"
+                  className={`h-11 ${errors.apellido_paterno ? 'border-sci-red' : ''}`}
+                />
+                {errors.apellido_paterno && (
+                  <p className="text-xs text-sci-red font-medium">{errors.apellido_paterno}</p>
+                )}
+              </div>
             </div>
-            <button type="button" onClick={onClose} disabled={saving} className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-[#64748B] hover:bg-[#F7F7F7]" aria-label="Cerrar formulario">
-              <X className="h-5 w-5" />
-            </button>
-          </header>
 
-          <div className="space-y-5 px-5 py-5 sm:px-7">
-            <div className="grid gap-5 sm:grid-cols-2">
-              <label className="space-y-2">
-                <span className="text-sm font-semibold">Nombre *</span>
-                <input autoFocus value={form.nombre} maxLength={100} onChange={(event) => setField('nombre', event.target.value)} className={inputClass('nombre')} placeholder="Ej. Carlos" />
-                {errors.nombre && <p className="text-sm text-[#E30613]">{errors.nombre}</p>}
-              </label>
-              <label className="space-y-2">
-                <span className="text-sm font-semibold">Apellido paterno *</span>
-                <input value={form.apellido_paterno} maxLength={100} onChange={(event) => setField('apellido_paterno', event.target.value)} className={inputClass('apellido_paterno')} placeholder="Ej. Vargas" />
-                {errors.apellido_paterno && <p className="text-sm text-[#E30613]">{errors.apellido_paterno}</p>}
-              </label>
+            <div className="space-y-1.5 text-left">
+              <Label htmlFor="std-materno" className="text-xs font-semibold">
+                Apellido materno
+              </Label>
+              <Input
+                id="std-materno"
+                value={form.apellido_materno}
+                maxLength={100}
+                onChange={(event) => setField('apellido_materno', event.target.value)}
+                placeholder="Ej. Flores"
+                className="h-11"
+              />
             </div>
 
-            <label className="block space-y-2">
-              <span className="text-sm font-semibold">Apellido materno</span>
-              <input value={form.apellido_materno} maxLength={100} onChange={(event) => setField('apellido_materno', event.target.value)} className={inputClass('apellido_materno')} placeholder="Ej. Flores" />
-            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5 text-left">
+                <Label htmlFor="std-sis" className="text-xs font-semibold">
+                  Código SIS *
+                </Label>
+                <Input
+                  id="std-sis"
+                  value={form.codigo_sis}
+                  maxLength={20}
+                  inputMode="numeric"
+                  onChange={(event) => setField('codigo_sis', event.target.value)}
+                  placeholder="Ej. 202104589"
+                  className={`h-11 ${errors.codigo_sis ? 'border-sci-red' : ''}`}
+                />
+                {errors.codigo_sis && (
+                  <p className="text-xs text-sci-red font-medium">{errors.codigo_sis}</p>
+                )}
+              </div>
 
-            <div className="grid gap-5 sm:grid-cols-2">
-              <label className="space-y-2">
-                <span className="text-sm font-semibold">Código SIS *</span>
-                <input value={form.codigo_sis} maxLength={20} inputMode="numeric" onChange={(event) => setField('codigo_sis', event.target.value)} className={inputClass('codigo_sis')} placeholder="Ej. 202104589" />
-                {errors.codigo_sis && <p className="text-sm text-[#E30613]">{errors.codigo_sis}</p>}
-              </label>
-              <label className="space-y-2">
-                <span className="text-sm font-semibold">Carnet de identidad *</span>
-                <input value={form.ci} maxLength={20} autoCapitalize="characters" onChange={(event) => setField('ci', event.target.value)} className={inputClass('ci')} placeholder="Ej. 8234567A" />
-                {errors.ci ? <p className="text-sm text-[#E30613]">{errors.ci}</p> : <p className="text-xs text-[#64748B]">Números y una letra final opcional.</p>}
-              </label>
+              <div className="space-y-1.5 text-left">
+                <Label htmlFor="std-ci" className="text-xs font-semibold">
+                  Carnet de identidad *
+                </Label>
+                <Input
+                  id="std-ci"
+                  value={form.ci}
+                  maxLength={20}
+                  autoCapitalize="characters"
+                  onChange={(event) => setField('ci', event.target.value)}
+                  placeholder="Ej. 8234567"
+                  className={`h-11 ${errors.ci ? 'border-sci-red' : ''}`}
+                />
+                {errors.ci && <p className="text-xs text-sci-red font-medium">{errors.ci}</p>}
+              </div>
             </div>
 
-            <label className="block space-y-2">
-              <span className="text-sm font-semibold">Complemento o extensión del CI</span>
-              <input value={form.ci_extension} maxLength={10} onChange={(event) => setField('ci_extension', event.target.value)} className={inputClass('ci_extension')} placeholder="Ej. CB" />
-            </label>
+            <div className="space-y-1.5 text-left">
+              <Label htmlFor="std-ext" className="text-xs font-semibold">
+                Complemento o extensión del CI
+              </Label>
+              <Input
+                id="std-ext"
+                value={form.ci_extension}
+                maxLength={10}
+                onChange={(event) => setField('ci_extension', event.target.value)}
+                placeholder="Ej. CB"
+                className="h-11"
+              />
+            </div>
 
-            <label className="block space-y-2">
-              <span className="text-sm font-semibold">Correo institucional *</span>
-              <input type="email" value={form.email_institucional} maxLength={150} onChange={(event) => setField('email_institucional', event.target.value)} className={inputClass('email_institucional')} placeholder="Ej. 202104589@est.umss.edu" />
-              {errors.email_institucional && <p className="text-sm text-[#E30613]">{errors.email_institucional}</p>}
-            </label>
+            <div className="space-y-1.5 text-left">
+              <Label htmlFor="std-email" className="text-xs font-semibold">
+                Correo institucional *
+              </Label>
+              <Input
+                id="std-email"
+                type="email"
+                value={form.email_institucional}
+                maxLength={150}
+                onChange={(event) => setField('email_institucional', event.target.value)}
+                placeholder="Ej. 202104589@est.umss.edu"
+                className={`h-11 ${errors.email_institucional ? 'border-sci-red' : ''}`}
+              />
+              {errors.email_institucional && (
+                <p className="text-xs text-sci-red font-medium">{errors.email_institucional}</p>
+              )}
+            </div>
 
             {examMode && (
-              <label className="block space-y-2">
-                <span className="text-sm font-semibold">Estado en el examen *</span>
-                <select value={form.estado} onChange={(event) => setField('estado', event.target.value as EstadoInscripcion)} className={inputClass('estado')}>
+              <div className="space-y-1.5 text-left">
+                <Label htmlFor="std-estado" className="text-xs font-semibold">
+                  Estado en el examen *
+                </Label>
+                <select
+                  id="std-estado"
+                  value={form.estado}
+                  onChange={(event) => setField('estado', event.target.value as EstadoInscripcion)}
+                  className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
+                >
                   <option value="Habilitado">Habilitado</option>
                   <option value="Inhabilitado">Inhabilitado</option>
                 </select>
-              </label>
+              </div>
             )}
 
-            {generalError && <div className="rounded-lg border border-[#E30613]/25 bg-[#E30613]/5 px-4 py-3 text-sm text-[#B0040E]" role="alert">{generalError}</div>}
+            {generalError && (
+              <div className="rounded-xl border border-sci-red/20 bg-sci-red/10 px-4 py-3 text-xs text-sci-red font-semibold">
+                {generalError}
+              </div>
+            )}
 
-            <div className="flex gap-3 rounded-lg border border-[#168FBD]/20 bg-[#168FBD]/8 px-4 py-3">
-              <Info className="mt-0.5 h-5 w-5 shrink-0 text-[#168FBD]" />
-              <p className="text-sm text-[#1E536E]">El código SIS identifica de forma única al estudiante. Los errores del servidor aparecerán junto al campo correspondiente.</p>
+            <div className="flex gap-3 rounded-xl border border-sci-cyan/20 bg-sci-cyan/10 p-3 text-xs text-muted-foreground">
+              <Info className="h-4 w-4 shrink-0 text-sci-cyan mt-0.5" />
+              <p>El código SIS identifica de forma unívoca a cada estudiante en los registros de la facultad.</p>
             </div>
           </div>
 
-          <footer className="sticky bottom-0 flex flex-col-reverse gap-3 border-t border-[#E2E8F0] bg-[#F7F7F7] px-5 py-4 sm:flex-row sm:justify-end sm:px-7">
-            <button type="button" onClick={onClose} disabled={saving} className="min-h-11 rounded-lg border border-[#E2E8F0] bg-white px-5 text-sm font-semibold text-[#1E293B] hover:bg-[#F7F7F7]">Cancelar</button>
-            <button type="submit" disabled={saving} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#0056B3] px-5 text-sm font-semibold text-white hover:bg-[#003770] disabled:cursor-wait disabled:opacity-60">
-              {saving && <LoaderCircle className="h-4 w-4 animate-spin" />}
+          <div className="flex flex-col-reverse gap-2 border-t border-border bg-muted/40 px-6 py-4 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={saving}
+              className="cursor-pointer"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              disabled={saving}
+              className="bg-sci-blue hover:opacity-90 text-white font-semibold cursor-pointer min-w-36"
+            >
+              {saving && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
               {saving ? 'Guardando...' : editing ? 'Guardar cambios' : 'Registrar estudiante'}
-            </button>
-          </footer>
+            </Button>
+          </div>
         </form>
-      </section>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

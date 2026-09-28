@@ -21,7 +21,14 @@ class ForgotPasswordController extends Controller
     public function sendResetLink(Request $request): JsonResponse
     {
         $request->validate([
-            'email' => 'required|email',
+            'email' => [
+                'required',
+                'string',
+                'email',
+                'regex:/^[a-zA-Z0-9._%+-]+@(est\.umss\.edu|gmail\.com)$/i',
+            ],
+        ], [
+            'email.regex' => 'Solo se permiten correos validos.',
         ]);
 
         $cuenta = $this->buscarPorEmail($request->email);

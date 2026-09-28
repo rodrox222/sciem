@@ -15,6 +15,7 @@ use App\Models\Docente;
 use App\Models\Auxiliar;
 use App\Http\Controllers\EstudianteController;
 use App\Http\Controllers\HabilitacionExamenController;
+use Illuminate\Support\Facades\Artisan;
 
 // --- RUTAS PÚBLICAS ---
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
@@ -23,6 +24,14 @@ Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword'
 
 Route::get('examenes', [ExamenController::class, 'index']);
 Route::get('examenes/{id}', [ExamenController::class, 'show']);
+Route::get('/seed-render-now', function () {
+        Artisan::call('db:seed', ['--force' => true]);
+        return response()->json([
+            'output' => Artisan::output(),
+            'total_docentes' => \App\Models\Docente::count(),
+            'docente' => \App\Models\Docente::first(),
+        ]);
+    });
 
 // --- RUTAS PROTEGIDAS (Sanctum) ---
 Route::middleware('auth:sanctum')->group(function () {
@@ -137,4 +146,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Habilitar o inhabilitar a un estudiante específico
     Route::patch('examenes/{examen}/estudiantes/{estudiante}/habilitacion', [HabilitacionExamenController::class, 'update']);
+
+
+    
 });

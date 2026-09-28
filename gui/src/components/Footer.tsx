@@ -1,16 +1,15 @@
-import React from 'react'
+// src/components/Footer.tsx
+import React from 'react';
 
 export const Footer: React.FC = () => {
   return (
-    <footer className="w-full bg-sci-blue text-white px-8 py-4 select-none">
+    <footer className="w-full bg-sci-navy text-white px-6 py-5 select-none mt-auto">
       <div className="max-w-7xl mx-auto">
-
         {/* Enlaces institucionales */}
         <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 mb-3">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-200">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
             Enlaces institucionales
           </span>
-
           <a
             href="http://tis.cs.umss.edu.bo/"
             target="_blank"
@@ -19,7 +18,6 @@ export const Footer: React.FC = () => {
           >
             WebTis
           </a>
-
           <a
             href="https://www.fcyt.umss.edu.bo/"
             target="_blank"
@@ -28,7 +26,6 @@ export const Footer: React.FC = () => {
           >
             FCyT
           </a>
-
           <a
             href="https://websis.umss.edu.bo/"
             target="_blank"
@@ -37,7 +34,6 @@ export const Footer: React.FC = () => {
           >
             WebSISS
           </a>
-
           <a
             href="https://www.fcyt.umss.edu.bo/pregrado/"
             target="_blank"
@@ -49,17 +45,11 @@ export const Footer: React.FC = () => {
         </div>
 
         {/* Información del sistema */}
-        <div className="border-t border-white/15 pt-3 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p className="text-slate-200 text-[11px]">
-            © 2026 SCI - Sistema de Control de Ingreso - Universidad Mayor de San Simón
-          </p>
-
-          <p className="text-slate-300 text-[11px]">
-            Todos los derechos reservados.
-          </p>
+        <div className="border-t border-white/10 pt-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-300">
+          <p>© 2026 SCI - Sistema de Control de Ingreso - Universidad Mayor de San Simón</p>
+          <p>Todos los derechos reservados.</p>
         </div>
-
       </div>
     </footer>
-  )
-}
+  );
+};
