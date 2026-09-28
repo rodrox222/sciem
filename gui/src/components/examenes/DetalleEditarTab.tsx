@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { AlertCircle, BookOpenCheck, CalendarDays, Check, Clock3, LoaderCircle, MapPin, Save, UserRound } from 'lucide-react'
+import { AlertCircle, BookOpenCheck, CalendarDays, Check, Clock3, LoaderCircle, MapPin, Save, UserCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -202,6 +202,23 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
               </select>
             </div>
 
+            {isAdmin && docentes.length > 0 && (
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="flex items-center gap-1.5 text-xs font-semibold">
+                  <UserCheck className="h-3.5 w-3.5 text-sci-cyan" /> Docente asignado *
+                </Label>
+                <select
+                  value={form.id_docente}
+                  onChange={(e) => setForm((c) => ({ ...c, id_docente: e.target.value }))}
+                  className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs"
+                >
+                  {docentes.map((d) => (
+                    <option key={d.id} value={d.id}>{d.nombre}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label className="flex items-center gap-1.5 text-xs font-semibold">
                 <CalendarDays className="h-3.5 w-3.5 text-sci-cyan" /> Fecha *
@@ -243,7 +260,6 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
             </div>
           </div>
 
-          {/* Selector de normas generales */}
           <div className="pt-2">
             <Label className="mb-2 block text-xs font-semibold">Normas generales aplicables</Label>
             <div className="max-h-48 space-y-2 overflow-y-auto">
