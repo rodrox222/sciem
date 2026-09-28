@@ -10,7 +10,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -25,15 +24,7 @@ class AuthController extends Controller
      */
     public function login(Request $request): JsonResponse
     {
-    /*    
-    return response()->json([
-            'db_host'     => config('database.connections.pgsql.host'),
-            'db_database' => config('database.connections.pgsql.database'),
-            'total_docentes' => Docente::count(),
-            'docente'     => Docente::where('email', 'docente@fcyt.umss.edu.bo')->first(),
-        ]);
-    */
-    // Validación estricta de formato: o es correo institucional válido o es CI numérico
+        // Validación estricta de formato: o es correo institucional válido o es CI numérico
         $request->validate([
             'email' => [
                 'required',
@@ -49,16 +40,6 @@ class AuthController extends Controller
 
         // Resolver tabla y rol según el patrón del identificador
         [$user, $rolDetectado] = $this->identificarYBuscarUsuario($rawIdentifier);
-
-        // REGISTRO DEPURADOR PARA VER EN RENDER LOGS
-        Log::error('DEBUG_LOGIN_RENDER', [
-            'raw_identifier'     => $rawIdentifier,
-            'rol_detectado'      => $rolDetectado,
-            'usuario_encontrado' => $user ? true : false,
-            'user_id'            => $user?->id,
-            'activo'             => $user?->activo,
-            'password_match'     => $user ? Hash::check($request->password, $user->password) : false,
-        ]);
 
         // Validar existencia y verificación de hash de contraseña
         if (!$user || !Hash::check($request->password, $user->password)) {
