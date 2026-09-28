@@ -6,6 +6,8 @@ import type { Examen, ExamenEstado } from '@/services/examenes.service'
 
 interface ExamenCardProps {
   exam: Examen
+  canManage?: boolean
+  onSelect?: (exam: Examen) => void
 }
 
 const estadoBadges: Record<ExamenEstado, string> = {
@@ -28,18 +30,25 @@ const formatDate = (date: string) => {
   }).format(new Date(`${normalized}T00:00:00Z`))
 }
 
-export function ExamenCard({ exam }: ExamenCardProps) {
+export function ExamenCard({ exam, canManage = false, onSelect }: ExamenCardProps) {
   const navigate = useNavigate()
+
+  const handleAction = () => {
+    if (onSelect) {
+      onSelect(exam)
+    }
+    navigate(`/examenes/${exam.id}`)
+  }
 
   return (
     <Card
       role="button"
       tabIndex={0}
-      onClick={() => navigate(`/examenes/${exam.id}`)}
+      onClick={handleAction}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
-          navigate(`/examenes/${exam.id}`)
+          handleAction()
         }
       }}
       className="group relative flex cursor-pointer flex-col justify-between overflow-hidden rounded-2xl border-border bg-card shadow-xs transition duration-200 hover:-translate-y-1 hover:border-sci-blue/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-sci-blue/30"
@@ -82,7 +91,7 @@ export function ExamenCard({ exam }: ExamenCardProps) {
       </div>
 
       <div className="flex items-center justify-between border-t border-border bg-muted/20 px-5 py-3 text-xs font-semibold text-sci-blue group-hover:bg-sci-blue/5">
-        <span>Gestionar evaluación</span>
+        <span>{canManage ? 'Gestionar evaluación' : 'Ver evaluación'}</span>
         <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
       </div>
     </Card>
