@@ -15,6 +15,7 @@ use App\Models\Docente;
 use App\Models\Auxiliar;
 use App\Http\Controllers\EstudianteController;
 use App\Http\Controllers\HabilitacionExamenController;
+use App\Http\Controllers\CargaMasivaEstudianteController;
 
 // --- RUTAS PÚBLICAS ---
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
@@ -137,4 +138,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Habilitar o inhabilitar a un estudiante específico
     Route::patch('examenes/{examen}/estudiantes/{estudiante}/habilitacion', [HabilitacionExamenController::class, 'update']);
+
+    Route::post('estudiantes/carga-masiva', [CargaMasivaEstudianteController::class, 'store']);
 });
