@@ -2,7 +2,13 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Check, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -190,7 +196,19 @@ export function UsuarioFormModal({
         : {}),
     }
 
-    await onSubmit(payload)
+    try {
+      await onSubmit(payload)
+    } catch (error) {
+      const mensaje =
+        error instanceof Error
+          ? error.message
+          : 'No se pudo guardar el usuario.'
+
+      setErrores((anterior) => ({
+        ...anterior,
+        general: mensaje,
+      }))
+    }
   }
 
   const manejarCierre = (abierto: boolean) => {
@@ -258,7 +276,12 @@ export function UsuarioFormModal({
                 </div>
               )}
 
-              {/* Nombre y apellido paterno */}
+              {errores.general && (
+                <div className="rounded-xl border border-sci-red/20 bg-sci-red/10 px-4 py-3 text-xs font-semibold text-sci-red">
+                  {errores.general}
+                </div>
+              )}
+
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <Label className="mb-1.5 block text-xs font-semibold">
@@ -319,7 +342,6 @@ export function UsuarioFormModal({
                 </div>
               </div>
 
-              {/* Apellido materno */}
               <div>
                 <Label className="mb-1.5 block text-xs font-semibold">
                   Apellido materno
@@ -338,7 +360,6 @@ export function UsuarioFormModal({
                 />
               </div>
 
-              {/* CI y extensión */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <Label className="mb-1.5 block text-xs font-semibold">
@@ -388,7 +409,6 @@ export function UsuarioFormModal({
                 </div>
               </div>
 
-              {/* Correo */}
               {formulario.tipo_usuario !== 'admin' && (
                 <div>
                   <Label className="mb-1.5 block text-xs font-semibold">
@@ -420,7 +440,6 @@ export function UsuarioFormModal({
                 </div>
               )}
 
-              {/* Contraseña */}
               <div>
                 <Label className="mb-1.5 block text-xs font-semibold">
                   Contraseña {modoEdicion ? '(opcional)' : '*'}
@@ -454,7 +473,6 @@ export function UsuarioFormModal({
                 )}
               </div>
 
-              {/* Rol */}
               <div>
                 <Label className="mb-1.5 block text-xs font-semibold">
                   Rol *
@@ -505,7 +523,6 @@ export function UsuarioFormModal({
                 )}
               </div>
 
-              {/* Acciones */}
               <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
                 <Button
                   type="button"
