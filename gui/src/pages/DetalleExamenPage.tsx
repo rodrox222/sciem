@@ -1,13 +1,28 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, LoaderCircle, BookOpen, Users, PencilLine } from 'lucide-react'
+import {
+  ArrowLeft,
+  LoaderCircle,
+  BookOpen,
+  Users,
+  PencilLine,
+  QrCode,
+} from 'lucide-react'
+
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { examenesService, type Examen, type ExamenEstado } from '@/services/examenes.service'
+
+import {
+  examenesService,
+  type Examen,
+  type ExamenEstado,
+} from '@/services/examenes.service'
+
 import { DetalleInfoTab } from '@/components/examenes/DetalleInfoTab'
 import { DetalleEstudiantesTab } from '@/components/examenes/DetalleEstudiantesTab'
 import { DetalleEditarTab } from '@/components/examenes/DetalleEditarTab'
+import { DetalleEscanerTab } from '@/components/examenes/DetalleEscanerTab'
 
 const estadoBadges: Record<ExamenEstado, string> = {
   Programado: 'border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy',
@@ -60,7 +75,12 @@ export default function DetalleExamenPage() {
   if (error || !exam) {
     return (
       <div className="space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/examenes')} className="gap-1 text-sci-blue">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate('/examenes')}
+          className="gap-1 text-sci-blue"
+        >
           <ArrowLeft className="h-4 w-4" /> Volver a exámenes
         </Button>
         <div className="rounded-2xl border border-sci-red/20 bg-sci-red/10 p-6 text-center text-xs font-semibold text-sci-red">
@@ -81,7 +101,7 @@ export default function DetalleExamenPage() {
           variant="ghost"
           size="sm"
           onClick={() => navigate('/examenes')}
-          className="h-auto p-0 text-xs font-semibold text-sci-blue hover:text-sci-navy gap-1 cursor-pointer"
+          className="h-auto cursor-pointer gap-1 p-0 text-xs font-semibold text-sci-blue hover:text-sci-navy"
         >
           <ArrowLeft className="h-4 w-4" /> Volver a exámenes
         </Button>
@@ -92,7 +112,10 @@ export default function DetalleExamenPage() {
               <span className="text-[11px] font-bold uppercase tracking-wider text-sci-cyan">
                 Gestión de Evaluación
               </span>
-              <Badge variant="outline" className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${estadoBadges[exam.estado]}`}>
+              <Badge
+                variant="outline"
+                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${estadoBadges[exam.estado]}`}
+              >
                 {exam.estado}
               </Badge>
             </div>
@@ -112,15 +135,23 @@ export default function DetalleExamenPage() {
         onValueChange={(val) => setSearchParams({ tab: val })}
         className="space-y-6"
       >
-        <TabsList className="bg-card border border-border p-1 rounded-xl">
-          <TabsTrigger value="info" className="gap-2 text-xs font-medium cursor-pointer">
+        <TabsList className="rounded-xl border border-border bg-card p-1">
+          <TabsTrigger value="info" className="cursor-pointer gap-2 text-xs font-medium">
             <BookOpen className="h-3.5 w-3.5" /> Ficha Técnica
           </TabsTrigger>
-          <TabsTrigger value="estudiantes" className="gap-2 text-xs font-medium cursor-pointer">
+
+          <TabsTrigger value="estudiantes" className="cursor-pointer gap-2 text-xs font-medium">
             <Users className="h-3.5 w-3.5" /> Padrón de Estudiantes
           </TabsTrigger>
+
+          {canManage && (
+            <TabsTrigger value="escaner" className="cursor-pointer gap-2 text-xs font-medium">
+              <QrCode className="h-3.5 w-3.5 text-sci-cyan" /> Escanear Acceso
+            </TabsTrigger>
+          )}
+
           {canEdit && (
-            <TabsTrigger value="editar" className="gap-2 text-xs font-medium cursor-pointer">
+            <TabsTrigger value="editar" className="cursor-pointer gap-2 text-xs font-medium">
               <PencilLine className="h-3.5 w-3.5" /> Modificar Examen
             </TabsTrigger>
           )}
@@ -133,6 +164,12 @@ export default function DetalleExamenPage() {
         <TabsContent value="estudiantes">
           <DetalleEstudiantesTab exam={exam} canManage={canManage} />
         </TabsContent>
+
+        {canManage && (
+          <TabsContent value="escaner">
+            <DetalleEscanerTab exam={exam} />
+          </TabsContent>
+        )}
 
         {canEdit && (
           <TabsContent value="editar">
