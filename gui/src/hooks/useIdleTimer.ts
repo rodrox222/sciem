@@ -1,25 +1,22 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { authService } from '@/services/auth.service'
 
-const WARNING_LIMIT_MS = 4 * 60 * 1000 // 4 minutos de inactividad
-const COUNTDOWN_SECONDS = 60           // 1 minuto de modal (total 5 min)
+const WARNING_LIMIT_MS = 4 * 60 * 1000 
+const COUNTDOWN_SECONDS = 60          
 const TOTAL_LIMIT_MS = WARNING_LIMIT_MS + COUNTDOWN_SECONDS * 1000
-const STORAGE_KEY = 'sciem_last_activity'
+const STORAGE_KEY = 'sci_last_activity' // <-- Actualizado a sci
 
 export const useIdleTimer = () => {
   const [showModal, setShowModal] = useState(false)
   const [secondsRemaining, setSecondsRemaining] = useState(COUNTDOWN_SECONDS)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const handleLogout = useCallback(() => {
+  const handleLogout = useCallback(async () => {
     setShowModal(false)
-    localStorage.removeItem('auth_token')
-    localStorage.removeItem('user_role')
-    localStorage.removeItem(STORAGE_KEY)
-    // Redirección dura inmediata: evita que pinte el dashboard
+    await authService.logout()
     window.location.replace('/login')
   }, [])
 
-  // 1. Revisa el almacenamiento sin sobreescribir la hora previa
   const checkSession = useCallback((): boolean => {
     const token = localStorage.getItem('auth_token')
     if (!token) return false
@@ -32,13 +29,11 @@ export const useIdleTimer = () => {
 
     const elapsed = Date.now() - parseInt(lastActivityStr, 10)
 
-    // Si ya pasaron 5 minutos o más: expulsa inmediatamente
     if (elapsed >= TOTAL_LIMIT_MS) {
-      handleLogout()
+      void handleLogout()
       return false
     }
 
-    // Si pasaron más de 4 minutos pero menos de 5: levanta el modal
     if (elapsed >= WARNING_LIMIT_MS) {
       const remaining = Math.max(1, Math.ceil((TOTAL_LIMIT_MS - elapsed) / 1000))
       setSecondsRemaining(remaining)
@@ -51,7 +46,6 @@ export const useIdleTimer = () => {
   const resetTimer = useCallback(() => {
     if (showModal) return
 
-    // Solo actualiza la fecha si la sesión sigue vigente
     localStorage.setItem(STORAGE_KEY, Date.now().toString())
 
     if (timerRef.current) clearTimeout(timerRef.current)
@@ -69,7 +63,6 @@ export const useIdleTimer = () => {
     resetTimer()
   }
 
-  // Montaje inicial y eventos de usuario
   useEffect(() => {
     const initialCheckId = window.setTimeout(() => {
       if (checkSession()) resetTimer()
@@ -80,7 +73,6 @@ export const useIdleTimer = () => {
 
     events.forEach((ev) => window.addEventListener(ev, handler))
 
-    // Detección al alternar pestañas
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         checkSession()
@@ -96,7 +88,6 @@ export const useIdleTimer = () => {
     }
   }, [checkSession, resetTimer])
 
-  // Cuenta regresiva del modal
   useEffect(() => {
     if (!showModal) return
 
@@ -104,7 +95,7 @@ export const useIdleTimer = () => {
       setSecondsRemaining((prev) => {
         if (prev <= 1) {
           clearInterval(interval)
-          handleLogout()
+          void handleLogout()
           return 0
         }
         return prev - 1
@@ -117,7 +108,7 @@ export const useIdleTimer = () => {
   return {
     showModal,
     secondsRemaining,
-    handleLogout,
+    handleLogout: () => void handleLogout(),
     handleStayActive,
   }
 }

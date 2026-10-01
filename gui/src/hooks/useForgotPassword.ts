@@ -1,11 +1,21 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8200/api'
+import { authService } from '@/services/auth.service'
 
 interface UseForgotPasswordOptions {
   onSuccess?: () => void
   onBackToLogin?: () => void
+}
+
+const DOMINIOS_PERMITIDOS = [
+  '@gmail.com',
+  '@est.umss.edu',
+  '@fcyt.umss.edu.bo',
+]
+
+const esCorreoPermitido = (email: string): boolean => {
+  const correo = email.trim().toLowerCase()
+  return DOMINIOS_PERMITIDOS.some((dominio) => correo.endsWith(dominio))
 }
 
 export const useForgotPassword = (options?: UseForgotPasswordOptions) => {
@@ -26,24 +36,22 @@ export const useForgotPassword = (options?: UseForgotPasswordOptions) => {
     e.preventDefault()
     setError(null)
 
-    if (!email.trim() || !email.includes('@')) {
-      setError('Por favor ingresa un correo institucional válido.')
+    const emailNormalizado = email.trim().toLowerCase()
+
+    if (!emailNormalizado || !emailNormalizado.includes('@')) {
+      setError('Por favor ingresa un correo electrónico válido.')
+      return
+    }
+
+    // Validación exclusiva en frontend para dominios autorizados
+    if (!esCorreoPermitido(emailNormalizado)) {
+      setError('Ingresar un correo valido.')
       return
     }
 
     setIsSubmitting(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/forgot-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ email: email.trim() }),
-      })
-      const data = await res.json().catch(() => ({}))
-
-      if (!res.ok) {
-        throw new Error(data.errors?.email?.[0] || data.message || 'No se pudo procesar la solicitud.')
-      }
-
+      await authService.requestPasswordReset(emailNormalizado)
       setStep('sent')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error al comunicarse con el servidor institucional.')
@@ -67,26 +75,12 @@ export const useForgotPassword = (options?: UseForgotPasswordOptions) => {
 
     setIsSubmitting(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          token: tokenFromUrl,
-          email: email.trim(),
-          password,
-          password_confirmation: confirmPassword,
-        }),
+      await authService.resetPassword({
+        token: tokenFromUrl,
+        email: email.trim(),
+        password,
+        password_confirmation: confirmPassword,
       })
-      const data = await res.json().catch(() => ({}))
-
-      if (!res.ok) {
-        throw new Error(
-          data.errors?.password?.[0] ||
-          data.errors?.token?.[0] ||
-          data.message ||
-          'El enlace ha expirado o es inválido.'
-        )
-      }
 
       if (options?.onSuccess) options.onSuccess()
       else if (options?.onBackToLogin) options.onBackToLogin()

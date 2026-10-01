@@ -1,66 +1,76 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute'
 
-// Páginas de HU1, HU4, HU5, HU6 y HU7
+// Layouts centralizados con Header y Footer
+import PublicLayout from './layouts/PublicLayout'
+import MainLayout from './layouts/MainLayout'
+import AuthLayout from './layouts/AuthLayout'
+
+// Páginas públicas
+import { HomePage } from './pages/HomePage'
+import CronogramaPublicPage from './pages/CronogramaPublicPage'
+
+// Páginas de autenticación
+import { LoginPage } from './pages/LoginPage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
+
+// Páginas protegidas generales
+import { DashboardPage } from './pages/DashboardPage'
+import ExamenesPage from './pages/ExamenesPage'
+import EstudiantesPage from './pages/EstudiantesPage'
+import DetalleExamenPage from './pages/DetalleExamenPage'
+
+// Páginas protegidas por Rol
 import UsuariosPage from './pages/UsuariosPage'
 import AulasPage from './pages/AulasPage'
 import NormasPage from './pages/NormasPage'
-import MisExamenesPage from './pages/MisExamenesPage'
-
-// Página de HU3
 import { AuditoriaPage } from './pages/AuditoriaPage'
-import { DashboardPage } from './pages/DashboardPage'
-import EstudiantesPage from './pages/EstudiantesPage'
-import ExamenesPage from './pages/ExamenesPage'
-import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
-import { HomePage } from './pages/HomePage'
-import { LoginPage } from './pages/LoginPage'
-import ProgramarExamenAdminPage from './pages/ProgramarExamenAdminPage'
 import ProgramarExamenPage from './pages/ProgramarExamenPage'
+
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<HomePage />} />
+        {/* 1. Rutas públicas con cabecera y pie oficial (PublicLayout) */}
+        <Route element={<PublicLayout />}>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/cronograma" element={<CronogramaPublicPage />} />
+        </Route>
 
+        {/* 2. Rutas de acceso (Login y recuperación) con AuthLayout */}
         <Route element={<PublicRoute />}>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/recuperar-contrasena" element={<ForgotPasswordPage />} />
+          <Route element={<AuthLayout />}>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/recuperar-contrasena" element={<ForgotPasswordPage />} />
+          </Route>
         </Route>
 
+        {/* 3. Panel autenticado con MainLayout (Header dinámico por rol + IdleTimer) */}
         <Route element={<ProtectedRoute />}>
-          <Route
-            path="/dashboard"
-            element={
-              <DashboardPage />
-            }
-          />
-          <Route path="/examenes" element={<ExamenesPage />} />
-          <Route path="/mis-examenes" element={<MisExamenesPage />} />
-          <Route path="/estudiantes" element={<EstudiantesPage />} />
+          <Route element={<MainLayout />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/examenes" element={<ExamenesPage />} />
+            <Route path="/estudiantes" element={<EstudiantesPage />} />
+            <Route path="/examenes" element={<ExamenesPage />} />
+            <Route path="/examenes/:id" element={<DetalleExamenPage />} />
+
+            {/* Exclusivo Administrador */}
+            <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+              <Route path="/usuarios" element={<UsuariosPage />} />
+              <Route path="/aulas" element={<AulasPage />} />
+              <Route path="/normas" element={<NormasPage />} />
+              <Route path="/dashboard/auditoria" element={<AuditoriaPage />} />
+            </Route>
+
+            {/* Administrador y Docente */}
+            <Route element={<ProtectedRoute allowedRoles={['admin', 'docente']} />}>
+              <Route path="/programar-examen" element={<ProgramarExamenPage />} />
+            </Route>
+          </Route>
         </Route>
 
-        <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
-          <Route path="/usuarios" element={<UsuariosPage />} />
-          <Route path="/aulas" element={<AulasPage />} />
-          <Route path="/normas" element={<NormasPage />} />
-          <Route
-            path="/programar-examen-admin"
-            element={<ProgramarExamenAdminPage />}
-          />
-          <Route
-            path="/dashboard/auditoria"
-            element={
-              <AuditoriaPage />
-            }
-          />
-        </Route>
-
-        <Route element={<ProtectedRoute allowedRoles={['admin', 'docente']} />}>
-          <Route path="/programar-examen" element={<ProgramarExamenPage />} />
-        </Route>
-
+        {/* Redirección ante cualquier ruta inexistente */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

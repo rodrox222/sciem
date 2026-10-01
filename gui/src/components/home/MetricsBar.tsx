@@ -2,58 +2,38 @@ import React from 'react';
 
 export const MetricsBar: React.FC = () => {
   return (
-    <section className="bg-white border-b border-slate-200 py-6">
+    <section className="bg-card py-6">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
 
-          {/* Exámenes programados */}
+          {/* Exámenes programados -> Azul oficial */}
           <div className="flex items-center gap-3">
-            <span className="w-3 h-3 rounded-full bg-blue-700" />
-
+            <span className="w-3 h-3 rounded-full bg-sci-blue" />
             <div>
-              <span className="text-2xl font-black text-slate-900">
-                18
-              </span>
-
-              <p className="text-xs text-slate-500">
-                Exámenes programados
-              </p>
+              <span className="text-2xl font-bold text-foreground">18</span>
+              <p className="text-xs text-muted-foreground">Exámenes programados</p>
             </div>
           </div>
 
-          {/* Ambientes habilitados */}
+          {/* Ambientes habilitados -> Cian oficial */}
           <div className="flex items-center gap-3">
-            <span className="w-3 h-3 rounded-full bg-sky-500" />
-
+            <span className="w-3 h-3 rounded-full bg-sci-cyan" />
             <div>
-              <span className="text-2xl font-black text-slate-900">
-                12
-              </span>
-
-              <p className="text-xs text-slate-500">
-                Ambientes habilitados
-              </p>
+              <span className="text-2xl font-bold text-foreground">12</span>
+              <p className="text-xs text-muted-foreground">Ambientes habilitados</p>
             </div>
           </div>
 
-          {/* Trazabilidad */}
+          {/* Trazabilidad -> Rojo oficial */}
           <div className="flex items-center gap-3">
-            <span className="w-3 h-3 rounded-full bg-red-600" />
-
+            <span className="w-3 h-3 rounded-full bg-sci-red" />
             <div>
-              <span className="text-2xl font-black text-slate-900">
-                24/7
-              </span>
-
-              <p className="text-xs text-slate-500">
-                Trazabilidad
-              </p>
+              <span className="text-2xl font-bold text-foreground">24/7</span>
+              <p className="text-xs text-muted-foreground">Trazabilidad</p>
             </div>
           </div>
 
         </div>
-
       </div>
     </section>
   );

@@ -1,5 +1,5 @@
-import { apiRequest } from './apiClient'
-import type { PaginatedResponse } from './aulas.service'
+import { api } from './api'
+import type { PaginatedResponse } from '@/types/api'
 import type { Norma } from './normas.service'
 
 export type ExamenEstado = 'Programado' | 'En proceso' | 'Terminado'
@@ -51,7 +51,12 @@ interface ExamenMutationResponse {
   examen: Examen
 }
 
-interface ExamenFilters {
+interface MateriaMutationResponse {
+  message: string
+  materia: CatalogItem
+}
+
+export interface ExamenFilters {
   search?: string
   estado?: ExamenEstado | ''
   fecha?: string
@@ -72,36 +77,30 @@ const buildExamQuery = (filters: ExamenFilters) => {
 
 export const examenesService = {
   list(filters: ExamenFilters = {}) {
-    return apiRequest<PaginatedResponse<Examen>>(
-      `/examenes${buildExamQuery(filters)}`,
-    )
+    return api.get<PaginatedResponse<Examen>>(`/examenes${buildExamQuery(filters)}`)
   },
 
   get(id: string) {
-    return apiRequest<Examen>(`/examenes/${id}`)
+    return api.get<Examen>(`/examenes/${id}`)
   },
 
   create(payload: ExamenPayload) {
-    return apiRequest<ExamenMutationResponse>('/examenes', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    })
+    return api.post<ExamenMutationResponse>('/examenes', payload)
   },
 
   update(id: string, payload: ExamenPayload) {
-    return apiRequest<ExamenMutationResponse>(`/examenes/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    })
+    return api.put<ExamenMutationResponse>(`/examenes/${id}`, payload)
   },
 
   listMaterias() {
-    return apiRequest<CatalogItem[]>('/materias?all=1')
+    return api.get<CatalogItem[]>('/materias?all=1')
+  },
+
+  createMateria(nombre: string) {
+    return api.post<MateriaMutationResponse>('/materias', { nombre })
   },
 
   listDocentes() {
-    return apiRequest<PaginatedResponse<DocenteItem>>(
-      '/users?tipo_usuario=docente&activo=true',
-    )
+    return api.get<PaginatedResponse<DocenteItem>>('/users?tipo_usuario=docente&activo=true')
   },
 }
