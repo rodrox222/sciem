@@ -16,6 +16,7 @@ use App\Models\Auxiliar;
 use App\Http\Controllers\EstudianteController;
 use App\Http\Controllers\HabilitacionExamenController;
 use Illuminate\Support\Facades\Artisan;
+use App\Http\Controllers\VerificacionController;
 
 // --- RUTAS PÚBLICAS ---
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
@@ -147,6 +148,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Habilitar o inhabilitar a un estudiante específico
     Route::patch('examenes/{examen}/estudiantes/{estudiante}/habilitacion', [HabilitacionExamenController::class, 'update']);
 
-
+    // HU 10 Escaneo e identificacion
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::post('examenes/{id}/verificar-ingreso', [VerificacionController::class, 'verificarIngreso']);
+    });
     
 });
