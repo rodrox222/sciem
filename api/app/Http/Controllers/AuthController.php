@@ -147,15 +147,26 @@ class AuthController extends Controller
 
         $emailLower = strtolower($identificador);
 
-        // Docente (@fcyt.umss.edu.bo)
+        // Docente
         if (str_ends_with($emailLower, '@fcyt.umss.edu.bo')) {
             $docente = Docente::where('email', $emailLower)->first();
             return [$docente, 'docente'];
         }
 
-        // Auxiliar (@est.umss.edu)
+        // Auxiliar
         if (str_ends_with($emailLower, '@est.umss.edu')) {
             $auxiliar = Auxiliar::where('email', $emailLower)->first();
+            return [$auxiliar, 'auxiliar'];
+        }
+
+        // Si es cuenta @gmail.com u otro dominio permitido (para el futuro), buscar en Docente y luego en Auxiliar
+        $docente = Docente::where('email', $emailLower)->first();
+        if ($docente) {
+            return [$docente, 'docente'];
+        }
+
+        $auxiliar = Auxiliar::where('email', $emailLower)->first();
+        if ($auxiliar) {
             return [$auxiliar, 'auxiliar'];
         }
 
