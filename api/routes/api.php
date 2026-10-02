@@ -147,6 +147,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Habilitar o inhabilitar a un estudiante específico
     Route::patch('examenes/{examen}/estudiantes/{estudiante}/habilitacion', [HabilitacionExamenController::class, 'update']);
 
+    // HU 11 VALIDAR HABILITACIÓN Y AMBIENTE
+    Route::post('examenes/{examen}/validar-ingreso', [HabilitacionExamenController::class, 'validarIngreso']);
+
 
     
 });
