@@ -148,7 +148,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Habilitar o inhabilitar a un estudiante específico
     Route::patch('examenes/{examen}/estudiantes/{estudiante}/habilitacion', [HabilitacionExamenController::class, 'update']);
 
-    Route::post('estudiantes/carga-masiva', [CargaMasivaEstudianteController::class, 'store']);
+    Route::post('examenes/{idExamen}/estudiantes/carga-masiva', [CargaMasivaEstudianteController::class, 'storePorExamen']);
 
     
 });
