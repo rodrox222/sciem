@@ -84,7 +84,6 @@ class CargaMasivaEstudianteController extends Controller
 
         $sisEnArchivo = [];
         $emailsEnArchivo = [];
-        $ciEnArchivo = [];
 
         $filasValidadas = [];
         $errores = [];
@@ -128,10 +127,10 @@ class CargaMasivaEstudianteController extends Controller
 
             if ($validador->fails()) {
                 $errores[] = [
-                    'fila'       => $numeroFila,
-                    'tipo_error' => 'FORMATO_INVALIDO',
+                    'fila'          => $numeroFila,
+                    'tipo_error'    => 'FORMATO_INVALIDO',
                     'identificador' => $registro['codigo_sis'] ?: "Línea {$numeroFila}",
-                    'motivo'     => implode(' | ', $validador->errors()->all()),
+                    'motivo'        => implode(' | ', $validador->errors()->all()),
                 ];
                 continue;
             }
@@ -179,14 +178,14 @@ class CargaMasivaEstudianteController extends Controller
 
         fclose($handle);
 
-        // si hubo un solo error, se rechaza la carga completa con rollback
+        // Si hubo un solo error, se rechaza la carga completa
         if (count($errores) > 0) {
             return response()->json([
-                'message'        => 'Se encontraron conflictos en el archivo. La operación fue cancelada y ningún estudiante fue agregado.',
-                'error_type'     => 'CONFLICTOS_EN_CARGA',
-                'total_filas'    => $numeroFila - 1,
-                'total_errores'  => count($errores),
-                'errores'        => $errores,
+                'message'       => 'Se encontraron conflictos en el archivo. La operación fue cancelada y ningún estudiante fue agregado.',
+                'error_type'    => 'CONFLICTOS_EN_CARGA',
+                'total_filas'   => $numeroFila - 1,
+                'total_errores' => count($errores),
+                'errores'       => $errores,
             ], 422);
         }
 
@@ -198,7 +197,6 @@ class CargaMasivaEstudianteController extends Controller
             $lotePivote = [];
 
             foreach ($filasValidadas as $datos) {
-                // Verificar si el estudiante ya existía en la tabla general de estudiantes
                 if (isset($estudiantesBdPorSis[$datos['codigo_sis']])) {
                     $idEstudiante = $estudiantesBdPorSis[$datos['codigo_sis']];
                     
@@ -231,12 +229,15 @@ class CargaMasivaEstudianteController extends Controller
                 }
 
                 $lotePivote[] = [
-                    'id_examen'             => $idExamen,
-                    'id_estudiante'         => $idEstudiante,
-                    'estado'                => 'Habilitado',
-                    'motivo_inhabilitacion' => null,
-                    'created_at'            => now(),
-                    'updated_at'            => now(),
+                    'id_examen'                 => $idExamen,
+                    'id_estudiante'             => $idEstudiante,
+                    'estado'                    => 'Inhabilitado',
+                    'motivo_estado'             => null,
+                    'ajuste_manual'             => false,
+                    'modificado_por_docente_id' => null,
+                    'fecha_ajuste_manual'       => null,
+                    'created_at'                => now(),
+                    'updated_at'                => now(),
                 ];
 
                 // Procesamiento por lotes de 50
@@ -286,7 +287,9 @@ class CargaMasivaEstudianteController extends Controller
     private function registrarAuditoria(Request $request, string $accion, array $detalles = []): void
     {
         $user = $request->user();
-        if (!$user) return;
+        if (!$user) {
+            return;
+        }
 
         $rol = match (get_class($user)) {
             Admin::class    => 'admin',

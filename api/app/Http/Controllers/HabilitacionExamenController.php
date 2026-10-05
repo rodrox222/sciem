@@ -3,9 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\CambiarHabilitacionRequest;
+use App\Models\Docente;
+use App\Models\Estudiante;
 use App\Models\Examen;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class HabilitacionExamenController extends Controller
 {
@@ -17,16 +20,16 @@ class HabilitacionExamenController extends Controller
 
         $estudiantes = $examen->estudiantes->map(function ($estudiante) {
             return [
-                'id'                     => $estudiante->id,
-                'codigo_sis'             => $estudiante->codigo_sis,
-                'ci'                     => $estudiante->ci,
-                'ci_extension'           => $estudiante->ci_extension,
-                'nombre_completo'        => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} " . ($estudiante->apellido_materno ?? '')),
-                'email_institucional'    => $estudiante->email_institucional,
-                'estado'                 => $estudiante->pivot->estado,
-                'motivo_estado'          => $estudiante->pivot->motivo_estado,
-                'ajuste_manual'          => (bool) $estudiante->pivot->ajuste_manual,
-                'fecha_ajuste_manual'    => $estudiante->pivot->fecha_ajuste_manual,
+                'id'                  => $estudiante->id,
+                'codigo_sis'          => $estudiante->codigo_sis,
+                'ci'                  => $estudiante->ci,
+                'ci_extension'        => $estudiante->ci_extension,
+                'nombre_completo'     => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} " . ($estudiante->apellido_materno ?? '')),
+                'email_institucional' => $estudiante->email_institucional,
+                'estado'              => $estudiante->pivot->estado,
+                'motivo_estado'       => $estudiante->pivot->motivo_estado,
+                'ajuste_manual'       => (bool) $estudiante->pivot->ajuste_manual,
+                'fecha_ajuste_manual' => $estudiante->pivot->fecha_ajuste_manual,
             ];
         });
 
@@ -68,6 +71,52 @@ class HabilitacionExamenController extends Controller
                 'motivo_estado' => $motivo,
                 'ajuste_manual' => true,
             ],
+        ], 200);
+    }
+
+    public function motivoInhabilitacion(string $examenId, string $estudianteId): JsonResponse
+    {
+        $examen = Examen::find($examenId);
+        if (!$examen) {
+            return response()->json([
+                'message'    => 'El examen especificado no existe.',
+                'error_type' => 'EXAMEN_NO_ENCONTRADO'
+            ], 404);
+        }
+
+        $pivot = DB::table('estudiante_examen')
+            ->where('id_examen', $examenId)
+            ->where('id_estudiante', $estudianteId)
+            ->first();
+
+        if (!$pivot) {
+            return response()->json([
+                'message'    => 'El estudiante no se encuentra registrado en este examen.',
+                'error_type' => 'ESTUDIANTE_NO_INSCRITO'
+            ], 404);
+        }
+
+        $estudiante = Estudiante::select('id', 'codigo_sis', 'nombre', 'apellido_paterno', 'apellido_materno')
+            ->find($estudianteId);
+
+        $docenteNombre = null;
+        if ($pivot->modificado_por_docente_id) {
+            $docente = Docente::find($pivot->modificado_por_docente_id);
+            if ($docente) {
+                $docenteNombre = trim("{$docente->nombre} {$docente->apellido_paterno} {$docente->apellido_materno}");
+            }
+        }
+
+        return response()->json([
+            'examen_id'           => $examenId,
+            'estudiante_id'       => $estudianteId,
+            'codigo_sis'          => $estudiante?->codigo_sis,
+            'nombre_completo'     => $estudiante ? trim("{$estudiante->nombre} {$estudiante->apellido_paterno} " . ($estudiante->apellido_materno ?? '')) : null,
+            'estado'              => $pivot->estado,
+            'motivo_estado'       => $pivot->motivo_estado,
+            'ajuste_manual'       => (bool) $pivot->ajuste_manual,
+            'modificado_por'      => $docenteNombre,
+            'fecha_ajuste_manual' => $pivot->fecha_ajuste_manual,
         ], 200);
     }
 }
