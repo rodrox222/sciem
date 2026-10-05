@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
 import {
+  AlertCircle,
+  AlertTriangle,
   Camera,
   CheckCircle2,
   RefreshCw,
   ShieldCheck,
   VideoOff,
+  XCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -15,16 +18,41 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { api, ApiError } from '@/services/api'
 import type { Examen } from '@/services/examenes.service'
 
 const READER_ID = 'qr-camera-stream-unique'
 
+interface VerificationResponse {
+  message: string
+  resultado: string
+  estudiante?: {
+    id: string
+    nombre_completo: string
+    codigo_sis: string
+    ci: string
+  }
+  detalles?: {
+    hora_ingreso?: string
+    aula?: string
+    motivo_inhabilitacion?: string
+    primer_ingreso?: string
+  }
+}
+
 export function DetalleEscanerTab({ exam }: { exam: Examen }) {
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
-  const [qrRawData, setQrRawData] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
-  const [scanTimestamp, setScanTimestamp] = useState<string>('')
+  const [, setVerifying] = useState(false)
+  const [scanResult, setScanResult] = useState<{
+    status: 'PERMITIDO' | 'YA_INGRESO' | 'INHABILITADO' | 'NO_INSCRITO' | 'INVALIDO'
+    title: string
+    message: string
+    estudianteNombre?: string
+    codigoSis?: string
+    detalle?: string
+  } | null>(null)
 
   const isPausedRef = useRef(false)
   const scannerInstanceRef = useRef<Html5Qrcode | null>(null)
@@ -45,11 +73,68 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
     setCameraActive(false)
   }
 
+  const handleScan = async (decodedText: string) => {
+    if (isPausedRef.current) return
+    isPausedRef.current = true
+    setVerifying(true)
+
+    try {
+      const response = await api.post<VerificationResponse>(
+        `/examenes/${exam.id}/verificar-ingreso`,
+        { qr_data: decodedText }
+      )
+
+      setScanResult({
+        status: 'PERMITIDO',
+        title: 'Ingreso Autorizado',
+        message: response.message,
+        estudianteNombre: response.estudiante?.nombre_completo,
+        codigoSis: response.estudiante?.codigo_sis,
+        detalle: response.detalles?.hora_ingreso ? `Hora: ${response.detalles.hora_ingreso}` : undefined,
+      })
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const msg = err.message
+
+        if (err.status === 409) {
+          setScanResult({
+            status: 'YA_INGRESO',
+            title: 'Acceso Denegado (Reingreso)',
+            message: msg,
+            detalle: 'El estudiante ya registró su entrada a este examen.',
+          })
+        } else if (err.status === 403) {
+          setScanResult({
+            status: msg.toLowerCase().includes('inhabilitado') ? 'INHABILITADO' : 'NO_INSCRITO',
+            title: 'Acceso Denegado',
+            message: msg,
+            detalle: 'No cumple con las condiciones requeridas para rendir el examen.',
+          })
+        } else {
+          setScanResult({
+            status: 'INVALIDO',
+            title: 'QR No Reconocido',
+            message: msg,
+            detalle: 'El código escaneado no tiene un formato válido para este sistema.',
+          })
+        }
+      } else {
+        setScanResult({
+          status: 'INVALIDO',
+          title: 'Error de Red',
+          message: 'No se pudo comunicar con el servidor.',
+        })
+      }
+    } finally {
+      setVerifying(false)
+      setShowModal(true)
+    }
+  }
+
   const startScanner = async () => {
     setCameraError(null)
     isPausedRef.current = false
 
-    // Asegurarse de limpiar cualquier instancia previa
     await stopScanner()
 
     const container = document.getElementById(READER_ID)
@@ -70,25 +155,8 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
           },
           aspectRatio: 1.0,
         },
-        (decodedText) => {
-          // Si el modal está abierto o está en pausa lógica, ignoramos lecturas consecutivas
-          if (isPausedRef.current) return
-
-          isPausedRef.current = true
-
-          const now = new Intl.DateTimeFormat('es-BO', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-          }).format(new Date())
-
-          setQrRawData(decodedText)
-          setScanTimestamp(now)
-          setShowModal(true)
-        },
-        () => {
-          // Escaneo frame a frame sin detección
-        },
+        (decodedText) => void handleScan(decodedText),
+        () => {}
       )
 
       setCameraActive(true)
@@ -96,7 +164,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
       const msg =
         err instanceof Error
           ? err.message
-          : 'No se pudo acceder a la cámara. Revisa los permisos del navegador o conexión HTTPS/localhost.'
+          : 'No se pudo acceder a la cámara. Revisa los permisos del navegador.'
       setCameraError(msg)
       setCameraActive(false)
     }
@@ -104,12 +172,8 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
 
   useEffect(() => {
     let mounted = true
-
-    // Retardo mínimo para asegurar que el contenedor DOM esté pintado en el Tab
     const timeout = setTimeout(() => {
-      if (mounted) {
-        void startScanner()
-      }
+      if (mounted) void startScanner()
     }, 150)
 
     return () => {
@@ -121,10 +185,10 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
 
   const handleCloseModal = () => {
     setShowModal(false)
-    // Desbloqueamos la pausa para permitir leer el siguiente QR sin reiniciar el hardware de la cámara
+    setScanResult(null)
     setTimeout(() => {
       isPausedRef.current = false
-    }, 300)
+    }, 500)
   }
 
   return (
@@ -133,13 +197,11 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
       <Card className="rounded-2xl border-border bg-card shadow-xs lg:col-span-2 overflow-hidden">
         <CardContent className="flex flex-col items-center justify-center p-4 sm:p-6">
           <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border-2 border-border bg-black shadow-inner">
-            {/* Contenedor del visor QR con estilos limpios */}
             <div
               id={READER_ID}
               className="w-full aspect-square overflow-hidden [&_video]:w-full [&_video]:h-full [&_video]:object-cover"
             />
 
-            {/* Efecto visual de visor de escaneo */}
             {cameraActive && !showModal && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <div className="h-48 w-48 rounded-2xl border-2 border-sci-cyan/70 shadow-[0_0_15px_rgba(22,143,189,0.3)]">
@@ -148,7 +210,6 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
               </div>
             )}
 
-            {/* Estado de carga */}
             {!cameraActive && !cameraError && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-card/90 text-muted-foreground p-6 text-center">
                 <Camera className="h-10 w-10 animate-pulse text-sci-cyan" />
@@ -156,14 +217,10 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
               </div>
             )}
 
-            {/* Estado de error */}
             {cameraError && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-card p-6 text-center">
                 <VideoOff className="h-10 w-10 text-sci-red" />
                 <p className="mt-3 text-xs font-semibold text-sci-red">{cameraError}</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  Verifica que la cámara no esté en uso por otra pestaña y concede permisos.
-                </p>
                 <Button
                   type="button"
                   variant="outline"
@@ -202,7 +259,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
         </CardContent>
       </Card>
 
-      {/* Información del examen y estado */}
+      {/* Control de Sesión */}
       <div className="space-y-4">
         <Card className="rounded-2xl border-border bg-card shadow-xs">
           <CardContent className="space-y-4 p-5 text-xs">
@@ -234,41 +291,68 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
         </Card>
       </div>
 
-      {/* Modal: Estudiante registrado con datos del QR crudos */}
+      {/* Modal de Feedback del Escaneo */}
       <Dialog open={showModal} onOpenChange={(open) => !open && handleCloseModal()}>
         <DialogContent className="max-w-md overflow-hidden rounded-2xl border-border bg-card p-0 text-card-foreground shadow-2xl">
-          <div className="bg-emerald-500/10 p-6 text-center">
-            <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-500 text-white shadow-md">
-              <CheckCircle2 className="h-8 w-8" />
+          {/* Cabecera con color dinámico */}
+          <div
+            className={`p-6 text-center ${
+              scanResult?.status === 'PERMITIDO'
+                ? 'bg-emerald-500/10'
+                : scanResult?.status === 'YA_INGRESO'
+                ? 'bg-amber-500/10'
+                : 'bg-red-500/10'
+            }`}
+          >
+            <div
+              className={`mx-auto grid h-14 w-14 place-items-center rounded-full text-white shadow-md ${
+                scanResult?.status === 'PERMITIDO'
+                  ? 'bg-emerald-500'
+                  : scanResult?.status === 'YA_INGRESO'
+                  ? 'bg-amber-500'
+                  : 'bg-red-500'
+              }`}
+            >
+              {scanResult?.status === 'PERMITIDO' && <CheckCircle2 className="h-8 w-8" />}
+              {scanResult?.status === 'YA_INGRESO' && <AlertTriangle className="h-8 w-8" />}
+              {(scanResult?.status === 'INHABILITADO' || scanResult?.status === 'NO_INSCRITO') && (
+                <XCircle className="h-8 w-8" />
+              )}
+              {scanResult?.status === 'INVALIDO' && <AlertCircle className="h-8 w-8" />}
             </div>
+
             <DialogTitle className="mt-3 text-lg font-extrabold text-sci-navy">
-              Estudiante registrado
+              {scanResult?.title}
             </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Código QR detectado correctamente.
+            <DialogDescription className="text-xs text-muted-foreground mt-1">
+              {scanResult?.message}
             </DialogDescription>
           </div>
 
           <div className="space-y-3 px-6 py-5 text-xs">
-            <div className="flex items-center justify-between border-b border-border pb-2">
-              <span className="font-semibold text-foreground">Hora de registro:</span>
-              <span className="font-mono text-muted-foreground">{scanTimestamp}</span>
-            </div>
-
-            <div className="space-y-1.5">
-              <span className="font-semibold text-foreground block">
-                Información del QR detectado:
-              </span>
-              <div className="max-h-48 overflow-y-auto rounded-xl border border-border bg-muted/50 p-3 font-mono text-[11px] text-sci-navy break-all whitespace-pre-wrap select-all">
-                {qrRawData || 'Sin contenido'}
+            {scanResult?.estudianteNombre && (
+              <div className="flex justify-between border-b border-border pb-2">
+                <span className="font-semibold text-foreground">Estudiante:</span>
+                <span className="font-bold text-sci-navy">{scanResult.estudianteNombre}</span>
               </div>
-            </div>
+            )}
+            {scanResult?.codigoSis && (
+              <div className="flex justify-between border-b border-border pb-2">
+                <span className="font-semibold text-foreground">Código SIS:</span>
+                <span className="font-mono text-muted-foreground">{scanResult.codigoSis}</span>
+              </div>
+            )}
+            {scanResult?.detalle && (
+              <p className="rounded-xl border border-border bg-muted/40 p-3 text-muted-foreground">
+                {scanResult.detalle}
+              </p>
+            )}
           </div>
 
           <div className="flex justify-end border-t border-border bg-muted/30 px-6 py-4">
             <Button
               type="button"
-              className="cursor-pointer bg-sci-blue text-xs font-semibold text-white hover:opacity-90"
+              className="cursor-pointer bg-sci-blue text-xs font-semibold text-white hover:opacity-90 w-full"
               onClick={handleCloseModal}
             >
               Continuar escaneando

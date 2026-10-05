@@ -56,6 +56,25 @@ interface MateriaMutationResponse {
   materia: CatalogItem
 }
 
+export interface Prerrequisito {
+  id: string
+  id_examen: string
+  titulo: string
+  descripcion?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface PrerrequisitoPayload {
+  titulo: string
+  descripcion?: string | null
+}
+
+export interface HabilitacionPayload {
+  estado: 'Habilitado' | 'Inhabilitado'
+  motivo_estado: string
+}
+
 export interface ExamenFilters {
   search?: string
   estado?: ExamenEstado | ''
@@ -102,5 +121,32 @@ export const examenesService = {
 
   listDocentes() {
     return api.get<PaginatedResponse<DocenteItem>>('/users?tipo_usuario=docente&activo=true')
+  },
+
+  // --- Prerrequisitos de Examen ---
+  listPrerrequisitos(examId: string) {
+    return api.get<Prerrequisito[]>(`/examenes/${examId}/prerrequisitos`)
+  },
+
+  createPrerrequisito(examId: string, payload: PrerrequisitoPayload) {
+    return api.post<{ message: string; prerrequisito: Prerrequisito }>(
+      `/examenes/${examId}/prerrequisitos`,
+      payload
+    )
+  },
+
+  toggleCumplimiento(prerrequisitoId: string, estudianteId: string, cumplido: boolean) {
+    return api.patch<{ message: string }>(
+      `/prerrequisitos/${prerrequisitoId}/estudiantes/${estudianteId}`,
+      { cumplido }
+    )
+  },
+
+  // --- Forzado manual docente ---
+  cambiarHabilitacion(examId: string, estudianteId: string, payload: HabilitacionPayload) {
+    return api.patch<{ message: string; data: any }>(
+      `/examenes/${examId}/estudiantes/${estudianteId}/habilitacion`,
+      payload
+    )
   },
 }

@@ -2,10 +2,9 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import {
   AlertCircle,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Edit3,
   LoaderCircle,
+  QrCode,
   RefreshCw,
   Search,
   UserPlus,
@@ -15,9 +14,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { EstudianteFormModal } from '@/components/estudiantes/EstudianteFormModal'
+import { EstudianteQrModal } from '@/components/estudiantes/EstudianteQrModal'
 import {
   estudiantesService,
-  type Estudiante,
+  type EstudianteInscritoExamen,
   type InscripcionPayload,
 } from '@/services/estudiantes.service'
 import type { Examen } from '@/services/examenes.service'
@@ -27,38 +27,29 @@ interface DetalleEstudiantesTabProps {
   canManage: boolean
 }
 
-const fullName = (student: Estudiante) =>
-  [student.nombre, student.apellido_paterno, student.apellido_materno]
-    .filter(Boolean)
-    .join(' ')
-
 export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTabProps) {
-  const [students, setStudents] = useState<Estudiante[]>([])
+  const [students, setStudents] = useState<EstudianteInscritoExamen[]>([])
   const [searchInput, setSearchInput] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
-  const [page, setPage] = useState(1)
-  const [lastPage, setLastPage] = useState(1)
-  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
-  const [editingStudent, setEditingStudent] = useState<Estudiante | null>(null)
+  const [editingStudent, setEditingStudent] = useState<any | null>(null)
+  const [qrStudent, setQrStudent] = useState<EstudianteInscritoExamen | null>(null)
 
   const loadStudents = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const response = await estudiantesService.listByExam(exam.id, page)
-      setStudents(response.data)
-      setTotal(response.total)
-      setLastPage(Math.max(response.last_page, 1))
+      const response = await estudiantesService.listByExam(exam.id)
+      setStudents(response.estudiantes || [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al cargar estudiantes del examen.')
     } finally {
       setLoading(false)
     }
-  }, [exam.id, page])
+  }, [exam.id])
 
   useEffect(() => {
     void loadStudents()
@@ -68,7 +59,7 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
     if (!searchTerm) return students
     const search = searchTerm.toLowerCase()
     return students.filter((student) =>
-      [fullName(student), student.codigo_sis, student.ci]
+      [student.nombre_completo, student.codigo_sis, student.ci]
         .join(' ')
         .toLowerCase()
         .includes(search),
@@ -76,7 +67,7 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
   }, [searchTerm, students])
 
   const enabledCount = visibleStudents.filter(
-    (student) => student.pivot?.estado !== 'Inhabilitado' && student.activo,
+    (student) => student.estado === 'Habilitado'
   ).length
 
   const handleSearch = (e: FormEvent) => {
@@ -96,7 +87,7 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-xs font-semibold text-sci-navy">
-            <Users className="h-4 w-4 text-sci-cyan" /> {total} Inscriptos
+            <Users className="h-4 w-4 text-sci-cyan" /> {students.length} Inscriptos
           </div>
           <div className="flex items-center gap-2 text-xs font-semibold text-sci-navy">
             <CheckCircle2 className="h-4 w-4 text-sci-cyan" /> {enabledCount} Habilitados
@@ -150,7 +141,7 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
         <Button type="submit" variant="outline" className="h-10 text-xs">Buscar</Button>
       </form>
 
-      {/* Tabla */}
+      {/* Tabla de Estudiantes */}
       <Card className="rounded-2xl border-border bg-card shadow-xs">
         <CardContent className="p-0">
           {loading ? (
@@ -166,41 +157,63 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
                     <th className="px-5 py-3.5">Código SIS</th>
                     <th className="px-5 py-3.5">C.I.</th>
                     <th className="px-5 py-3.5">Correo</th>
-                    <th className="px-5 py-3.5 text-right">Estado</th>
+                    <th className="px-5 py-3.5">Estado</th>
+                    <th className="px-5 py-3.5 text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {visibleStudents.map((st) => (
                     <tr key={st.id} className="hover:bg-muted/20">
-                      <td className="px-5 py-3.5 font-bold text-sci-navy">{fullName(st)}</td>
+                      <td className="px-5 py-3.5 font-bold text-sci-navy">{st.nombre_completo}</td>
                       <td className="px-5 py-3.5 text-muted-foreground">{st.codigo_sis}</td>
-                      <td className="px-5 py-3.5 text-muted-foreground">{st.ci} {st.ci_extension}</td>
+                      <td className="px-5 py-3.5 text-muted-foreground">{st.ci} {st.ci_extension ?? ''}</td>
                       <td className="px-5 py-3.5 text-muted-foreground">{st.email_institucional}</td>
+                      <td className="px-5 py-3.5">
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                            st.estado === 'Habilitado'
+                              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700'
+                              : 'border-red-500/30 bg-red-500/10 text-red-600'
+                          }`}
+                          title={st.motivo_estado ?? ''}
+                        >
+                          {st.estado}
+                        </span>
+                      </td>
                       <td className="px-5 py-3.5 text-right">
-                        {canManage ? (
+                        <div className="flex items-center justify-end gap-2">
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => {
-                              setEditingStudent(st)
-                              setModalOpen(true)
-                            }}
+                            title="Ver Credencial QR"
+                            onClick={() => setQrStudent(st)}
                             className="cursor-pointer gap-1 text-xs"
                           >
-                            <Edit3 className="h-3 w-3" /> Editar
+                            <QrCode className="h-3.5 w-3.5 text-sci-cyan" />
                           </Button>
-                        ) : (
-                          <span className="rounded-full border border-sci-cyan/30 bg-sci-cyan/10 px-2 py-0.5 text-[11px] font-semibold text-sci-navy">
-                            {st.pivot?.estado ?? (st.activo ? 'Activo' : 'Inactivo')}
-                          </span>
-                        )}
+
+                          {canManage && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditingStudent(st)
+                                setModalOpen(true)
+                              }}
+                              className="cursor-pointer gap-1 text-xs"
+                            >
+                              <Edit3 className="h-3 w-3" /> Editar
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
                   {visibleStudents.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="py-10 text-center text-muted-foreground">
+                      <td colSpan={6} className="py-10 text-center text-muted-foreground">
                         No hay estudiantes registrados para este examen.
                       </td>
                     </tr>
@@ -212,35 +225,7 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
         </CardContent>
       </Card>
 
-      {/* Paginación */}
-      {!loading && total > 0 && (
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>Página {page} de {lastPage} · {total} estudiantes</span>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setPage((c) => Math.max(1, c - 1))}
-              disabled={page <= 1}
-              className="gap-1 text-xs"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" /> Anterior
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setPage((c) => Math.min(lastPage, c + 1))}
-              disabled={page >= lastPage}
-              className="gap-1 text-xs"
-            >
-              Siguiente <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-      )}
-
+      {/* Modal para editar/asignar estudiante */}
       {modalOpen && (
         <EstudianteFormModal
           key={editingStudent?.id ?? 'new'}
@@ -248,6 +233,15 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
           examMode={true}
           onClose={() => setModalOpen(false)}
           onSubmit={saveStudent}
+        />
+      )}
+
+      {/* Modal para visualizar el código QR del estudiante */}
+      {qrStudent && (
+        <EstudianteQrModal
+          estudiante={qrStudent}
+          materiaNombre={exam.materia?.nombre}
+          onClose={() => setQrStudent(null)}
         />
       )}
     </div>
