@@ -37,7 +37,7 @@ export default function DetalleExamenPage() {
   const activeTab = searchParams.get('tab') || 'info'
 
   const role = (localStorage.getItem('user_role') ?? '').toLowerCase()
-  const canManage = ['admin', 'administrador', 'docente'].includes(role)
+  const canManage = ['admin', 'administrador', 'docente', 'auxiliar'].includes(role)
 
   const [exam, setExam] = useState<Examen | null>(null)
   const [loading, setLoading] = useState(true)
@@ -58,8 +58,31 @@ export default function DetalleExamenPage() {
   }, [id])
 
   useEffect(() => {
-    void loadExam()
-  }, [loadExam])
+    if (!id) return
+
+    let cancelled = false
+
+    examenesService
+      .get(id)
+      .then((data) => {
+        if (cancelled) return
+        setExam(data)
+        setError('')
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        setError(err instanceof Error ? err.message : 'No se pudo obtener el examen.')
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [id])
 
   if (loading) {
     return (
