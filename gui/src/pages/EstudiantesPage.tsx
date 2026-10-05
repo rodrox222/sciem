@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 
 import { EstudianteFormModal } from '../components/estudiantes/EstudianteFormModal'
+import { AsociarEstudiantesModal } from '../components/estudiantes/AsociarEstudiantesModal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -49,8 +50,8 @@ export default function EstudiantesPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
-  const [editingStudent, setEditingStudent] = useState<Estudiante | null>(null)
-
+  const [associateModalOpen, setAssociateModalOpen] = useState(false)
+ const [editingStudent, setEditingStudent] = useState<Estudiante | null>(null)
   const loadStudents = useCallback(async () => {
     setLoading(true)
     setError('')
@@ -111,12 +112,6 @@ export default function EstudiantesPage() {
     event.preventDefault()
     setPage(1)
     setSearchTerm(searchInput.trim())
-  }
-
-  const openCreate = () => {
-    setEditingStudent(null)
-    setSuccess('')
-    setModalOpen(true)
   }
 
   const openEdit = (student: Estudiante) => {
@@ -201,7 +196,7 @@ export default function EstudiantesPage() {
         {canManage && examId && exam && (
           <Button
             type="button"
-            onClick={openCreate}
+            onClick={() => setAssociateModalOpen(true)}
             className="bg-sci-blue hover:opacity-90 text-white font-semibold cursor-pointer shadow-xs gap-2"
           >
             <UserPlus className="h-4 w-4" />
@@ -459,6 +454,18 @@ export default function EstudiantesPage() {
           onSubmit={saveStudent}
         />
       )}
+      {associateModalOpen && examId && exam && (
+  <AsociarEstudiantesModal
+    examId={examId}
+    examName={exam.nombre}
+    onClose={() => setAssociateModalOpen(false)}
+    onSuccess={() => {
+      setAssociateModalOpen(false)
+      setPage(1)
+      void loadStudents()
+    }}
+  />
+)}
     </div>
   )
 }

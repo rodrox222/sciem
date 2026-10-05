@@ -9,12 +9,15 @@ import {
   RefreshCw,
   Search,
   UserPlus,
+  UserX,
   Users,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { EstudianteFormModal } from '@/components/estudiantes/EstudianteFormModal'
+import { AsociarEstudiantesModal } from '@/components/estudiantes/AsociarEstudiantesModal'
+import { InhabilitarEstudianteModal } from '@/components/estudiantes/InhabilitarEstudianteModal'
 import {
   estudiantesService,
   type Estudiante,
@@ -43,8 +46,9 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
-  const [editingStudent, setEditingStudent] = useState<Estudiante | null>(null)
-
+ const [associateModalOpen, setAssociateModalOpen] = useState(false)
+ const [editingStudent, setEditingStudent] = useState<Estudiante | null>(null)
+ const [inhabilitarStudent, setInhabilitarStudent] = useState<Estudiante | null>(null)
   const loadStudents = useCallback(async () => {
     setLoading(true)
     setError('')
@@ -83,6 +87,10 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
     e.preventDefault()
     setSearchTerm(searchInput.trim())
   }
+  const openInhabilitar = (student: Estudiante) => {
+  setSuccess('')
+  setInhabilitarStudent(student)
+}
 
   const saveStudent = async (payload: InscripcionPayload) => {
     const response = await estudiantesService.enroll(exam.id, payload)
@@ -104,18 +112,29 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
         </div>
 
         {canManage && (
-          <Button
-            type="button"
-            onClick={() => {
-              setEditingStudent(null)
-              setSuccess('')
-              setModalOpen(true)
-            }}
-            className="cursor-pointer gap-2 bg-sci-blue text-xs font-semibold text-white hover:opacity-90"
-          >
-            <UserPlus className="h-4 w-4" /> Agregar estudiante
-          </Button>
-        )}
+  <Button
+    type="button"
+    onClick={() => {
+      setSuccess('')
+      setAssociateModalOpen(true)
+    }}
+    className="cursor-pointer gap-2 bg-sci-blue text-xs font-semibold text-white hover:opacity-90"
+  >
+    <UserPlus className="h-4 w-4" /> Agregar estudiante
+  </Button>
+)}
+{associateModalOpen && (
+  <AsociarEstudiantesModal
+    examId={exam.id}
+    examName={exam.nombre}
+    onClose={() => setAssociateModalOpen(false)}
+    onSuccess={() => {
+      setAssociateModalOpen(false)
+      setPage(1)
+      void loadStudents()
+    }}
+  />
+)}
       </div>
 
       {success && (
@@ -177,20 +196,34 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
                       <td className="px-5 py-3.5 text-muted-foreground">{st.ci} {st.ci_extension}</td>
                       <td className="px-5 py-3.5 text-muted-foreground">{st.email_institucional}</td>
                       <td className="px-5 py-3.5 text-right">
-                        {canManage ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setEditingStudent(st)
-                              setModalOpen(true)
-                            }}
-                            className="cursor-pointer gap-1 text-xs"
-                          >
-                            <Edit3 className="h-3 w-3" /> Editar
-                          </Button>
-                        ) : (
+                      {canManage ? (
+  <div className="flex justify-end gap-2">
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={() => {
+        setEditingStudent(st)
+        setModalOpen(true)
+      }}
+      className="cursor-pointer gap-1 text-xs"
+    >
+      <Edit3 className="h-3 w-3" /> Editar
+    </Button>
+
+    {st.pivot?.estado !== 'Inhabilitado' && (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => openInhabilitar(st)}
+        className="cursor-pointer gap-1 text-xs text-sci-red hover:text-sci-red"
+      >
+        <UserX className="h-3 w-3" /> Inhabilitar
+      </Button>
+    )}
+  </div>
+) : (
                           <span className="rounded-full border border-sci-cyan/30 bg-sci-cyan/10 px-2 py-0.5 text-[11px] font-semibold text-sci-navy">
                             {st.pivot?.estado ?? (st.activo ? 'Activo' : 'Inactivo')}
                           </span>
@@ -250,6 +283,18 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
           onSubmit={saveStudent}
         />
       )}
+      {inhabilitarStudent && (
+  <InhabilitarEstudianteModal
+    estudiante={inhabilitarStudent}
+    examName={exam.nombre}
+    onClose={() => setInhabilitarStudent(null)}
+    onSubmit={async () => {
+      throw new Error(
+        'La operación de inhabilitación aún no está conectada al endpoint del backend.',
+      )
+    }}
+  />
+)}
     </div>
   )
 }
