@@ -15,6 +15,7 @@ use App\Models\Docente;
 use App\Models\Auxiliar;
 use App\Http\Controllers\EstudianteController;
 use App\Http\Controllers\HabilitacionExamenController;
+use App\Http\Controllers\CargaMasivaEstudianteController;
 use Illuminate\Support\Facades\Artisan;
 use App\Http\Controllers\VerificacionController;
 
@@ -147,10 +148,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Habilitar o inhabilitar a un estudiante específico
     Route::patch('examenes/{examen}/estudiantes/{estudiante}/habilitacion', [HabilitacionExamenController::class, 'update']);
-
+    
     // HU 10 Escaneo e identificacion
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::post('examenes/{id}/verificar-ingreso', [VerificacionController::class, 'verificarIngreso']);
     });
-    
+
+    Route::post('examenes/{idExamen}/estudiantes/carga-masiva', [CargaMasivaEstudianteController::class, 'storePorExamen']);
+
 });
