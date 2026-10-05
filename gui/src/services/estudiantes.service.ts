@@ -13,10 +13,11 @@ export interface Estudiante {
   apellido_materno?: string | null
   email_institucional: string
   activo: boolean
-  pivot?: {
-    estado: EstadoInscripcion
-    created_at?: string
-  }
+ pivot?: {
+  estado: EstadoInscripcion
+  motivo_inhabilitacion?: string | null
+  created_at?: string
+}
   created_at?: string
   updated_at?: string
 }
@@ -61,5 +62,26 @@ export const estudiantesService = {
 
   enroll(examId: string, payload: InscripcionPayload) {
     return api.post<MutationResponse>(`/examenes/${examId}/estudiantes`, payload)
+  },
+    cambiarHabilitacion(
+    examId: string,
+    estudianteId: string,
+    payload: {
+      estado: EstadoInscripcion
+      motivo_inhabilitacion?: string | null
+    },
+  ) {
+    return api.patch<{
+      message: string
+      data: {
+        examen_id: string
+        estudiante_id: string
+        estado: EstadoInscripcion
+        motivo_inhabilitacion: string | null
+      }
+    }>(
+      `/examenes/${examId}/estudiantes/${estudianteId}/habilitacion`,
+      payload,
+    )
   },
 }

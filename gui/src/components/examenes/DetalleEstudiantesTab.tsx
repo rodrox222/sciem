@@ -111,17 +111,32 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
           </div>
         </div>
 
-        {canManage && (
-  <Button
-    type="button"
-    onClick={() => {
-      setSuccess('')
-      setAssociateModalOpen(true)
-    }}
-    className="cursor-pointer gap-2 bg-sci-blue text-xs font-semibold text-white hover:opacity-90"
-  >
-    <UserPlus className="h-4 w-4" /> Agregar estudiante
-  </Button>
+       {canManage && (
+  <div className="flex flex-wrap gap-2">
+    <Button
+      type="button"
+      onClick={() => {
+        setSuccess('')
+        setEditingStudent(null)
+        setModalOpen(true)
+      }}
+      className="cursor-pointer gap-2 bg-sci-blue text-xs font-semibold text-white hover:opacity-90"
+    >
+      <UserPlus className="h-4 w-4" /> Crear estudiante
+    </Button>
+
+    <Button
+      type="button"
+      onClick={() => {
+        setSuccess('')
+        setAssociateModalOpen(true)
+      }}
+      variant="outline"
+      className="cursor-pointer gap-2 text-xs font-semibold"
+    >
+      <Users className="h-4 w-4" /> Agregar estudiante
+    </Button>
+  </div>
 )}
 {associateModalOpen && (
   <AsociarEstudiantesModal
@@ -185,7 +200,7 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
                     <th className="px-5 py-3.5">Código SIS</th>
                     <th className="px-5 py-3.5">C.I.</th>
                     <th className="px-5 py-3.5">Correo</th>
-                    <th className="px-5 py-3.5 text-right">Estado</th>
+                    <th className="px-5 py-3.5 text-right">Estado / Motivo</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -195,40 +210,55 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
                       <td className="px-5 py-3.5 text-muted-foreground">{st.codigo_sis}</td>
                       <td className="px-5 py-3.5 text-muted-foreground">{st.ci} {st.ci_extension}</td>
                       <td className="px-5 py-3.5 text-muted-foreground">{st.email_institucional}</td>
-                      <td className="px-5 py-3.5 text-right">
-                      {canManage ? (
-  <div className="flex justify-end gap-2">
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      onClick={() => {
-        setEditingStudent(st)
-        setModalOpen(true)
-      }}
-      className="cursor-pointer gap-1 text-xs"
-    >
-      <Edit3 className="h-3 w-3" /> Editar
-    </Button>
+                    <td className="px-5 py-3.5 text-right">
+  <div className="flex items-center justify-end gap-2">
+    {st.pivot?.estado === 'Inhabilitado' ? (
+      <span className="inline-flex items-center rounded-full border border-sci-red/30 bg-sci-red/10 px-2 py-0.5 text-[11px] font-semibold text-sci-red">
+        Inhabilitado
+      </span>
+    ) : (
+      <span className="inline-flex items-center rounded-full border border-sci-cyan/30 bg-sci-cyan/10 px-2 py-0.5 text-[11px] font-semibold text-sci-navy">
+        Habilitado
+      </span>
+    )}
+{st.pivot?.estado === 'Inhabilitado' && st.pivot?.motivo_inhabilitacion && (
+  <span
+    title={st.pivot.motivo_inhabilitacion}
+    className="max-w-48 truncate text-[11px] text-muted-foreground"
+  >
+    Motivo: {st.pivot.motivo_inhabilitacion}
+  </span>
+)}
+    {canManage && (
+      <>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setEditingStudent(st)
+            setModalOpen(true)
+          }}
+          className="cursor-pointer gap-1 text-xs"
+        >
+          <Edit3 className="h-3 w-3" /> Editar
+        </Button>
 
-    {st.pivot?.estado !== 'Inhabilitado' && (
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => openInhabilitar(st)}
-        className="cursor-pointer gap-1 text-xs text-sci-red hover:text-sci-red"
-      >
-        <UserX className="h-3 w-3" /> Inhabilitar
-      </Button>
+        {st.pivot?.estado !== 'Inhabilitado' && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => openInhabilitar(st)}
+            className="cursor-pointer gap-1 text-xs text-sci-red hover:text-sci-red"
+          >
+            <UserX className="h-3 w-3" /> Inhabilitar
+          </Button>
+        )}
+      </>
     )}
   </div>
-) : (
-                          <span className="rounded-full border border-sci-cyan/30 bg-sci-cyan/10 px-2 py-0.5 text-[11px] font-semibold text-sci-navy">
-                            {st.pivot?.estado ?? (st.activo ? 'Activo' : 'Inactivo')}
-                          </span>
-                        )}
-                      </td>
+</td>
                     </tr>
                   ))}
                   {visibleStudents.length === 0 && (
@@ -288,11 +318,20 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
     estudiante={inhabilitarStudent}
     examName={exam.nombre}
     onClose={() => setInhabilitarStudent(null)}
-    onSubmit={async () => {
-      throw new Error(
-        'La operación de inhabilitación aún no está conectada al endpoint del backend.',
-      )
-    }}
+    onSubmit={async (motivo) => {
+  await estudiantesService.cambiarHabilitacion(
+    exam.id,
+    inhabilitarStudent.id,
+    {
+      estado: 'Inhabilitado',
+      motivo_inhabilitacion: motivo,
+    },
+  )
+
+  setInhabilitarStudent(null)
+  setSuccess('Estudiante inhabilitado correctamente.')
+  await loadStudents()
+}}
   />
 )}
     </div>
