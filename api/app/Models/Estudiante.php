@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Estudiante extends Model
 {
@@ -33,18 +34,22 @@ class Estudiante extends Model
         ];
     }
 
-    /**
-     * Exámenes asociados al estudiante.
-     */
     public function examenes(): BelongsToMany
     {
-        return $this->belongsToMany(
-            Examen::class,
-            'estudiante_examen',
-            'id_estudiante',
-            'id_examen'
-        )
-        ->withPivot('estado', 'motivo_inhabilitacion')
-        ->withTimestamps();
+        return $this->belongsToMany(Examen::class, 'estudiante_examen', 'id_estudiante', 'id_examen')
+            ->withPivot('estado', 'motivo_estado', 'ajuste_manual', 'modificado_por_docente_id', 'fecha_ajuste_manual')
+            ->withTimestamps();
+    }
+
+    public function prerrequisitos(): BelongsToMany
+    {
+        return $this->belongsToMany(PrerrequisitoExamen::class, 'estudiante_prerrequisito', 'id_estudiante', 'id_prerrequisito')
+            ->withPivot('cumplido', 'fecha_cumplimiento', 'revisado_por_docente_id')
+            ->withTimestamps();
+    }
+
+    public function logsAsistencias(): HasMany
+    {
+        return $this->hasMany(LogAsistencia::class, 'id_estudiante');
     }
 }

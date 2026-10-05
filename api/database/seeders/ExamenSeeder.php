@@ -71,7 +71,7 @@ class ExamenSeeder extends Seeder
                 $examen->estudiantes()->syncWithoutDetaching([
                     $estudiantes[0]->id => [
                         'estado'                => 'Habilitado',
-                        'motivo_inhabilitacion' => null,
+                        'motivo_estado' => null,
                         'created_at'            => now(),
                         'updated_at'            => now(),
                     ],
@@ -83,7 +83,7 @@ class ExamenSeeder extends Seeder
                 $examen->estudiantes()->syncWithoutDetaching([
                     $estudiantes[1]->id => [
                         'estado'                => 'Habilitado',
-                        'motivo_inhabilitacion' => null,
+                        'motivo_estado' => null,
                         'created_at'            => now(),
                         'updated_at'            => now(),
                     ],
@@ -95,7 +95,7 @@ class ExamenSeeder extends Seeder
                 $examen->estudiantes()->syncWithoutDetaching([
                     $estudiantes[2]->id => [
                         'estado'                => 'Inhabilitado',
-                        'motivo_inhabilitacion' => 'No cumple con el 80% de asistencia mínima requerida.',
+                        'motivo_estado' => 'No cumple con el 80% de asistencia mínima requerida.',
                         'created_at'            => now(),
                         'updated_at'            => now(),
                     ],
