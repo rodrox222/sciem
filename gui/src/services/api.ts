@@ -5,12 +5,14 @@ export type ValidationErrors = Record<string, string[]>;
 export class ApiError extends Error {
   status: number;
   errors?: ValidationErrors;
+  data?: unknown;
 
-  constructor(message: string, status: number, errors?: ValidationErrors) {
+  constructor(message: string, status: number, errors?: ValidationErrors, data?: unknown) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.errors = errors;
+    this.data = data;
   }
 }
 
@@ -88,7 +90,8 @@ export async function apiRequest<T>(
     throw new ApiError(
       errorPayload?.message || `Error en la petición (HTTP ${response.status})`,
       response.status,
-      errorPayload?.errors
+      errorPayload?.errors,
+      payload
     );
   }
 
