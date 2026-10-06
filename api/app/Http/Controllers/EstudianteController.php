@@ -99,7 +99,7 @@ class EstudianteController extends Controller
      */
     public function inscribirAExamen(InscribirEstudianteExamenRequest $request, string $idExamen): JsonResponse
     {
-        $examen = Examen::find($idExamen);
+        $examen = Examen::withCount('prerrequisitos')->find($idExamen);
 
         if (!$examen) {
             return response()->json(['message' => 'Examen no encontrado.'], 404);
@@ -110,27 +110,33 @@ class EstudianteController extends Controller
         }
 
         $data = $request->validated();
-        $estado = $data['estado'] ?? 'Habilitado';
 
-        // El alta y la vinculación se confirman juntas.
+        // Si el examen tiene prerrequisitos -> Inhabilitado. Si no tiene -> Habilitado.
+        $estadoPorDefecto = ($examen->prerrequisitos_count > 0) ? 'Inhabilitado' : 'Habilitado';
+        $estado = $data['estado'] ?? $estadoPorDefecto;
+
         $estudiante = DB::transaction(function () use ($examen, $data, $estado) {
             $estudiante = Estudiante::updateOrCreate(
-            ['codigo_sis' => $data['codigo_sis']],
-            [
-                'ci'                  => $data['ci'],
-                'ci_extension'        => $data['ci_extension'] ?? null,
-                'nombre'              => $data['nombre'],
-                'apellido_paterno'    => $data['apellido_paterno'],
-                'apellido_materno'    => $data['apellido_materno'] ?? null,
-                'email_institucional' => $data['email_institucional'],
-                'activo'              => true,
-            ]
-        );
+                ['codigo_sis' => $data['codigo_sis']],
+                [
+                    'ci'                  => $data['ci'],
+                    'ci_extension'        => $data['ci_extension'] ?? null,
+                    'nombre'              => $data['nombre'],
+                    'apellido_paterno'    => $data['apellido_paterno'],
+                    'apellido_materno'    => $data['apellido_materno'] ?? null,
+                    'email_institucional' => $data['email_institucional'],
+                    'activo'              => true,
+                ]
+            );
 
-        // syncWithoutDetaching evita duplicar si ya estaba inscrito y no borra a los demás
-        $examen->estudiantes()->syncWithoutDetaching([
-            $estudiante->id => ['estado' => $estado],
-        ]);
+            $examen->estudiantes()->syncWithoutDetaching([
+                $estudiante->id => [
+                    'estado'        => $estado,
+                    'motivo_estado' => null,
+                    'ajuste_manual' => false,
+                ],
+            ]);
+
             return $estudiante;
         });
 

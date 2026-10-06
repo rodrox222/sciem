@@ -59,12 +59,32 @@ export default function EstudiantesPage() {
     try {
       if (examId) {
         const [studentResponse, examResponse] = await Promise.all([
-          estudiantesService.listByExam(examId, page),
+          estudiantesService.listByExam(examId),
           examenesService.get(examId),
         ])
-        setStudents(studentResponse.data)
-        setTotal(studentResponse.total)
-        setLastPage(Math.max(studentResponse.last_page, 1))
+
+        // Normalizamos los estudiantes del examen a la interfaz Estudiante
+        const mappedStudents: Estudiante[] = (studentResponse.estudiantes || []).map((st) => ({
+          id: st.id,
+          codigo_sis: st.codigo_sis,
+          ci: st.ci,
+          ci_extension: st.ci_extension,
+          nombre: st.nombre_completo,
+          apellido_paterno: '',
+          apellido_materno: null,
+          email_institucional: st.email_institucional,
+          activo: true,
+          pivot: {
+            estado: st.estado,
+            motivo_estado: st.motivo_estado,
+            ajuste_manual: st.ajuste_manual,
+            fecha_ajuste_manual: st.fecha_ajuste_manual,
+          },
+        }))
+
+        setStudents(mappedStudents)
+        setTotal(mappedStudents.length)
+        setLastPage(1)
         setExam(examResponse)
       } else {
         const response = await estudiantesService.list({
