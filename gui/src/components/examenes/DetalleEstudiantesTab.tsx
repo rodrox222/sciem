@@ -8,12 +8,15 @@ import {
   RefreshCw,
   Search,
   UserPlus,
+  UserX,
   Users,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { EstudianteFormModal } from '@/components/estudiantes/EstudianteFormModal'
+import { AsociarEstudiantesModal } from '@/components/estudiantes/AsociarEstudiantesModal'
+import { InhabilitarEstudianteModal } from '@/components/estudiantes/InhabilitarEstudianteModal'
 import { EstudianteQrModal } from '@/components/estudiantes/EstudianteQrModal'
 import {
   estudiantesService,
@@ -34,8 +37,12 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
+  // Modales
   const [modalOpen, setModalOpen] = useState(false)
+  const [associateModalOpen, setAssociateModalOpen] = useState(false)
   const [editingStudent, setEditingStudent] = useState<any | null>(null)
+  const [inhabilitarStudent, setInhabilitarStudent] = useState<EstudianteInscritoExamen | null>(null)
   const [qrStudent, setQrStudent] = useState<EstudianteInscritoExamen | null>(null)
 
   const loadStudents = useCallback(async () => {
@@ -75,6 +82,11 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
     setSearchTerm(searchInput.trim())
   }
 
+  const openInhabilitar = (student: EstudianteInscritoExamen) => {
+    setSuccess('')
+    setInhabilitarStudent(student)
+  }
+
   const saveStudent = async (payload: InscripcionPayload) => {
     const response = await estudiantesService.enroll(exam.id, payload)
     setSuccess(response.message || 'Estudiante asignado correctamente.')
@@ -95,19 +107,45 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
         </div>
 
         {canManage && (
-          <Button
-            type="button"
-            onClick={() => {
-              setEditingStudent(null)
-              setSuccess('')
-              setModalOpen(true)
-            }}
-            className="cursor-pointer gap-2 bg-sci-blue text-xs font-semibold text-white hover:opacity-90"
-          >
-            <UserPlus className="h-4 w-4" /> Agregar estudiante
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              onClick={() => {
+                setSuccess('')
+                setEditingStudent(null)
+                setModalOpen(true)
+              }}
+              className="cursor-pointer gap-2 bg-sci-blue text-xs font-semibold text-white hover:opacity-90"
+            >
+              <UserPlus className="h-4 w-4" /> Crear estudiante
+            </Button>
+
+            <Button
+              type="button"
+              onClick={() => {
+                setSuccess('')
+                setAssociateModalOpen(true)
+              }}
+              variant="outline"
+              className="cursor-pointer gap-2 text-xs font-semibold"
+            >
+              <Users className="h-4 w-4" /> Agregar estudiante
+            </Button>
+          </div>
         )}
       </div>
+
+      {associateModalOpen && (
+        <AsociarEstudiantesModal
+          examId={exam.id}
+          examName={exam.nombre}
+          onClose={() => setAssociateModalOpen(false)}
+          onSuccess={() => {
+            setAssociateModalOpen(false)
+            void loadStudents()
+          }}
+        />
+      )}
 
       {success && (
         <div className="rounded-xl border border-sci-cyan/30 bg-sci-cyan/10 px-4 py-3 text-xs font-semibold text-sci-navy">
@@ -169,43 +207,66 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
                       <td className="px-5 py-3.5 text-muted-foreground">{st.ci} {st.ci_extension ?? ''}</td>
                       <td className="px-5 py-3.5 text-muted-foreground">{st.email_institucional}</td>
                       <td className="px-5 py-3.5">
-                        <span
-                          className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                            st.estado === 'Habilitado'
-                              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700'
-                              : 'border-red-500/30 bg-red-500/10 text-red-600'
-                          }`}
-                          title={st.motivo_estado ?? ''}
-                        >
-                          {st.estado}
-                        </span>
+                        <div className="flex flex-col gap-0.5">
+                          <span
+                            className={`inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                              st.estado === 'Habilitado'
+                                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700'
+                                : 'border-red-500/30 bg-red-500/10 text-red-600'
+                            }`}
+                          >
+                            {st.estado}
+                          </span>
+                          {st.estado === 'Inhabilitado' && st.motivo_estado && (
+                            <span
+                              title={st.motivo_estado}
+                              className="max-w-44 truncate text-[10px] text-muted-foreground"
+                            >
+                              {st.motivo_estado}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-5 py-3.5 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1.5">
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
                             title="Ver Credencial QR"
                             onClick={() => setQrStudent(st)}
-                            className="cursor-pointer gap-1 text-xs"
+                            className="cursor-pointer h-8 w-8 p-0"
                           >
                             <QrCode className="h-3.5 w-3.5 text-sci-cyan" />
                           </Button>
 
                           {canManage && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setEditingStudent(st)
-                                setModalOpen(true)
-                              }}
-                              className="cursor-pointer gap-1 text-xs"
-                            >
-                              <Edit3 className="h-3 w-3" /> Editar
-                            </Button>
+                            <>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingStudent(st)
+                                  setModalOpen(true)
+                                }}
+                                className="cursor-pointer gap-1 text-xs h-8"
+                              >
+                                <Edit3 className="h-3 w-3" /> Editar
+                              </Button>
+
+                              {st.estado !== 'Inhabilitado' && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openInhabilitar(st)}
+                                  className="cursor-pointer gap-1 text-xs text-sci-red hover:text-sci-red h-8"
+                                >
+                                  <UserX className="h-3 w-3" /> Inhabilitar
+                                </Button>
+                              )}
+                            </>
                           )}
                         </div>
                       </td>
@@ -225,7 +286,7 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
         </CardContent>
       </Card>
 
-      {/* Modal para editar/asignar estudiante */}
+      {/* Modal para crear/editar estudiante */}
       {modalOpen && (
         <EstudianteFormModal
           key={editingStudent?.id ?? 'new'}
@@ -233,6 +294,29 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
           examMode={true}
           onClose={() => setModalOpen(false)}
           onSubmit={saveStudent}
+        />
+      )}
+
+      {/* Modal para inhabilitar estudiante */}
+      {inhabilitarStudent && (
+        <InhabilitarEstudianteModal
+          estudiante={inhabilitarStudent as any}
+          examName={exam.nombre}
+          onClose={() => setInhabilitarStudent(null)}
+          onSubmit={async (motivo) => {
+            await estudiantesService.cambiarHabilitacion(
+              exam.id,
+              inhabilitarStudent.id,
+              {
+                estado: 'Inhabilitado',
+                motivo_estado: motivo,
+              }
+            )
+
+            setInhabilitarStudent(null)
+            setSuccess('Estudiante inhabilitado correctamente.')
+            await loadStudents()
+          }}
         />
       )}
 
