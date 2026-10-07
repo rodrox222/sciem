@@ -2,7 +2,7 @@ services:
   db:
     image: postgres:15.10-alpine
     container_name: sciem_db
-    env_file: .env
+    env_file: ./api/.env
     volumes:
       - ./data/pg_data:/var/lib/postgresql/data
     ports:
