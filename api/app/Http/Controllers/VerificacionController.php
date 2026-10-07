@@ -8,6 +8,7 @@ use App\Models\LogAsistencia;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Database\QueryException;
 
 class VerificacionController extends Controller
 {
@@ -176,7 +177,8 @@ class VerificacionController extends Controller
                 'fecha_ingreso' => now('America/La_Paz'),
             ]
         );
-        $this->registrarLog(
+        try {
+            $this->registrarLog(
             $examen->id,
             $estudiante->id,
             $codigoSis,
@@ -184,6 +186,35 @@ class VerificacionController extends Controller
             'Ingreso validado y autorizado exitosamente.',
             $qrData
         );
+        } catch (QueryException $e) {
+            if ($e->getCode() === '23505') {
+                $ingresoPrevio = LogAsistencia::where('id_examen', $examen->id)
+                    ->where('id_estudiante', $estudiante->id)
+                    ->where('resultado', 'PERMITIDO')
+                    ->first();
+
+        $this->registrarLog(
+            $examen->id,
+            $estudiante->id,
+            $codigoSis,
+            'RECHAZADO_YA_INGRESO',
+            'El estudiante ya registró un ingreso exitoso previamente.',
+            $qrData
+        );
+
+        return response()->json([
+            'resultado' => 'RECHAZADO_YA_INGRESO',
+            'message'   => 'El estudiante ya registró su ingreso a esta evaluación.',
+            'detalles'  => [
+                'primer_ingreso' => $ingresoPrevio
+                    ? Carbon::parse($ingresoPrevio->fecha_escaneo)->format('d/m/Y H:i:s')
+                    : null,
+            ],
+        ], 409);
+    }
+
+    throw $e;
+}
 
         $nombreCompleto = trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}");
 
