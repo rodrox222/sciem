@@ -12,8 +12,8 @@ use App\Models\LogAuditoria;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class CargaMasivaEstudianteController extends Controller
 {
@@ -21,7 +21,7 @@ class CargaMasivaEstudianteController extends Controller
 
     public function storePorExamen(CargaMasivaEstudiantesRequest $request, string $idExamen): JsonResponse
     {
-        // Validar existencia del examen
+        // 1. Validar existencia del examen
         $examen = Examen::find($idExamen);
         if (!$examen) {
             return response()->json([
@@ -30,7 +30,7 @@ class CargaMasivaEstudianteController extends Controller
             ], 404);
         }
 
-        // Control de pertenencia del docente
+        // 2. Control de pertenencia del docente
         $user = $request->user();
         if ($user instanceof Docente && $examen->id_docente !== $user->id) {
             return response()->json([
@@ -39,42 +39,19 @@ class CargaMasivaEstudianteController extends Controller
             ], 403);
         }
 
+        // 3. Cargar el archivo con PhpSpreadsheet (soporta .xlsx, .xls y .csv)
         $archivo = $request->file('archivo');
-        $handle = fopen($archivo->getRealPath(), 'r');
-
-        if ($handle === false) {
+        try {
+            $spreadsheet = IOFactory::load($archivo->getRealPath());
+        } catch (\Throwable $e) {
             return response()->json([
-                'message'    => 'No se pudo abrir el archivo CSV para su lectura.',
-                'error_type' => 'ARCHIVO_ILEGIBLE'
+                'message'    => 'No se pudo leer el archivo. Asegúrese de que sea un archivo Excel o CSV válido.',
+                'error_type' => 'ARCHIVO_ILEGIBLE',
+                'detalle'    => $e->getMessage(),
             ], 422);
         }
 
-        // Validar cabecera esperada
-        $cabecera = fgetcsv($handle, 0, ',');
-        if (!$cabecera) {
-            fclose($handle);
-            return response()->json([
-                'message'    => 'El archivo CSV proporcionado está vacío.',
-                'error_type' => 'ARCHIVO_VACIO'
-            ], 422);
-        }
-
-        $cabeceraLimpia = array_map(function ($col) {
-            return trim(preg_replace('/[\x00-\x1F\x80-\xFF]/', '', strtolower($col)));
-        }, $cabecera);
-
-        $cabeceraEsperada = ['codigo_sis', 'ci', 'ci_extension', 'nombre', 'apellido_paterno', 'apellido_materno', 'email_institucional'];
-        if (array_slice($cabeceraLimpia, 0, count($cabeceraEsperada)) !== $cabeceraEsperada) {
-            fclose($handle);
-            return response()->json([
-                'message'           => 'La cabecera del archivo CSV no coincide con el formato oficial.',
-                'error_type'        => 'CABECERA_INVALIDA',
-                'cabecera_recibida' => $cabecera,
-                'formato_esperado'  => implode(',', $cabeceraEsperada),
-            ], 422);
-        }
-
-        // Pre-cargar identificadores existentes en BD
+        // 4. Pre-cargar identificadores existentes en BD
         $estudiantesBdPorSis = Estudiante::pluck('id', 'codigo_sis')->toArray();
         $inscritosEnEsteExamen = DB::table('estudiante_examen')
             ->where('id_examen', $idExamen)
@@ -82,114 +59,133 @@ class CargaMasivaEstudianteController extends Controller
             ->flip()
             ->toArray();
 
-        $sisEnArchivo = [];
-        $emailsEnArchivo = [];
-
         $filasValidadas = [];
+        $sisProcesados = [];
         $errores = [];
-        $numeroFila = 1;
 
-        // FASE 1: Validación fila por fila
-        while (($fila = fgetcsv($handle, 0, ',')) !== false) {
-            $numeroFila++;
+        // 5. Recorrer hoja por hoja
+        foreach ($spreadsheet->getAllSheets() as $hoja) {
+            $nombreHoja = $hoja->getTitle();
+            $maxFila = $hoja->getHighestRow();
 
-            if (count(array_filter($fila)) === 0) {
-                continue;
-            }
+            // Buscar la celda con exactamente '#' en las primeras 30 filas
+            $filaCabecera = null;
+            $colNumero = null;
+            $limiteBusqueda = min(30, $maxFila);
 
-            $registro = [
-                'codigo_sis'          => isset($fila[0]) ? trim($fila[0]) : '',
-                'ci'                  => isset($fila[1]) ? trim($fila[1]) : '',
-                'ci_extension'        => isset($fila[2]) && trim($fila[2]) !== '' ? trim($fila[2]) : null,
-                'nombre'              => isset($fila[3]) ? trim($fila[3]) : '',
-                'apellido_paterno'    => isset($fila[4]) ? trim($fila[4]) : '',
-                'apellido_materno'    => isset($fila[5]) && trim($fila[5]) !== '' ? trim($fila[5]) : null,
-                'email_institucional' => isset($fila[6]) ? trim($fila[6]) : '',
-            ];
-
-            // Reglas de formato
-            $validador = Validator::make($registro, [
-                'codigo_sis'          => ['required', 'string', 'max:20'],
-                'ci'                  => ['required', 'string', 'max:20'],
-                'ci_extension'        => ['nullable', 'string', 'max:10'],
-                'nombre'              => ['required', 'string', 'max:100'],
-                'apellido_paterno'    => ['required', 'string', 'max:100'],
-                'apellido_materno'    => ['nullable', 'string', 'max:100'],
-                'email_institucional' => ['required', 'string', 'max:150', 'regex:/^[a-zA-Z0-9._%+-]+@est\.umss\.edu$/i'],
-            ], [
-                'codigo_sis.required'          => 'El código SIS es obligatorio.',
-                'ci.required'                  => 'El CI es obligatorio.',
-                'nombre.required'              => 'El nombre es obligatorio.',
-                'apellido_paterno.required'    => 'El apellido paterno es obligatorio.',
-                'email_institucional.regex'    => 'El correo debe terminar en @est.umss.edu.',
-                'email_institucional.required' => 'El correo institucional es obligatorio.',
-            ]);
-
-            if ($validador->fails()) {
-                $errores[] = [
-                    'fila'          => $numeroFila,
-                    'tipo_error'    => 'FORMATO_INVALIDO',
-                    'identificador' => $registro['codigo_sis'] ?: "Línea {$numeroFila}",
-                    'motivo'        => implode(' | ', $validador->errors()->all()),
-                ];
-                continue;
-            }
-
-            // Duplicados dentro del mismo CSV
-            if (isset($sisEnArchivo[$registro['codigo_sis']])) {
-                $errores[] = [
-                    'fila'          => $numeroFila,
-                    'tipo_error'    => 'DUPLICADO_EN_ARCHIVO',
-                    'identificador' => $registro['codigo_sis'],
-                    'motivo'        => "El código SIS '{$registro['codigo_sis']}' aparece duplicado en el archivo (repetido de la fila {$sisEnArchivo[$registro['codigo_sis']]}).",
-                ];
-                continue;
-            }
-
-            if (isset($emailsEnArchivo[$registro['email_institucional']])) {
-                $errores[] = [
-                    'fila'          => $numeroFila,
-                    'tipo_error'    => 'DUPLICADO_EN_ARCHIVO',
-                    'identificador' => $registro['email_institucional'],
-                    'motivo'        => "El correo '{$registro['email_institucional']}' aparece repetido en el archivo.",
-                ];
-                continue;
-            }
-
-            // Duplicados contra el examen actual
-            if (isset($estudiantesBdPorSis[$registro['codigo_sis']])) {
-                $idEstudianteExistente = $estudiantesBdPorSis[$registro['codigo_sis']];
-                if (isset($inscritosEnEsteExamen[$idEstudianteExistente])) {
-                    $errores[] = [
-                        'fila'          => $numeroFila,
-                        'tipo_error'    => 'YA_INSCRITO_EN_EXAMEN',
-                        'identificador' => $registro['codigo_sis'],
-                        'motivo'        => "El estudiante con SIS '{$registro['codigo_sis']}' ya se encuentra inscrito en este examen.",
-                    ];
-                    continue;
+            for ($f = 1; $f <= $limiteBusqueda; $f++) {
+                for ($c = 'A'; $c <= 'G'; $c++) {
+                    $valor = trim((string) $hoja->getCell("{$c}{$f}")->getValue());
+                    if ($valor === '#') {
+                        $filaCabecera = $f;
+                        $colNumero = $c;
+                        break 2;
+                    }
                 }
             }
 
-            $sisEnArchivo[$registro['codigo_sis']] = $numeroFila;
-            $emailsEnArchivo[$registro['email_institucional']] = $numeroFila;
+            // Si la hoja no tiene la cabecera '#' esperada, continuar con la siguiente hoja
+            if (!$filaCabecera) {
+                continue;
+            }
 
-            $filasValidadas[] = $registro;
+            // Mapeo relativo de columnas a partir de '#'
+            $colSis       = chr(ord($colNumero) + 1);
+            $colApellidos = chr(ord($colNumero) + 2);
+            $colNombres   = chr(ord($colNumero) + 3);
+            $colEmail     = chr(ord($colNumero) + 4);
+
+            $filasVaciasConsecutivas = 0;
+
+            for ($fila = $filaCabecera + 1; $fila <= $maxFila; $fila++) {
+                $rawSis       = trim((string) $hoja->getCell("{$colSis}{$fila}")->getValue());
+                $rawApellidos = trim((string) $hoja->getCell("{$colApellidos}{$fila}")->getValue());
+                $rawNombres   = trim((string) $hoja->getCell("{$colNombres}{$fila}")->getValue());
+                $rawEmail     = trim((string) $hoja->getCell("{$colEmail}{$fila}")->getValue());
+
+                // Detectar fila vacía
+                if ($rawSis === '' && $rawApellidos === '' && $rawNombres === '') {
+                    $filasVaciasConsecutivas++;
+                    // Condición de parada: 3 líneas consecutivas vacías
+                    if ($filasVaciasConsecutivas >= 3) {
+                        break;
+                    }
+                    continue;
+                }
+
+                $filasVaciasConsecutivas = 0;
+
+                // Omitir separadores u otras filas que no tengan código SIS numérico
+                if (!preg_match('/^[0-9]{6,12}$/', $rawSis)) {
+                    continue;
+                }
+
+                // Validar duplicados dentro del mismo archivo
+                if (isset($sisProcesados[$rawSis])) {
+                    $errores[] = [
+                        'hoja'          => $nombreHoja,
+                        'fila'          => $fila,
+                        'identificador' => $rawSis,
+                        'motivo'        => "El estudiante con SIS '{$rawSis}' aparece duplicado en el archivo.",
+                    ];
+                    continue;
+                }
+
+                // Validar si ya está inscrito en el examen
+                if (isset($estudiantesBdPorSis[$rawSis])) {
+                    $idExistente = $estudiantesBdPorSis[$rawSis];
+                    if (isset($inscritosEnEsteExamen[$idExistente])) {
+                        $errores[] = [
+                            'hoja'          => $nombreHoja,
+                            'fila'          => $fila,
+                            'identificador' => $rawSis,
+                            'motivo'        => "El estudiante con SIS '{$rawSis}' ya se encuentra inscrito en este examen.",
+                        ];
+                        continue;
+                    }
+                }
+
+                // Separar apellidos (Paterno y Materno)
+                $partesApellidos = preg_split('/\s+/', $rawApellidos);
+                $apellidoPaterno = $partesApellidos[0] ?? '';
+                $apellidoMaterno = count($partesApellidos) > 1 ? implode(' ', array_slice($partesApellidos, 1)) : null;
+
+                // Formatear correo institucional si viene incompleto
+                $email = str_contains($rawEmail, '@') ? $rawEmail : "{$rawSis}@est.umss.edu";
+
+                $registro = [
+                    'codigo_sis'          => $rawSis,
+                    'ci'                  => null,
+                    'ci_extension'        => null,
+                    'nombre'              => $rawNombres,
+                    'apellido_paterno'    => $apellidoPaterno,
+                    'apellido_materno'    => $apellidoMaterno,
+                    'email_institucional' => $email,
+                ];
+
+                $sisProcesados[$rawSis] = true;
+                $filasValidadas[] = $registro;
+            }
         }
 
-        fclose($handle);
-
-        // Si hubo un solo error, se rechaza la carga completa
+        // FASE DE VALIDACIÓN ATÓMICA: Si se detectó algún conflicto, se rechaza todo (código 422)
         if (count($errores) > 0) {
             return response()->json([
                 'message'       => 'Se encontraron conflictos en el archivo. La operación fue cancelada y ningún estudiante fue agregado.',
                 'error_type'    => 'CONFLICTOS_EN_CARGA',
-                'total_filas'   => $numeroFila - 1,
                 'total_errores' => count($errores),
                 'errores'       => $errores,
             ], 422);
         }
 
-        // FASE 2: Inserción por lotes con transacción SQL
+        if (count($filasValidadas) === 0) {
+            return response()->json([
+                'message'    => 'No se encontraron registros de estudiantes válidos en el archivo.',
+                'error_type' => 'SIN_REGISTROS_VALIDOS',
+            ], 422);
+        }
+
+        // FASE DE INSERCIÓN: Solo se ejecuta si NO hubo ningún error en todo el archivo
         DB::beginTransaction();
 
         try {
@@ -199,10 +195,8 @@ class CargaMasivaEstudianteController extends Controller
             foreach ($filasValidadas as $datos) {
                 if (isset($estudiantesBdPorSis[$datos['codigo_sis']])) {
                     $idEstudiante = $estudiantesBdPorSis[$datos['codigo_sis']];
-                    
+
                     Estudiante::where('id', $idEstudiante)->update([
-                        'ci'                  => $datos['ci'],
-                        'ci_extension'        => $datos['ci_extension'],
                         'nombre'              => $datos['nombre'],
                         'apellido_paterno'    => $datos['apellido_paterno'],
                         'apellido_materno'    => $datos['apellido_materno'],
@@ -216,8 +210,8 @@ class CargaMasivaEstudianteController extends Controller
                     $loteNuevosEstudiantes[] = [
                         'id'                  => $idEstudiante,
                         'codigo_sis'          => $datos['codigo_sis'],
-                        'ci'                  => $datos['ci'],
-                        'ci_extension'        => $datos['ci_extension'],
+                        'ci'                  => null,
+                        'ci_extension'        => null,
                         'nombre'              => $datos['nombre'],
                         'apellido_paterno'    => $datos['apellido_paterno'],
                         'apellido_materno'    => $datos['apellido_materno'],
@@ -232,7 +226,7 @@ class CargaMasivaEstudianteController extends Controller
                     'id_examen'                 => $idExamen,
                     'id_estudiante'             => $idEstudiante,
                     'estado'                    => 'Inhabilitado',
-                    'motivo_estado'             => null,
+                    'motivo_estado'             => 'No cumple con los prerrequisitos asignados.',
                     'ajuste_manual'             => false,
                     'modificado_por_docente_id' => null,
                     'fecha_ajuste_manual'       => null,
@@ -240,7 +234,6 @@ class CargaMasivaEstudianteController extends Controller
                     'updated_at'                => now(),
                 ];
 
-                // Procesamiento por lotes de 50
                 if (count($lotePivote) >= self::TAMANO_LOTE) {
                     if (!empty($loteNuevosEstudiantes)) {
                         Estudiante::insert($loteNuevosEstudiantes);
@@ -252,7 +245,6 @@ class CargaMasivaEstudianteController extends Controller
                 }
             }
 
-            // Remanente
             if (!empty($loteNuevosEstudiantes)) {
                 Estudiante::insert($loteNuevosEstudiantes);
             }
@@ -268,7 +260,7 @@ class CargaMasivaEstudianteController extends Controller
             DB::commit();
 
             return response()->json([
-                'message'          => 'Carga masiva completada con éxito. Todos los estudiantes fueron asignados al examen.',
+                'message'          => 'Carga masiva completada con éxito. Planilla WebSISS procesada correctamente.',
                 'examen_id'        => $idExamen,
                 'total_insertados' => count($filasValidadas),
             ], 201);
