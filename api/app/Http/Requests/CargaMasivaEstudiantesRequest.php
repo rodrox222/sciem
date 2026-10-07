@@ -17,8 +17,8 @@ class CargaMasivaEstudiantesRequest extends FormRequest
             'archivo' => [
                 'required',
                 'file',
-                'mimes:csv,txt',
-                'max:5120', // Máximo 5MB
+                'mimes:csv,txt,xlsx,xls',
+                'max:20480',
             ],
         ];
     }
@@ -26,10 +26,10 @@ class CargaMasivaEstudiantesRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'archivo.required' => 'Debe adjuntar un archivo CSV para la carga masiva.',
+            'archivo.required' => 'Debe adjuntar un archivo (CSV o Excel) para la carga masiva.',
             'archivo.file'     => 'El elemento subido debe ser un archivo válido.',
-            'archivo.mimes'    => 'El archivo debe tener formato CSV (.csv o texto delimitado).',
-            'archivo.max'      => 'El archivo no debe exceder los 5 MB.',
+            'archivo.mimes'    => 'El archivo debe tener formato compatible (.csv, .xlsx o .xls).',
+            'archivo.max'      => 'El archivo no debe exceder los 20 MB.',
         ];
     }
 }

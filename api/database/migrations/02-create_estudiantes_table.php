@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('estudiantes', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('codigo_sis', 20)->unique();
-            $table->string('ci', 20);
+            $table->string('ci', 20)->nullable();
             $table->string('ci_extension', 10)->nullable();
             $table->string('nombre', 100);
             $table->string('apellido_paterno', 100);
