@@ -84,6 +84,28 @@ export const estudiantesService = {
     return api.post<MutationResponse>(`/examenes/${examId}/estudiantes`, payload)
   },
 
+  cambiarHabilitacion(
+    examId: string,
+    estudianteId: string,
+    payload: {
+      estado: EstadoInscripcion
+      motivo_inhabilitacion?: string | null
+    },
+  ) {
+    return api.patch<{
+      message: string
+      data: {
+        examen_id: string
+        estudiante_id: string
+        estado: EstadoInscripcion
+        motivo_inhabilitacion: string | null
+      }
+    }>(
+      `/examenes/${examId}/estudiantes/${estudianteId}/habilitacion`,
+      payload,
+    )
+  },
+
   unenroll(examId: string, estudianteId: string) {
     return api.delete<{ message: string }>(`/examenes/${examId}/estudiantes/${estudianteId}`)
   },

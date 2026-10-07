@@ -18,7 +18,7 @@ class DatabaseSeeder extends Seeder
             UsersSeeder::class,
             EstudianteSeeder::class,
             ExamenSeeder::class,
-            ExaCargaMasivaSeeder::class,
+            PrerrequisitoSeeder::class,
         ]);
     }
 }

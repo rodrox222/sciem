@@ -16,5 +16,11 @@ export default defineConfig({
     watch: {
       usePolling: true, // Crucial para que detecte cambios de código en Windows/WSL2
     },
+    proxy: {
+      '/api': {
+        target: 'http://api',
+        changeOrigin: true,
+      },
+    },
   },
 })

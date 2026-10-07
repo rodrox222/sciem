@@ -145,6 +145,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('examenes/{examen}/estudiantes', [HabilitacionExamenController::class, 'index']);
         // Listar prerrequisitos fijados para el examen
         Route::get('examenes/{examen}/prerrequisitos', [PrerrequisitoController::class, 'index']);
+        // motivo rapido de innabilitacion
+        Route::get('examenes/{examen}/estudiantes/{estudiante}/motivo', [HabilitacionExamenController::class, 'motivoInhabilitacion']);
     });
 
     Route::middleware('role:admin,administrador,docente')->group(function () {
