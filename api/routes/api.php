@@ -162,4 +162,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::post('examenes/{id}/verificar-ingreso', [VerificacionController::class, 'verificarIngreso']);
     });
+
+    Route::post('/examenes/{id}/registro-manual', [VerificacionController::class, 'registrarIngresoManual']);
+    Route::get('/examenes/{id}/asistencias', [VerificacionController::class, 'listarAsistencias']);
 });
