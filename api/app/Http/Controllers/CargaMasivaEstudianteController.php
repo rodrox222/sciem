@@ -21,7 +21,7 @@ class CargaMasivaEstudianteController extends Controller
 
     public function storePorExamen(CargaMasivaEstudiantesRequest $request, string $idExamen): JsonResponse
     {
-        // 1. Validar existencia del examen
+        // Validar existencia del examen
         $examen = Examen::find($idExamen);
         if (!$examen) {
             return response()->json([
@@ -30,7 +30,7 @@ class CargaMasivaEstudianteController extends Controller
             ], 404);
         }
 
-        // 2. Control de pertenencia del docente
+        // Control de pertenencia del docente
         $user = $request->user();
         if ($user instanceof Docente && $examen->id_docente !== $user->id) {
             return response()->json([
@@ -39,7 +39,7 @@ class CargaMasivaEstudianteController extends Controller
             ], 403);
         }
 
-        // 3. Cargar el archivo con PhpSpreadsheet (soporta .xlsx, .xls y .csv)
+        // Cargar el archivo con PhpSpreadsheet (soporta .xlsx, .xls y .csv)
         $archivo = $request->file('archivo');
         try {
             $spreadsheet = IOFactory::load($archivo->getRealPath());
@@ -51,7 +51,7 @@ class CargaMasivaEstudianteController extends Controller
             ], 422);
         }
 
-        // 4. Pre-cargar identificadores existentes en BD
+        // Pre-cargar identificadores existentes en BD
         $estudiantesBdPorSis = Estudiante::pluck('id', 'codigo_sis')->toArray();
         $inscritosEnEsteExamen = DB::table('estudiante_examen')
             ->where('id_examen', $idExamen)
@@ -63,7 +63,7 @@ class CargaMasivaEstudianteController extends Controller
         $sisProcesados = [];
         $errores = [];
 
-        // 5. Recorrer hoja por hoja
+        // Recorrer hoja por hoja
         foreach ($spreadsheet->getAllSheets() as $hoja) {
             $nombreHoja = $hoja->getTitle();
             $maxFila = $hoja->getHighestRow();
@@ -168,10 +168,10 @@ class CargaMasivaEstudianteController extends Controller
             }
         }
 
-        // FASE DE VALIDACIÓN ATÓMICA: Si se detectó algún conflicto, se rechaza todo (código 422)
+        // FASE DE VALIDACIÓN ATÓMICA: Si se detectó algún conflicto, se rechaza todo
         if (count($errores) > 0) {
             return response()->json([
-                'message'       => 'Se encontraron conflictos en el archivo. La operación fue cancelada y ningún estudiante fue agregado.',
+                'message'       => 'Se encontraron conflictos en el archivo. La operación fue cancelada.',
                 'error_type'    => 'CONFLICTOS_EN_CARGA',
                 'total_errores' => count($errores),
                 'errores'       => $errores,
@@ -260,7 +260,7 @@ class CargaMasivaEstudianteController extends Controller
             DB::commit();
 
             return response()->json([
-                'message'          => 'Carga masiva completada con éxito. Planilla WebSISS procesada correctamente.',
+                'message'          => 'Carga completada con éxito.',
                 'examen_id'        => $idExamen,
                 'total_insertados' => count($filasValidadas),
             ], 201);
