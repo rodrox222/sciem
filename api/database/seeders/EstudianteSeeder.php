@@ -35,13 +35,13 @@ class EstudianteSeeder extends Seeder
             ],
             [
                 'id'                  => (string) Str::uuid(),
-                'codigo_sis'          => '202301640',
+                'codigo_sis'          => '202301641',
                 'ci'                  => '7654129',
                 'ci_extension'        => null,
                 'nombre'              => 'Rodrigo',
                 'apellido_paterno'    => 'Fernandez',
                 'apellido_materno'    => 'Gomez',
-                'email_institucional' => '202301640@est.umss.edu',
+                'email_institucional' => '202301641@est.umss.edu',
                 'activo'              => true,
             ],
         ];
