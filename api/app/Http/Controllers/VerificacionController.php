@@ -170,6 +170,12 @@ class VerificacionController extends Controller
         }
 
         // 7. Acceso Autorizado
+        $examen->estudiantes()->updateExistingPivot(
+            $estudiante->id,
+            [
+                'fecha_ingreso' => now('America/La_Paz'),
+            ]
+        );
         $this->registrarLog(
             $examen->id,
             $estudiante->id,
@@ -194,6 +200,7 @@ class VerificacionController extends Controller
                 'materia'      => $examen->materia?->nombre ?? 'Sin asignar',
                 'aula'         => $examen->aula?->nombre ?? 'Aula general',
                 'hora_ingreso' => Carbon::now('America/La_Paz')->format('H:i:s'),
+                'fecha_ingreso' => Carbon::now('America/La_Paz')->format('d/m/Y'),
             ],
         ], 200);
     }
