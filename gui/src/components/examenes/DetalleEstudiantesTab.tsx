@@ -108,7 +108,47 @@ const [prerrequisitosStudent, setPrerrequisitosStudent] =
     setSuccess(response.message || 'Estudiante asignado correctamente.')
     await loadStudents()
   }
+const openEditStudent = async (student: EstudianteInscritoExamen) => {
+  try {
+    setError('')
+    setSuccess('')
 
+    // Buscamos el estudiante completo para obtener
+    // nombre, apellido paterno y apellido materno por separado.
+    const response = await estudiantesService.list({
+      search: student.codigo_sis,
+      perPage: 100,
+    })
+
+    const fullStudent = response.data.find(
+      (item) => item.id === student.id,
+    )
+
+    if (!fullStudent) {
+      setError('No se pudo encontrar la información completa del estudiante.')
+      return
+    }
+
+    // Enviamos al modal el objeto Estudiante completo.
+    setEditingStudent({
+      ...fullStudent,
+      pivot: {
+        estado: student.estado,
+        motivo_estado: student.motivo_estado,
+        ajuste_manual: student.ajuste_manual,
+        fecha_ajuste_manual: student.fecha_ajuste_manual,
+      },
+    })
+
+    setModalOpen(true)
+  } catch (err) {
+    setError(
+      err instanceof Error
+        ? err.message
+        : 'No se pudo cargar la información del estudiante.',
+    )
+  }
+}
   return (
     <div className="space-y-5">
       {/* Barra de control y conteo */}
@@ -304,10 +344,7 @@ const [prerrequisitosStudent, setPrerrequisitosStudent] =
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                onClick={() => {
-                                  setEditingStudent(st)
-                                  setModalOpen(true)
-                                }}
+                                onClick={() => void openEditStudent(st)}
                                 className="cursor-pointer gap-1 text-xs h-8"
                               >
                                 <Edit3 className="h-3 w-3" /> Editar
