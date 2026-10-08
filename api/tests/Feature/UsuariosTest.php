@@ -21,6 +21,7 @@ use App\Models\Admin;
 use App\Models\Docente;
 use App\Models\Auxiliar;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 uses(RefreshDatabase::class);
@@ -92,13 +93,17 @@ it('TC-HU1-7: rechaza registro con CI ya existente en cualquiera de las 3 tablas
 
 it('TC-HU1-8: rechaza registro con correo ya existente', function () {
     $admin = crearAdmin();
-    Docente::factory()->create(['email' => 'jperez@fcyt.umss.edu.bo']);
+    // Se usa @est.umss.edu (dominio que el regex de StoreUserRequest sí acepta hoy) para que
+    // el único error posible sea la duplicidad; con @fcyt.umss.edu.bo el test pasaría por el
+    // bug del regex y no probaría nada sobre el correo duplicado.
+    Docente::factory()->create(['email' => 'jperez@est.umss.edu']);
 
     $response = $this->actingAs($admin, 'sanctum')->postJson('/api/users', datosDocenteValidos([
-        'ci' => '6456789', 'email' => 'jperez@fcyt.umss.edu.bo',
+        'ci' => '6456789', 'email' => 'jperez@est.umss.edu',
     ]));
 
-    $response->assertStatus(422);
+    $response->assertStatus(422)
+        ->assertJsonPath('errors.email.0', 'El correo electrónico ya se encuentra registrado en el sistema.');
 })->group('grupo1');
 
 it('TC-HU1-9: rechaza registro con formato de correo inválido', function () {
@@ -161,16 +166,15 @@ it('TC-HU1-24: valida el rol en cada petición al backend (no solo en la primera
 
 // --- Unicidad a nivel de base de datos (TC-HU1-21, TC-HU1-22) ---
 
-it('TC-HU1-21: GAP — el CI no es UNIQUE a nivel de base de datos (solo se valida vía API)', function () {
+it('TC-HU1-21: el CI es UNIQUE a nivel de base de datos', function () {
+    // GAP CONFIRMADO (schema dump): no existe UNIQUE sobre admin.ci / docente.ci / auxiliar.ci;
+    // la unicidad hoy solo vive en el closure de StoreUserRequest. Este test afirma el
+    // comportamiento acordado, por eso FALLA hasta que el equipo agregue el constraint.
+    // (Un UNIQUE por tabla cubre la unicidad dentro de la tabla, no entre las 3 tablas.)
     crearAdmin(['ci' => '8451231']);
 
-    // Confirmado por el schema dump: no hay constraint UNIQUE en admin.ci/docente.ci/auxiliar.ci.
-    // Este insert directo NO lanza excepción hoy — documentamos el gap en vez de fingir que
-    // la BD ya lo protege. La protección real está en StoreUserRequest (ver TC-HU1-7).
-    $duplicado = Admin::factory()->make(['ci' => '8451231']);
-    $duplicado->save();
-
-    expect(Admin::where('ci', '8451231')->count())->toBe(2); // documenta el estado actual (gap)
+    expect(fn () => DB::transaction(fn () => Admin::factory()->create(['ci' => '8451231'])))
+        ->toThrow(\Illuminate\Database\QueryException::class);
 })->group('grupo1');
 
 it('TC-HU1-22: el correo de Docente/Auxiliar es UNIQUE a nivel de base de datos', function () {

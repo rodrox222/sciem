@@ -86,15 +86,15 @@ it('TC-HU6-6: rechaza registro de examen con hora_fin igual o anterior a hora_in
     ]))->assertStatus(422);
 })->group('grupo1');
 
-it('TC-HU6-7: GAP — el examen se puede crear hoy sin ninguna norma asociada', function () {
-    // El AC original exige al menos una norma al programar el examen, pero StoreExamenRequest
-    // no tiene campo `normas` — las normas se asocian en un paso posterior y separado.
-    // Este test documenta el estado real; no hay nada que "rechazar" en el POST de creación.
+it('TC-HU6-7: rechaza registro de examen sin ninguna norma asociada', function () {
+    // El pliego exige que todo examen tenga normas. Hoy StoreExamenRequest no tiene campo
+    // `normas`, así que el examen se crea igual (201) y este test FALLA hasta que el equipo
+    // defina cómo se envían las normas al crear el examen y lo haga obligatorio.
     $admin = Admin::factory()->create();
 
     $response = $this->actingAs($admin, 'sanctum')->postJson('/api/examenes', examenBase());
 
-    $response->assertCreated(); // documenta que hoy se permite sin normas (gap de arquitectura)
+    $response->assertStatus(422);
 })->group('grupo1');
 
 it('TC-HU6-8: rechaza registro de examen sin seleccionar un aula', function () {

@@ -18,6 +18,7 @@
 use App\Models\Admin;
 use App\Models\Aula;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 
 uses(RefreshDatabase::class);
 
@@ -57,14 +58,13 @@ it('TC-HU4-5: rechaza registro de aula con campo ubicación vacío (obligatorio 
     $response->assertStatus(422)->assertJsonValidationErrors('ubicacion');
 })->group('grupo1');
 
-it('TC-HU4-11: GAP — el nombre de aula no es UNIQUE a nivel de base de datos', function () {
+it('TC-HU4-11: el nombre de aula es UNIQUE a nivel de base de datos', function () {
+    // GAP CONFIRMADO (schema dump): aulas no tiene UNIQUE sobre `nombre`. Este test afirma el
+    // comportamiento acordado, por eso FALLA hasta que el equipo agregue el constraint.
     Aula::factory()->create(['nombre' => 'A-101']);
 
-    // Confirmado por el schema dump: aulas no tiene ningún UNIQUE constraint sobre `nombre`.
-    $duplicada = Aula::factory()->make(['nombre' => 'A-101']);
-    $duplicada->save(); // hoy NO lanza excepción — se documenta el gap en vez de asumirlo resuelto
-
-    expect(Aula::where('nombre', 'A-101')->count())->toBe(2);
+    expect(fn () => DB::transaction(fn () => Aula::factory()->create(['nombre' => 'A-101'])))
+        ->toThrow(\Illuminate\Database\QueryException::class);
 })->group('grupo1');
 
 it('bonus: el estado Mantenimiento (equivalente a "dado de baja") se puede aplicar vía PUT', function () {

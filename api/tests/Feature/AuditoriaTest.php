@@ -38,15 +38,20 @@ it('TC-HU3-1: registra automáticamente usuario, acción y fecha/hora al ejecuta
 it('TC-HU3-6: rechaza cualquier intento de editar o eliminar un registro de auditoría, incluso como Administrador', function () {
     $log = LogAuditoria::factory()->create();
 
-    // Bloqueo en capa de aplicación (modelo LogAuditoria::booted()).
+    // Capa de aplicación (LogAuditoria::booted lanza RuntimeException antes de tocar la BD).
     expect(fn () => $log->update(['accion' => 'MODIFICADO']))->toThrow(\RuntimeException::class);
     expect(fn () => $log->delete())->toThrow(\RuntimeException::class);
 
-    // Bloqueo real a nivel de base de datos (triggers PL/pgSQL), evadiendo Eloquent.
-    expect(fn () => DB::statement('UPDATE logs_auditoria SET accion = ? WHERE id = ?', ['X', $log->id]))
-        ->toThrow(\Illuminate\Database\QueryException::class);
-    expect(fn () => DB::table('logs_auditoria')->where('id', $log->id)->delete())
-        ->toThrow(\Illuminate\Database\QueryException::class);
+    // Capa de base de datos (triggers PL/pgSQL), evadiendo Eloquent. Cada intento va en su
+    // propio savepoint (DB::transaction anidado): en PostgreSQL un error deja abortada la
+    // transacción del test y el statement siguiente fallaría con 25P02 aunque el trigger no
+    // existiera (falso positivo). Además se exige el mensaje del trigger ("inmutables").
+    expect(fn () => DB::transaction(fn () => DB::statement(
+        'UPDATE logs_auditoria SET accion = ? WHERE id = ?', ['X', $log->id]
+    )))->toThrow(\Illuminate\Database\QueryException::class, 'inmutables');
+
+    expect(fn () => DB::transaction(fn () => DB::table('logs_auditoria')->where('id', $log->id)->delete()))
+        ->toThrow(\Illuminate\Database\QueryException::class, 'inmutables');
 })->group('grupo1');
 
 it('TC-HU3-8: registra en el historial un inicio de sesión fallido', function () {
@@ -62,26 +67,29 @@ it('TC-HU3-8: registra en el historial un inicio de sesión fallido', function (
 })->group('grupo1');
 
 it('TC-HU3-9: guarda el rol vigente al momento de la acción (rol_en_el_momento), no el rol actual', function () {
-    $docente = Docente::factory()->create();
     $admin = Admin::factory()->create();
+    $docente = Docente::factory()->create();
 
-    $this->actingAs($docente, 'sanctum')->postJson('/api/normas', [
-        'titulo' => 'Norma de prueba', 'descripcion' => 'Descripción de prueba.', 'tipo' => 'General',
-    ]); // puede fallar 403 (docente no crea normas) pero NormaController::store no es lo probado aquí
+    // 1) El Docente ejecuta una acción auditada (crear materia está permitido a docente).
+    $this->actingAs($docente, 'sanctum')->postJson('/api/materias', ['nombre' => 'Materia de prueba HU3-9'])
+        ->assertCreated();
+    $log = LogAuditoria::where('accion', 'MATERIA_CREADA')->latest('created_at')->firstOrFail();
+    expect($log->rol_en_el_momento)->toBe('docente');
 
-    $this->actingAs($admin, 'sanctum')->postJson('/api/normas', [
-        'titulo' => 'Norma admin', 'descripcion' => 'Creada por admin.', 'tipo' => 'General',
-    ])->assertCreated();
+    // 2) El Admin cambia al usuario de Docente a Auxiliar (UserController migra el registro de tabla).
+    $this->actingAs($admin, 'sanctum')->putJson("/api/users/{$docente->id}", ['tipo_usuario' => 'auxiliar'])
+        ->assertOk();
+    $this->assertDatabaseHas('auxiliar', ['id' => $docente->id]);
 
-    $log = LogAuditoria::where('accion', 'NORMA_CREADA')->latest('created_at')->first();
-    expect($log->rol_en_el_momento)->toBe('admin');
+    // 3) El registro histórico NO debe reflejar el rol nuevo.
+    expect($log->refresh()->rol_en_el_momento)->toBe('docente');
 })->group('grupo1');
 
 it('TC-HU3-13: el historial de auditoría es inmutable a nivel de almacenamiento (BD)', function () {
     $log = LogAuditoria::factory()->create();
 
-    expect(fn () => DB::table('logs_auditoria')->where('id', $log->id)->delete())
-        ->toThrow(\Illuminate\Database\QueryException::class);
+    expect(fn () => DB::transaction(fn () => DB::table('logs_auditoria')->where('id', $log->id)->delete()))
+        ->toThrow(\Illuminate\Database\QueryException::class, 'inmutables');
 })->group('grupo1');
 
 it('TC-HU3-14: mantiene la referencia al usuario aunque este sea desactivado posteriormente', function () {

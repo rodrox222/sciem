@@ -32,6 +32,7 @@ use App\Models\Admin;
 use App\Models\Examen;
 use App\Models\Estudiante;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 
 uses(RefreshDatabase::class);
 
@@ -173,14 +174,19 @@ it('TC-HU7-13: GAP — ci_extension no valida formato (acepta más de una letra 
     $response->assertStatus(422); // GAP: hoy solo valida max:10, esto pasaría como válido
 })->group('grupo1');
 
-it('TC-HU7-14: código SIS es UNIQUE a nivel de BD; CI, GAP — no lo es', function () {
-    Estudiante::factory()->create(['codigo_sis' => '202312345', 'ci' => '8234567']);
+it('TC-HU7-14: código SIS y CI son UNIQUE a nivel de base de datos', function () {
+    Estudiante::factory()->create(['codigo_sis' => '202312345', 'ci' => '8234567', 'ci_extension' => null]);
 
-    expect(fn () => Estudiante::factory()->create(['codigo_sis' => '202312345', 'ci' => '7000001']))
-        ->toThrow(\Illuminate\Database\QueryException::class);
+    // codigo_sis duplicado: protegido hoy por estudiantes_codigo_sis_unique.
+    expect(fn () => DB::transaction(fn () => Estudiante::factory()->create([
+        'codigo_sis' => '202312345', 'ci' => '7000001',
+    ])))->toThrow(\Illuminate\Database\QueryException::class);
 
-    // GAP confirmado por el schema: no hay UNIQUE sobre `ci`, este insert NO lanza excepción hoy.
-    $duplicado = Estudiante::factory()->make(['codigo_sis' => '202312460', 'ci' => '8234567']);
-    $duplicado->save();
-    expect(Estudiante::where('ci', '8234567')->count())->toBe(2);
+    // CI duplicado (mismo ci y misma ci_extension): GAP confirmado, no hay UNIQUE -> FALLA hoy.
+    // Ojo para quien lo implemente: un UNIQUE (ci, ci_extension) normal NO bloquea duplicados
+    // cuando ci_extension es NULL (en PostgreSQL los NULL se consideran distintos); en PG 15
+    // se puede usar UNIQUE NULLS NOT DISTINCT (ci, ci_extension).
+    expect(fn () => DB::transaction(fn () => Estudiante::factory()->create([
+        'codigo_sis' => '202312460', 'ci' => '8234567', 'ci_extension' => null,
+    ])))->toThrow(\Illuminate\Database\QueryException::class);
 })->group('grupo1');
