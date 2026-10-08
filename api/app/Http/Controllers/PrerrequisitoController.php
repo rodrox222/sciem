@@ -90,4 +90,55 @@ class PrerrequisitoController extends Controller
 
         return response()->json(['message' => 'Cumplimiento actualizado exitosamente.']);
     }
+
+    /**
+     * GET /api/examenes/{examenId}/estudiantes/{estudianteId}/prerrequisitos
+     */
+    public function prerrequisitosPorEstudiante(string $examenId, string $estudianteId): JsonResponse
+    {
+        $examen = Examen::find($examenId);
+        if (!$examen) {
+            return response()->json([
+                'message'    => 'El examen especificado no existe.',
+                'error_type' => 'EXAMEN_NO_ENCONTRADO'
+            ], 404);
+        }
+
+        $inscrito = DB::table('estudiante_examen')
+            ->where('id_examen', $examenId)
+            ->where('id_estudiante', $estudianteId)
+            ->exists();
+
+        if (!$inscrito) {
+            return response()->json([
+                'message'    => 'El estudiante no se encuentra registrado en este examen.',
+                'error_type' => 'ESTUDIANTE_NO_INSCRITO'
+            ], 404);
+        }
+
+        $prerrequisitos = DB::table('prerrequisitos_examen as pe')
+            ->leftJoin('estudiante_prerrequisito as ep', function ($join) use ($estudianteId) {
+                $join->on('pe.id', '=', 'ep.id_prerrequisito')
+                    ->where('ep.id_estudiante', '=', $estudianteId);
+            })
+            ->where('pe.id_examen', $examenId)
+            ->select(
+                'pe.id',
+                'pe.titulo',
+                'pe.descripcion',
+                DB::raw('COALESCE(ep.cumplido, false) as cumplido')
+            )
+            ->orderBy('pe.created_at', 'asc')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'id'          => $item->id,
+                    'titulo'      => $item->titulo,
+                    'descripcion' => $item->descripcion,
+                    'cumplido'    => (bool) $item->cumplido,
+                ];
+            });
+
+        return response()->json($prerrequisitos, 200);
+    }
 }
