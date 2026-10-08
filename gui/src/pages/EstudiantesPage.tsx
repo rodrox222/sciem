@@ -466,13 +466,27 @@ export default function EstudiantesPage() {
       )}
 
       {modalOpen && examId && exam && (
-        <EstudianteFormModal
-          key={editingStudent?.id ?? 'new'}
-          estudiante={editingStudent}
-          examMode={Boolean(examId)}
-          onClose={() => setModalOpen(false)}
-          onSubmit={saveStudent}
-        />
+       <EstudianteFormModal
+  key={editingStudent?.id ?? 'new'}
+  estudiante={editingStudent}
+  examMode={Boolean(examId)}
+  onClose={() => setModalOpen(false)}
+  onSubmit={saveStudent}
+ onBulkUpload={async (archivo) => {
+  if (!examId) return
+
+  const response = await estudiantesService.cargaMasiva(examId, archivo)
+
+  setSuccess(
+    response.message ||
+      `Carga masiva completada. Se registraron ${response.total_insertados} estudiantes.`,
+  )
+
+  setModalOpen(false)
+  setPage(1)
+  await loadStudents()
+}}
+/>
       )}
       {associateModalOpen && examId && exam && (
   <AsociarEstudiantesModal
