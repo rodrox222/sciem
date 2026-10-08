@@ -83,14 +83,26 @@ export const estudiantesService = {
   enroll(examId: string, payload: InscripcionPayload) {
     return api.post<MutationResponse>(`/examenes/${examId}/estudiantes`, payload)
   },
+cargaMasiva(examId: string, archivo: File) {
+  const formData = new FormData()
+  formData.append('archivo', archivo)
 
+  return api.post<{
+    message: string
+    examen_id: string
+    total_insertados: number
+  }>(
+    `/examenes/${examId}/estudiantes/carga-masiva`,
+    formData,
+  )
+},
   cambiarHabilitacion(
     examId: string,
     estudianteId: string,
-    payload: {
-      estado: EstadoInscripcion
-      motivo_inhabilitacion?: string | null
-    },
+   payload: {
+  estado: EstadoInscripcion
+  motivo_estado?: string | null
+},
   ) {
     return api.patch<{
       message: string
@@ -98,7 +110,7 @@ export const estudiantesService = {
         examen_id: string
         estudiante_id: string
         estado: EstadoInscripcion
-        motivo_inhabilitacion: string | null
+motivo_estado: string | null
       }
     }>(
       `/examenes/${examId}/estudiantes/${estudianteId}/habilitacion`,

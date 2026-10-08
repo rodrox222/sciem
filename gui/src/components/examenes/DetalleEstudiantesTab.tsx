@@ -18,6 +18,11 @@ import { EstudianteFormModal } from '@/components/estudiantes/EstudianteFormModa
 import { AsociarEstudiantesModal } from '@/components/estudiantes/AsociarEstudiantesModal'
 import { InhabilitarEstudianteModal } from '@/components/estudiantes/InhabilitarEstudianteModal'
 import { EstudianteQrModal } from '@/components/estudiantes/EstudianteQrModal'
+import { PrerrequisitosEstudianteModal } from '@/components/estudiantes/PrerrequisitosEstudianteModal'
+import {
+  prerrequisitosService,
+  type Prerrequisito,
+} from '@/services/prerrequisitos.service'
 import {
   estudiantesService,
   type EstudianteInscritoExamen,
@@ -37,6 +42,7 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [prerrequisitos, setPrerrequisitos] = useState<Prerrequisito[]>([])
 
   // Modales
   const [modalOpen, setModalOpen] = useState(false)
@@ -44,7 +50,8 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
   const [editingStudent, setEditingStudent] = useState<any | null>(null)
   const [inhabilitarStudent, setInhabilitarStudent] = useState<EstudianteInscritoExamen | null>(null)
   const [qrStudent, setQrStudent] = useState<EstudianteInscritoExamen | null>(null)
-
+const [prerrequisitosStudent, setPrerrequisitosStudent] =
+  useState<EstudianteInscritoExamen | null>(null)
   const loadStudents = useCallback(async () => {
     setLoading(true)
     setError('')
@@ -57,10 +64,19 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
       setLoading(false)
     }
   }, [exam.id])
+  const loadPrerrequisitos = useCallback(async () => {
+  try {
+    const response = await prerrequisitosService.listByExam(exam.id)
+    setPrerrequisitos(response)
+  } catch (err) {
+    console.error('Error al cargar prerrequisitos:', err)
+  }
+}, [exam.id])
 
-  useEffect(() => {
-    void loadStudents()
-  }, [loadStudents])
+ useEffect(() => {
+  void loadStudents()
+  void loadPrerrequisitos()
+}, [loadStudents, loadPrerrequisitos])
 
   const visibleStudents = useMemo(() => {
     if (!searchTerm) return students
@@ -92,7 +108,47 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
     setSuccess(response.message || 'Estudiante asignado correctamente.')
     await loadStudents()
   }
+const openEditStudent = async (student: EstudianteInscritoExamen) => {
+  try {
+    setError('')
+    setSuccess('')
 
+    // Buscamos el estudiante completo para obtener
+    // nombre, apellido paterno y apellido materno por separado.
+    const response = await estudiantesService.list({
+      search: student.codigo_sis,
+      perPage: 100,
+    })
+
+    const fullStudent = response.data.find(
+      (item) => item.id === student.id,
+    )
+
+    if (!fullStudent) {
+      setError('No se pudo encontrar la información completa del estudiante.')
+      return
+    }
+
+    // Enviamos al modal el objeto Estudiante completo.
+    setEditingStudent({
+      ...fullStudent,
+      pivot: {
+        estado: student.estado,
+        motivo_estado: student.motivo_estado,
+        ajuste_manual: student.ajuste_manual,
+        fecha_ajuste_manual: student.fecha_ajuste_manual,
+      },
+    })
+
+    setModalOpen(true)
+  } catch (err) {
+    setError(
+      err instanceof Error
+        ? err.message
+        : 'No se pudo cargar la información del estudiante.',
+    )
+  }
+}
   return (
     <div className="space-y-5">
       {/* Barra de control y conteo */}
@@ -163,7 +219,40 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
           </Button>
         </div>
       )}
+{prerrequisitos.length > 0 && (
+  <Card className="mb-4 border-sci-cyan/20 bg-white shadow-sm">
+    <CardContent className="p-5">
+      <div className="mb-4">
+        <h3 className="text-sm font-bold text-sci-navy">
+          Prerrequisitos del examen
+        </h3>
 
+        <p className="mt-1 text-xs text-muted-foreground">
+          Condiciones que deben cumplirse para que un estudiante esté habilitado.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {prerrequisitos.map((prerrequisito) => (
+          <div
+            key={prerrequisito.id}
+            className="rounded-lg border border-border bg-muted/20 p-3"
+          >
+            <p className="text-sm font-semibold text-sci-navy">
+              {prerrequisito.titulo}
+            </p>
+
+            {prerrequisito.descripcion && (
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                {prerrequisito.descripcion}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </CardContent>
+  </Card>
+)}
       {/* Buscador */}
       <form onSubmit={handleSearch} className="flex gap-2">
         <div className="relative flex-1">
@@ -239,17 +328,23 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
                           >
                             <QrCode className="h-3.5 w-3.5 text-sci-cyan" />
                           </Button>
-
+<Button
+  type="button"
+  variant="outline"
+  size="sm"
+  title="Gestionar prerrequisitos"
+  onClick={() => setPrerrequisitosStudent(st)}
+  className="cursor-pointer gap-1 text-xs h-8"
+>
+  Prerrequisitos
+</Button>
                           {canManage && (
                             <>
                               <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                onClick={() => {
-                                  setEditingStudent(st)
-                                  setModalOpen(true)
-                                }}
+                                onClick={() => void openEditStudent(st)}
                                 className="cursor-pointer gap-1 text-xs h-8"
                               >
                                 <Edit3 className="h-3 w-3" /> Editar
@@ -288,13 +383,24 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
 
       {/* Modal para crear/editar estudiante */}
       {modalOpen && (
-        <EstudianteFormModal
-          key={editingStudent?.id ?? 'new'}
-          estudiante={editingStudent}
-          examMode={true}
-          onClose={() => setModalOpen(false)}
-          onSubmit={saveStudent}
-        />
+       <EstudianteFormModal
+  key={editingStudent?.id ?? 'new'}
+  estudiante={editingStudent}
+  examMode={true}
+  onClose={() => setModalOpen(false)}
+  onSubmit={saveStudent}
+  onBulkUpload={async (archivo) => {
+    const response = await estudiantesService.cargaMasiva(exam.id, archivo)
+
+    setSuccess(
+      response.message ||
+        `Carga masiva completada. Se registraron ${response.total_insertados} estudiantes.`,
+    )
+
+    setModalOpen(false)
+    await loadStudents()
+  }}
+/>
       )}
 
       {/* Modal para inhabilitar estudiante */}
@@ -309,7 +415,7 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
               inhabilitarStudent.id,
               {
                 estado: 'Inhabilitado',
-                motivo_estado: motivo,
+               motivo_estado: motivo,
               }
             )
 
@@ -328,6 +434,17 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
           onClose={() => setQrStudent(null)}
         />
       )}
+      {prerrequisitosStudent && (
+  <PrerrequisitosEstudianteModal
+    examId={exam.id}
+    estudiante={prerrequisitosStudent}
+    prerrequisitos={prerrequisitos}
+    onClose={() => setPrerrequisitosStudent(null)}
+    onSuccess={() => {
+      void loadStudents()
+    }}
+  />
+)}
     </div>
   )
 }

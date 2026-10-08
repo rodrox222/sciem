@@ -156,6 +156,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('prerrequisitos/{prerrequisito}/estudiantes/{estudiante}', [PrerrequisitoController::class, 'toggleCumplimiento']);
         // Forzado manual de habilitación/inhabilitación por parte del docente
         Route::patch('examenes/{examen}/estudiantes/{estudiante}/habilitacion', [HabilitacionExamenController::class, 'update']);
+        // prerrequisitos de un estudiante en un examen
+        Route::get('examenes/{examen}/estudiantes/{estudiante}/prerrequisitos', [PrerrequisitoController::class, 'prerrequisitosPorEstudiante']);
     });
 
     // --- HU 10: ESCANEO QR Y CONTROL DE ACCESO ---

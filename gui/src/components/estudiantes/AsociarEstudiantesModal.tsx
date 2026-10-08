@@ -43,26 +43,16 @@ export function AsociarEstudiantesModal({
       setError('')
 
       try {
-        const [allStudentsResponse, firstExamPage] =
-          await Promise.all([
-            estudiantesService.list({
-              perPage: 100,
-            }),
-            estudiantesService.listByExam(examId, 1),
-          ])
+       
+       const [allStudentsResponse, enrolledResponse] =
+  await Promise.all([
+    estudiantesService.list({
+      perPage: 100,
+    }),
+    estudiantesService.listByExam(examId),
+  ])
 
-        const enrolledStudents = [...firstExamPage.data]
-
-        for (
-          let page = 2;
-          page <= firstExamPage.last_page;
-          page += 1
-        ) {
-          const response =
-            await estudiantesService.listByExam(examId, page)
-
-          enrolledStudents.push(...response.data)
-        }
+const enrolledStudents = enrolledResponse.estudiantes
 
         const enrolledIds = new Set(
           enrolledStudents.map((student) => student.id),

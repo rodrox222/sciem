@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react'
-import { Info, LoaderCircle } from 'lucide-react'
+import { FileSpreadsheet, Info, LoaderCircle, Upload } from 'lucide-react'
 
 import type {
   EstadoInscripcion,
   Estudiante,
   InscripcionPayload,
 } from '../../services/estudiantes.service'
+import { ApiError } from '../../services/api'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
@@ -15,15 +16,23 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog'
-
+}from '../ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../ui/alert-dialog'
 interface EstudianteFormModalProps {
   estudiante?: Estudiante | null
   examMode?: boolean
   onClose: () => void
   onSubmit: (payload: InscripcionPayload) => Promise<void>
+  onBulkUpload?: (archivo: File) => Promise<void>
 }
-
 interface FormState {
   nombre: string
   apellido_paterno: string
@@ -45,17 +54,30 @@ const createInitialState = (student?: Estudiante | null): FormState => ({
   email_institucional: student?.email_institucional ?? '',
   estado: student?.pivot?.estado ?? 'Habilitado',
 })
-
 export function EstudianteFormModal({
   estudiante,
   examMode = false,
   onClose,
   onSubmit,
+  onBulkUpload,
 }: EstudianteFormModalProps) {
   const [form, setForm] = useState<FormState>(() => createInitialState(estudiante))
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [generalError, setGeneralError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [bulkMode, setBulkMode] = useState(false)
+const [bulkFile, setBulkFile] = useState<File | null>(null)
+const [bulkError, setBulkError] = useState('')
+const [bulkSaving, setBulkSaving] = useState(false)
+const [showBulkErrorDialog, setShowBulkErrorDialog] = useState(false)
+const [bulkRowErrors, setBulkRowErrors] = useState<
+  Array<{
+    fila: number
+    tipo_error: string
+    identificador: string
+    motivo: string
+  }>
+>([])
 
   const editing = Boolean(estudiante)
 
@@ -114,10 +136,60 @@ export function EstudianteFormModal({
       setSaving(false)
     }
   }
+const handleBulkSubmit = async () => {
+  if (!bulkFile) {
+    setBulkError('Selecciona un archivo antes de continuar.')
+    return
+  }
 
-  return (
-    <Dialog open onOpenChange={(open) => !saving && !open && onClose()}>
-      <DialogContent className="max-w-2xl p-0 overflow-hidden border-border bg-card text-card-foreground shadow-2xl rounded-2xl">
+  if (!onBulkUpload) {
+    setBulkError('La carga masiva no está disponible.')
+    return
+  }
+
+  try {
+    setBulkError('')
+    setBulkSaving(true)
+
+    await onBulkUpload(bulkFile)
+    onClose()
+  } catch (error) {
+    if (error instanceof ApiError) {
+      setBulkError(error.message)
+
+      const data = error.data as {
+        errores?: Array<{
+          fila: number
+          tipo_error: string
+          identificador: string
+          motivo: string
+        }>
+      } | null
+
+      setBulkRowErrors(data?.errores ?? [])
+      setShowBulkErrorDialog(true)
+    } else {
+      setBulkError(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo completar la carga masiva.',
+      )
+
+      setBulkRowErrors([])
+    }
+  } finally {
+    setBulkSaving(false)
+  }
+}
+ return (
+  <>
+    <Dialog
+  open
+  onOpenChange={(open) =>
+    !saving && !bulkSaving && !open && onClose()
+  }
+>
+<DialogContent className="max-w-2xl p-0 overflow-hidden border-border bg-card text-card-foreground shadow-2xl rounded-2xl">
         <form onSubmit={handleSubmit} noValidate>
           <DialogHeader className="border-b border-border px-6 py-5 text-left">
             <span className="text-[11px] font-bold uppercase tracking-wider text-sci-cyan">
@@ -131,8 +203,45 @@ export function EstudianteFormModal({
                 ? 'Los datos quedarán vinculados al examen seleccionado.'
                 : 'El registro se almacenará en el padrón institucional.'}
             </DialogDescription>
-          </DialogHeader>
+            {!editing && (
+  <div className="mt-4 flex rounded-xl border border-border bg-muted/40 p-1">
+    <button
+      type="button"
+      onClick={() => {
+        setBulkMode(false)
+       setBulkError('')
+setBulkRowErrors([])
+setBulkFile(null)
+      }}
+      className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+        !bulkMode
+          ? 'bg-white text-sci-navy shadow-sm'
+          : 'text-muted-foreground hover:text-sci-navy'
+      }`}
+    >
+      Individual
+    </button>
 
+    <button
+      type="button"
+      onClick={() => {
+        setBulkMode(true)
+        setErrors({})
+        setGeneralError('')
+      }}
+      className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+        bulkMode
+          ? 'bg-white text-sci-navy shadow-sm'
+          : 'text-muted-foreground hover:text-sci-navy'
+      }`}
+    >
+      <Upload className="mr-2 inline h-4 w-4" />
+      Carga masiva
+    </button>
+  </div>
+)}
+          </DialogHeader>
+{!bulkMode ? (
           <div className="space-y-4 px-6 py-6 max-h-[65vh] overflow-y-auto">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5 text-left">
@@ -266,8 +375,105 @@ export function EstudianteFormModal({
                   <option value="Inhabilitado">Inhabilitado</option>
                 </select>
               </div>
-            )}
+          )}
+</div>
+) : (
+  <div className="space-y-5">
+    <div className="rounded-2xl border border-dashed border-sci-blue/40 bg-sci-blue/5 p-8 text-center">
+      <FileSpreadsheet className="mx-auto h-12 w-12 text-sci-blue" />
 
+      <h3 className="mt-4 text-base font-bold text-sci-navy">
+        Carga masiva de estudiantes
+      </h3>
+
+      <p className="mx-auto mt-2 max-w-md text-xs text-muted-foreground">
+        Selecciona un archivo CSV con los datos de los estudiantes
+        que deseas registrar en el examen.
+      </p>
+
+      <label
+        htmlFor="bulk-student-file"
+        className="mt-5 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-sci-blue px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+      >
+        <Upload className="h-4 w-4" />
+        Seleccionar archivo
+      </label>
+
+      <input
+        id="bulk-student-file"
+        type="file"
+        accept=".csv,.txt"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0] ?? null
+
+          setBulkError('')
+          setBulkRowErrors([])
+          setBulkFile(null)
+
+          if (!file) return
+
+          if (file.size > 5 * 1024 * 1024) {
+            setBulkError('El archivo no debe exceder los 5 MB.')
+            event.target.value = ''
+            return
+          }
+
+          setBulkFile(file)
+        }}
+      />
+
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        Formato permitido: CSV · Tamaño máximo: 5 MB
+      </p>
+    </div>
+
+    {bulkFile && (
+      <div className="rounded-xl border border-sci-cyan/30 bg-sci-cyan/10 p-4">
+        <p className="text-sm font-semibold text-sci-navy">
+          Archivo seleccionado
+        </p>
+
+        <p className="mt-1 break-all text-xs text-muted-foreground">
+          {bulkFile.name}
+        </p>
+
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          {(bulkFile.size / 1024 / 1024).toFixed(2)} MB
+        </p>
+      </div>
+    )}
+
+  {bulkError && (
+  <div className="rounded-xl border border-sci-red/20 bg-sci-red/10 px-4 py-3">
+    <p className="text-xs font-semibold text-sci-red">
+      {bulkError}
+    </p>
+
+    {bulkRowErrors.length > 0 && (
+      <button
+        type="button"
+        onClick={() => setShowBulkErrorDialog(true)}
+        className="mt-2 text-xs font-bold text-sci-blue underline"
+      >
+        Ver detalle de errores
+      </button>
+    )}
+  </div>
+)}
+
+    <div className="rounded-xl border border-border bg-muted/40 p-4 text-xs text-muted-foreground">
+      <p className="font-semibold text-sci-navy">
+        Columnas esperadas
+      </p>
+
+      <p className="mt-1">
+        código SIS, CI, extensión del CI, nombre, apellido paterno,
+        apellido materno y correo institucional.
+      </p>
+    </div>
+  </div>
+)}
             {generalError && (
               <div className="rounded-xl border border-sci-red/20 bg-sci-red/10 px-4 py-3 text-xs text-sci-red font-semibold">
                 {generalError}
@@ -278,29 +484,107 @@ export function EstudianteFormModal({
               <Info className="h-4 w-4 shrink-0 text-sci-cyan mt-0.5" />
               <p>El código SIS identifica de forma unívoca a cada estudiante en los registros de la facultad.</p>
             </div>
-          </div>
+          
 
           <div className="flex flex-col-reverse gap-2 border-t border-border bg-muted/40 px-6 py-4 sm:flex-row sm:justify-end">
             <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              disabled={saving}
+  type="button"
+  variant="outline"
+  onClick={onClose}
+  disabled={saving || bulkSaving}
               className="cursor-pointer"
             >
               Cancelar
             </Button>
-            <Button
-              type="submit"
-              disabled={saving}
-              className="bg-sci-blue hover:opacity-90 text-white font-semibold cursor-pointer min-w-36"
-            >
-              {saving && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
-              {saving ? 'Guardando...' : editing ? 'Guardar cambios' : 'Registrar estudiante'}
-            </Button>
+            {bulkMode ? (
+  <Button
+    type="button"
+    onClick={() => void handleBulkSubmit()}
+    disabled={bulkSaving || !bulkFile}
+    className="bg-sci-blue hover:opacity-90 text-white font-semibold cursor-pointer min-w-36"
+  >
+    {bulkSaving && (
+      <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+    )}
+    {bulkSaving ? 'Procesando...' : 'Cargar estudiantes'}
+  </Button>
+) : (
+  <Button
+    type="submit"
+    disabled={saving}
+    className="bg-sci-blue hover:opacity-90 text-white font-semibold cursor-pointer min-w-36"
+  >
+    {saving && (
+      <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+    )}
+    {saving
+      ? 'Guardando...'
+      : editing
+        ? 'Guardar cambios'
+        : 'Registrar estudiante'}
+  </Button>
+)}
           </div>
         </form>
       </DialogContent>
     </Dialog>
-  )
+
+<AlertDialog
+  open={showBulkErrorDialog}
+  onOpenChange={setShowBulkErrorDialog}
+>
+  <AlertDialogContent className="max-w-lg">
+    <AlertDialogHeader>
+      <AlertDialogTitle className="text-sci-red">
+        No se pudo completar la carga
+      </AlertDialogTitle>
+
+      <AlertDialogDescription>
+        {bulkError}
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+
+    {bulkRowErrors.length > 0 && (
+      <div className="max-h-[45vh] space-y-2 overflow-y-auto pr-1">
+        {bulkRowErrors.map((item, index) => (
+          <div
+            key={`${item.fila}-${item.identificador}-${index}`}
+            className="rounded-xl border border-border bg-muted/40 p-3"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-sci-navy">
+                Fila {item.fila}
+              </span>
+
+              {item.identificador && (
+                <span className="rounded-full bg-sci-blue/10 px-2 py-1 text-[11px] font-semibold text-sci-blue">
+                  {item.identificador}
+                </span>
+              )}
+
+              <span className="rounded-full bg-sci-red/10 px-2 py-1 text-[11px] font-semibold text-sci-red">
+                {item.tipo_error}
+              </span>
+            </div>
+
+            <p className="mt-2 text-xs text-muted-foreground">
+              {item.motivo}
+            </p>
+          </div>
+        ))}
+      </div>
+    )}
+
+    <AlertDialogFooter>
+      <AlertDialogAction
+        onClick={() => setShowBulkErrorDialog(false)}
+        className="bg-sci-blue text-white hover:opacity-90"
+      >
+        Entendido
+      </AlertDialogAction>
+    </AlertDialogFooter>
+ </AlertDialogContent>
+</AlertDialog>
+  </>
+)
 }
