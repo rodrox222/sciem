@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 
 import { EstudianteFormModal } from '../components/estudiantes/EstudianteFormModal'
+import { AsociarEstudiantesModal } from '../components/estudiantes/AsociarEstudiantesModal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -49,8 +50,8 @@ export default function EstudiantesPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
-  const [editingStudent, setEditingStudent] = useState<Estudiante | null>(null)
-
+  const [associateModalOpen, setAssociateModalOpen] = useState(false)
+ const [editingStudent, setEditingStudent] = useState<Estudiante | null>(null)
   const loadStudents = useCallback(async () => {
     setLoading(true)
     setError('')
@@ -58,12 +59,32 @@ export default function EstudiantesPage() {
     try {
       if (examId) {
         const [studentResponse, examResponse] = await Promise.all([
-          estudiantesService.listByExam(examId, page),
+          estudiantesService.listByExam(examId),
           examenesService.get(examId),
         ])
-        setStudents(studentResponse.data)
-        setTotal(studentResponse.total)
-        setLastPage(Math.max(studentResponse.last_page, 1))
+
+        // Normalizamos los estudiantes del examen a la interfaz Estudiante
+        const mappedStudents: Estudiante[] = (studentResponse.estudiantes || []).map((st) => ({
+          id: st.id,
+          codigo_sis: st.codigo_sis,
+          ci: st.ci,
+          ci_extension: st.ci_extension,
+          nombre: st.nombre_completo,
+          apellido_paterno: '',
+          apellido_materno: null,
+          email_institucional: st.email_institucional,
+          activo: true,
+          pivot: {
+            estado: st.estado,
+            motivo_estado: st.motivo_estado,
+            ajuste_manual: st.ajuste_manual,
+            fecha_ajuste_manual: st.fecha_ajuste_manual,
+          },
+        }))
+
+        setStudents(mappedStudents)
+        setTotal(mappedStudents.length)
+        setLastPage(1)
         setExam(examResponse)
       } else {
         const response = await estudiantesService.list({
@@ -111,12 +132,6 @@ export default function EstudiantesPage() {
     event.preventDefault()
     setPage(1)
     setSearchTerm(searchInput.trim())
-  }
-
-  const openCreate = () => {
-    setEditingStudent(null)
-    setSuccess('')
-    setModalOpen(true)
   }
 
   const openEdit = (student: Estudiante) => {
@@ -201,7 +216,7 @@ export default function EstudiantesPage() {
         {canManage && examId && exam && (
           <Button
             type="button"
-            onClick={openCreate}
+            onClick={() => setAssociateModalOpen(true)}
             className="bg-sci-blue hover:opacity-90 text-white font-semibold cursor-pointer shadow-xs gap-2"
           >
             <UserPlus className="h-4 w-4" />
@@ -451,14 +466,40 @@ export default function EstudiantesPage() {
       )}
 
       {modalOpen && examId && exam && (
-        <EstudianteFormModal
-          key={editingStudent?.id ?? 'new'}
-          estudiante={editingStudent}
-          examMode={Boolean(examId)}
-          onClose={() => setModalOpen(false)}
-          onSubmit={saveStudent}
-        />
+       <EstudianteFormModal
+  key={editingStudent?.id ?? 'new'}
+  estudiante={editingStudent}
+  examMode={Boolean(examId)}
+  onClose={() => setModalOpen(false)}
+  onSubmit={saveStudent}
+ onBulkUpload={async (archivo) => {
+  if (!examId) return
+
+  const response = await estudiantesService.cargaMasiva(examId, archivo)
+
+  setSuccess(
+    response.message ||
+      `Carga masiva completada. Se registraron ${response.total_insertados} estudiantes.`,
+  )
+
+  setModalOpen(false)
+  setPage(1)
+  await loadStudents()
+}}
+/>
       )}
+      {associateModalOpen && examId && exam && (
+  <AsociarEstudiantesModal
+    examId={examId}
+    examName={exam.nombre}
+    onClose={() => setAssociateModalOpen(false)}
+    onSuccess={() => {
+      setAssociateModalOpen(false)
+      setPage(1)
+      void loadStudents()
+    }}
+  />
+)}
     </div>
   )
 }

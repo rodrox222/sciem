@@ -10,10 +10,14 @@ use App\Http\Controllers\AulaController;
 use App\Http\Controllers\ExamenController;
 use App\Http\Controllers\MateriaController;
 use App\Http\Controllers\NormaController;
+use App\Http\Controllers\EstudianteController;
+use App\Http\Controllers\HabilitacionExamenController;
+use App\Http\Controllers\PrerrequisitoController;
+use App\Http\Controllers\VerificacionController;
+use App\Http\Controllers\CargaMasivaEstudianteController;
 use App\Models\Admin;
 use App\Models\Docente;
 use App\Models\Auxiliar;
-use App\Http\Controllers\EstudianteController;
 use Illuminate\Support\Facades\Artisan;
 
 // --- RUTAS PÚBLICAS ---
@@ -23,14 +27,15 @@ Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword'
 
 Route::get('examenes', [ExamenController::class, 'index']);
 Route::get('examenes/{id}', [ExamenController::class, 'show']);
+
 Route::get('/seed-render-now', function () {
-        Artisan::call('db:seed', ['--force' => true]);
-        return response()->json([
-            'output' => Artisan::output(),
-            'total_docentes' => \App\Models\Docente::count(),
-            'docente' => \App\Models\Docente::first(),
-        ]);
-    });
+    Artisan::call('db:seed', ['--force' => true]);
+    return response()->json([
+        'output' => Artisan::output(),
+        'total_docentes' => \App\Models\Docente::count(),
+        'docente' => \App\Models\Docente::first(),
+    ]);
+});
 
 // --- RUTAS PROTEGIDAS (Sanctum) ---
 Route::middleware('auth:sanctum')->group(function () {
@@ -88,12 +93,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('aulas/{id}', [AulaController::class, 'destroy']);
     });
 
-    /*// --- EXÁMENES ---
-    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
-        Route::get('examenes', [ExamenController::class, 'index']);
-        Route::get('examenes/{id}', [ExamenController::class, 'show']);
-    }); */
-
+    // --- EXÁMENES ---
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::post('examenes', [ExamenController::class, 'store']);
         Route::put('examenes/{id}', [ExamenController::class, 'update']);
@@ -126,20 +126,45 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('examenes/{id}/normas/particulares', [NormaController::class, 'crearParticularesParaExamen']);
     });
 
-    // Lectura de estudiantes (admin, docente y auxiliar)
+    // --- ESTUDIANTES (Padrón general) ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('estudiantes', [EstudianteController::class, 'index']);
         Route::get('estudiantes/{identificador}', [EstudianteController::class, 'show']);
-        Route::get('examenes/{id}/estudiantes', [EstudianteController::class, 'estudiantesPorExamen']);
     });
 
-    // Escritura e inscripción (admin y docente)
+    // --- INSCRIPCIÓN Y GESTIÓN EN EXAMEN ---
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::post('examenes/{id}/estudiantes', [EstudianteController::class, 'inscribirAExamen']);
         Route::delete('examenes/{id}/estudiantes/{idEstudiante}', [EstudianteController::class, 'desvincularDeExamen']);
+        Route::post('examenes/{idExamen}/estudiantes/carga-masiva', [CargaMasivaEstudianteController::class, 'storePorExamen']);
     });
 
+    // --- HU 9: PRERREQUISITOS Y HABILITACIÓN ---
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        // Listar estudiantes inscritos al examen con estado de habilitación y auditoría
+        Route::get('examenes/{examen}/estudiantes', [HabilitacionExamenController::class, 'index']);
+        // Listar prerrequisitos fijados para el examen
+        Route::get('examenes/{examen}/prerrequisitos', [PrerrequisitoController::class, 'index']);
+        // motivo rapido de innabilitacion
+        Route::get('examenes/{examen}/estudiantes/{estudiante}/motivo', [HabilitacionExamenController::class, 'motivoInhabilitacion']);
+    });
 
+    Route::middleware('role:admin,administrador,docente')->group(function () {
+        // Crear un prerrequisito para el examen (inhabilita a quienes no tengan ajuste manual)
+        Route::post('examenes/{examen}/prerrequisitos', [PrerrequisitoController::class, 'store']);
+        // Marcar o desmarcar si un estudiante cumplió el prerrequisito
+        Route::patch('prerrequisitos/{prerrequisito}/estudiantes/{estudiante}', [PrerrequisitoController::class, 'toggleCumplimiento']);
+        // Forzado manual de habilitación/inhabilitación por parte del docente
+        Route::patch('examenes/{examen}/estudiantes/{estudiante}/habilitacion', [HabilitacionExamenController::class, 'update']);
+        // prerrequisitos de un estudiante en un examen
+        Route::get('examenes/{examen}/estudiantes/{estudiante}/prerrequisitos', [PrerrequisitoController::class, 'prerrequisitosPorEstudiante']);
+    });
 
-    
+    // --- HU 10: ESCANEO QR Y CONTROL DE ACCESO ---
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::post('examenes/{id}/verificar-ingreso', [VerificacionController::class, 'verificarIngreso']);
+    });
+
+    Route::post('/examenes/{id}/registro-manual', [VerificacionController::class, 'registrarIngresoManual']);
+    Route::get('/examenes/{id}/asistencias', [VerificacionController::class, 'listarAsistencias']);
 });

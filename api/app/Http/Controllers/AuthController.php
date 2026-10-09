@@ -10,7 +10,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -25,40 +24,22 @@ class AuthController extends Controller
      */
     public function login(Request $request): JsonResponse
     {
-    /*    
-    return response()->json([
-            'db_host'     => config('database.connections.pgsql.host'),
-            'db_database' => config('database.connections.pgsql.database'),
-            'total_docentes' => Docente::count(),
-            'docente'     => Docente::where('email', 'docente@fcyt.umss.edu.bo')->first(),
-        ]);
-    */
-    // Validación estricta de formato: o es correo institucional válido o es CI numérico
+        // Validación estricta de formato: o es correo institucional válido o es CI numérico
         $request->validate([
             'email' => [
                 'required',
                 'string',
-                'regex:/^([a-zA-Z0-9._%+-]+@(est\.umss\.edu|fcyt\.umss\.edu\.bo)|\d+)$/'
+                'regex:/^([a-zA-Z0-9._%+-]+@(est\.umss\.edu|fcyt\.umss\.edu\.bo|gmail\.com)|\d+)$/i'
             ],
             'password' => 'required|string',
         ], [
-            'email.regex' => 'Debe ingresar un correo institucional válido o su cédula de identidad autorizada.'
+            'email.regex' => 'Debe ingresar un correo institucional válido.'
         ]);
 
         $rawIdentifier = trim($request->email);
 
         // Resolver tabla y rol según el patrón del identificador
         [$user, $rolDetectado] = $this->identificarYBuscarUsuario($rawIdentifier);
-
-        // REGISTRO DEPURADOR PARA VER EN RENDER LOGS
-        Log::error('DEBUG_LOGIN_RENDER', [
-            'raw_identifier'     => $rawIdentifier,
-            'rol_detectado'      => $rolDetectado,
-            'usuario_encontrado' => $user ? true : false,
-            'user_id'            => $user?->id,
-            'activo'             => $user?->activo,
-            'password_match'     => $user ? Hash::check($request->password, $user->password) : false,
-        ]);
 
         // Validar existencia y verificación de hash de contraseña
         if (!$user || !Hash::check($request->password, $user->password)) {
@@ -166,15 +147,26 @@ class AuthController extends Controller
 
         $emailLower = strtolower($identificador);
 
-        // Docente (@fcyt.umss.edu.bo)
+        // Docente
         if (str_ends_with($emailLower, '@fcyt.umss.edu.bo')) {
             $docente = Docente::where('email', $emailLower)->first();
             return [$docente, 'docente'];
         }
 
-        // Auxiliar (@est.umss.edu)
+        // Auxiliar
         if (str_ends_with($emailLower, '@est.umss.edu')) {
             $auxiliar = Auxiliar::where('email', $emailLower)->first();
+            return [$auxiliar, 'auxiliar'];
+        }
+
+        // Si es cuenta @gmail.com u otro dominio permitido (para el futuro), buscar en Docente y luego en Auxiliar
+        $docente = Docente::where('email', $emailLower)->first();
+        if ($docente) {
+            return [$docente, 'docente'];
+        }
+
+        $auxiliar = Auxiliar::where('email', $emailLower)->first();
+        if ($auxiliar) {
             return [$auxiliar, 'auxiliar'];
         }
 
