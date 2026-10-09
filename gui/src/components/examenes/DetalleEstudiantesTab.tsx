@@ -39,6 +39,9 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
   const [students, setStudents] = useState<EstudianteInscritoExamen[]>([])
   const [searchInput, setSearchInput] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
+  const [estadoFiltro, setEstadoFiltro] = useState<
+  'Todos' | 'Habilitado' | 'Inhabilitado'
+>('Todos')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -78,16 +81,28 @@ const [prerrequisitosStudent, setPrerrequisitosStudent] =
   void loadPrerrequisitos()
 }, [loadStudents, loadPrerrequisitos])
 
-  const visibleStudents = useMemo(() => {
-    if (!searchTerm) return students
-    const search = searchTerm.toLowerCase()
-    return students.filter((student) =>
-      [student.nombre_completo, student.codigo_sis, student.ci]
+ const visibleStudents = useMemo(() => {
+  const search = searchTerm.toLowerCase()
+
+  return students.filter((student) => {
+    const matchesSearch =
+      !searchTerm ||
+      [
+        student.nombre_completo,
+        student.codigo_sis,
+        student.ci,
+      ]
         .join(' ')
         .toLowerCase()
-        .includes(search),
-    )
-  }, [searchTerm, students])
+        .includes(search)
+
+    const matchesEstado =
+      estadoFiltro === 'Todos' ||
+      student.estado === estadoFiltro
+
+    return matchesSearch && matchesEstado
+  })
+}, [searchTerm, students, estadoFiltro])
 
   const enabledCount = visibleStudents.filter(
     (student) => student.estado === 'Habilitado'
@@ -150,7 +165,7 @@ const openEditStudent = async (student: EstudianteInscritoExamen) => {
   }
 }
   return (
-    <div className="space-y-5">
+  <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-clip">
       {/* Barra de control y conteo */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
@@ -267,7 +282,70 @@ const openEditStudent = async (student: EstudianteInscritoExamen) => {
         </div>
         <Button type="submit" variant="outline" className="h-10 text-xs">Buscar</Button>
       </form>
+{/* Filtro por estado: desplegable en móviles */}
+<details className="rounded-xl border border-border bg-white md:hidden">
+  <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-sci-navy">
+    Filtrar por estado
+    <span className="ml-2 text-xs font-normal text-muted-foreground">
+      {estadoFiltro}
+    </span>
+  </summary>
 
+  <div className="border-t border-border p-3">
+    <label
+      htmlFor="estado-filtro-movil"
+      className="mb-2 block text-xs font-medium text-sci-dark"
+    >
+      Estado de habilitación
+    </label>
+
+    <select
+      id="estado-filtro-movil"
+      value={estadoFiltro}
+      onChange={(e) =>
+        setEstadoFiltro(
+          e.target.value as
+            | 'Todos'
+            | 'Habilitado'
+            | 'Inhabilitado'
+        )
+      }
+      className="h-11 w-full rounded-md border border-border bg-white px-3 text-sm"
+    >
+      <option value="Todos">Todos los estados</option>
+      <option value="Habilitado">Habilitados</option>
+      <option value="Inhabilitado">Inhabilitados</option>
+    </select>
+  </div>
+</details>
+
+{/* Filtro visible en escritorio */}
+<div className="hidden md:flex md:items-center md:gap-2">
+  <label
+    htmlFor="estado-filtro-escritorio"
+    className="text-sm text-muted-foreground"
+  >
+    Estado:
+  </label>
+
+  <select
+    id="estado-filtro-escritorio"
+    value={estadoFiltro}
+    onChange={(e) =>
+      setEstadoFiltro(
+        e.target.value as
+          | 'Todos'
+          | 'Habilitado'
+          | 'Inhabilitado'
+      )
+    }
+    className="h-10 rounded-md border border-border bg-white px-3 text-sm"
+  >
+    <option value="Todos">Todos</option>
+    <option value="Habilitado">Habilitados</option>
+    <option value="Inhabilitado">Inhabilitados</option>
+  </select>
+</div>
       {/* Tabla de Estudiantes */}
       <Card className="rounded-2xl border-border bg-card shadow-xs">
         <CardContent className="p-0">
@@ -275,8 +353,8 @@ const openEditStudent = async (student: EstudianteInscritoExamen) => {
             <div className="grid min-h-64 place-items-center">
               <LoaderCircle className="h-8 w-8 animate-spin text-sci-cyan" />
             </div>
-          ) : (
-            <div className="overflow-x-auto">
+         ) : (<>
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-left text-xs">
                 <thead className="border-b border-border bg-muted/40 font-semibold text-muted-foreground">
                   <tr>
@@ -375,8 +453,128 @@ const openEditStudent = async (student: EstudianteInscritoExamen) => {
                     </tr>
                   )}
                 </tbody>
+           
               </table>
             </div>
+
+            {/* Tarjetas de estudiantes para móviles */}
+            <div className="space-y-3 p-3 md:hidden">
+              {visibleStudents.map((st) => (
+                <div
+                  key={st.id}
+                  className="space-y-3 rounded-xl border border-border bg-white p-4 shadow-sm"
+                >
+                  {/* Nombre y estado */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-sm font-bold text-sci-navy">
+                        {st.nombre_completo}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Código SIS: {st.codigo_sis}
+                      </p>
+                    </div>
+
+                    <span
+                      className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold ${
+                        st.estado === 'Habilitado'
+                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700'
+                          : 'border-red-500/30 bg-red-500/10 text-red-600'
+                      }`}
+                    >
+                      {st.estado}
+                    </span>
+                  </div>
+
+                  {/* Datos del estudiante */}
+                  <div className="space-y-2 border-t border-border pt-3 text-xs">
+                    <div>
+                      <p className="font-semibold text-sci-dark">C.I.</p>
+                      <p className="mt-0.5 text-muted-foreground">
+                        {st.ci} {st.ci_extension ?? ''}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="font-semibold text-sci-dark">Correo institucional</p>
+                      <p className="mt-0.5 break-all text-muted-foreground">
+                        {st.email_institucional}
+                      </p>
+                    </div>
+
+                    {st.estado === 'Inhabilitado' && st.motivo_estado && (
+                      <div className="rounded-lg bg-red-50 p-3">
+                        <p className="font-semibold text-red-700">
+                          Motivo de inhabilitación
+                        </p>
+                        <p className="mt-1 break-words text-red-600">
+                          {st.motivo_estado}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Acciones */}
+                  <div className="grid grid-cols-2 gap-2 border-t border-border pt-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setQrStudent(st)}
+                      className="h-10 gap-2 text-xs"
+                    >
+                      <QrCode className="h-4 w-4 text-sci-cyan" />
+                      Ver QR
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPrerrequisitosStudent(st)}
+                      className="h-10 gap-2 text-xs"
+                    >
+                      Prerrequisitos
+                    </Button>
+
+                    {canManage && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void openEditStudent(st)}
+                          className="h-10 gap-2 text-xs"
+                        >
+                          <Edit3 className="h-4 w-4" />
+                          Editar
+                        </Button>
+
+                        {st.estado !== 'Inhabilitado' && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openInhabilitar(st)}
+                            className="h-10 gap-2 text-xs text-sci-red hover:text-sci-red"
+                          >
+                            <UserX className="h-4 w-4" />
+                            Inhabilitar
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {visibleStudents.length === 0 && (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  No hay estudiantes que coincidan con los filtros.
+                </p>
+              )}
+            </div>
+          </>
           )}
         </CardContent>
       </Card>

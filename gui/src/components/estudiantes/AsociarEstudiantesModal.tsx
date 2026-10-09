@@ -194,8 +194,10 @@ const enrolledStudents = enrolledResponse.estudiantes
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+    
+<div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
+
+      <div className="flex h-[100dvh] max-h-[100dvh] w-full max-w-3xl flex-col overflow-hidden rounded-none border border-border bg-card shadow-2xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
         {/* Encabezado */}
         <div className="flex items-start justify-between border-b border-border px-6 py-5">
           <div>
@@ -230,7 +232,7 @@ const enrolledStudents = enrolledResponse.estudiantes
         </div>
 
         {/* Contenido */}
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6">
           {error && (
             <div className="rounded-xl border border-sci-red/20 bg-sci-red/10 px-4 py-3 text-xs font-semibold text-sci-red">
               {error}
@@ -384,7 +386,7 @@ const enrolledStudents = enrolledResponse.estudiantes
         </div>
 
         {/* Footer */}
-        <div className="flex flex-col-reverse gap-2 border-t border-border bg-muted/40 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="shrink-0 flex flex-col-reverse gap-2 border-t border-border bg-muted/40 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
           <span className="text-xs text-muted-foreground">
             {selectedCount > 0
               ? `${selectedCount} estudiante${
