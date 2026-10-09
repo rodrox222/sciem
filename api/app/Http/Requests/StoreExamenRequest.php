@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Examen;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class StoreExamenRequest extends FormRequest
 {
@@ -24,5 +26,35 @@ class StoreExamenRequest extends FormRequest
             'id_aula'    => ['required', 'uuid', 'exists:aulas,id'],
             'id_docente' => ['required', 'uuid', 'exists:docente,id'],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function ($validator) {
+            if ($validator->errors()->isNotEmpty()) {
+                return;
+            }
+
+            $idAula   = $this->input('id_aula');
+            $fecha    = $this->input('fecha');
+            $horaIni  = $this->input('hora_ini');
+            $horaFin  = $this->input('hora_fin');
+
+            $traslape = Examen::where('id_aula', $idAula)
+                ->where('fecha', $fecha)
+                ->whereIn('estado', ['Programado', 'En proceso'])
+                ->where(function ($query) use ($horaIni, $horaFin) {
+                    $query->where('hora_ini', '<', $horaFin)
+                          ->where('hora_fin', '>', $horaIni);
+                })
+                ->first();
+
+            if ($traslape) {
+                $validator->errors()->add(
+                    'id_aula',
+                    "El aula ya se encuentra ocupada por la evaluación '{$traslape->nombre}' en el horario de {$traslape->hora_ini} a {$traslape->hora_fin}."
+                );
+            }
+        });
     }
 }

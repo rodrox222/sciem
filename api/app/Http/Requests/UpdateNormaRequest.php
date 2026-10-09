@@ -26,6 +26,7 @@ class UpdateNormaRequest extends FormRequest
                 'string',
                 Rule::in($esAdmin ? ['General', 'Particular'] : ['Particular']),
             ],
+            'estado'      => ['sometimes', 'required', 'string', Rule::in(['Activo', 'Inactivo'])],
         ];
     }
 }

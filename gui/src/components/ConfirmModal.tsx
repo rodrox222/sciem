@@ -36,17 +36,19 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 }) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px] border-border bg-card text-card-foreground rounded-2xl shadow-xl">
+      <DialogContent className="sm:max-w-[460px] border-border bg-card text-card-foreground rounded-2xl shadow-xl">
         <DialogHeader>
-          <DialogTitle className="text-foreground font-bold text-lg">{title}</DialogTitle>
-          <DialogDescription className="text-muted-foreground text-sm mt-2 leading-relaxed">
-            {description}
+          <DialogTitle className="text-sci-navy font-bold text-lg leading-tight">
+            {title}
+          </DialogTitle>
+          <DialogDescription asChild className="text-muted-foreground text-sm mt-2 leading-relaxed">
+            <div>{description}</div>
           </DialogDescription>
         </DialogHeader>
 
         <DialogFooter className="mt-6 flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
           {showCancel && onCancel && (
-            <Button variant="outline" onClick={onCancel} className="cursor-pointer">
+            <Button variant="outline" onClick={onCancel} className="cursor-pointer border-border">
               {cancelText}
             </Button>
           )}
@@ -54,7 +56,9 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             variant={variant}
             onClick={onConfirm}
             className={`cursor-pointer ${
-              variant === 'default' ? 'bg-sci-blue hover:opacity-90 text-white font-semibold' : ''
+              variant === 'destructive'
+                ? 'bg-sci-red hover:opacity-90 text-white font-semibold'
+                : 'bg-sci-blue hover:opacity-90 text-white font-semibold'
             }`}
           >
             {confirmText}

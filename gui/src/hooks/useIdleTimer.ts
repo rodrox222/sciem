@@ -1,10 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { authService } from '@/services/auth.service'
+import { configService } from '@/services/config.service'
 
-const WARNING_LIMIT_MS = 4 * 60 * 1000 
-const COUNTDOWN_SECONDS = 60          
-const TOTAL_LIMIT_MS = WARNING_LIMIT_MS + COUNTDOWN_SECONDS * 1000
-const STORAGE_KEY = 'sci_last_activity' // <-- Actualizado a sci
+const COUNTDOWN_SECONDS = 60
+const STORAGE_KEY = 'sci_last_activity'
+
+const getLimits = () => {
+  const totalMinutes = configService.getTimeoutMinutes()
+  const totalMs = totalMinutes * 60 * 1000
+  // Si el timeout es de 1 minuto, avisa a los 30s; si es mayor, avisa 1 minuto antes
+  const warningMs = totalMinutes === 1 ? 30 * 1000 : (totalMinutes - 1) * 60 * 1000
+  return { totalMs, warningMs }
+}
 
 export const useIdleTimer = () => {
   const [showModal, setShowModal] = useState(false)
@@ -21,6 +28,7 @@ export const useIdleTimer = () => {
     const token = localStorage.getItem('auth_token')
     if (!token) return false
 
+    const { totalMs, warningMs } = getLimits()
     const lastActivityStr = localStorage.getItem(STORAGE_KEY)
     if (!lastActivityStr) {
       localStorage.setItem(STORAGE_KEY, Date.now().toString())
@@ -29,13 +37,13 @@ export const useIdleTimer = () => {
 
     const elapsed = Date.now() - parseInt(lastActivityStr, 10)
 
-    if (elapsed >= TOTAL_LIMIT_MS) {
+    if (elapsed >= totalMs) {
       void handleLogout()
       return false
     }
 
-    if (elapsed >= WARNING_LIMIT_MS) {
-      const remaining = Math.max(1, Math.ceil((TOTAL_LIMIT_MS - elapsed) / 1000))
+    if (elapsed >= warningMs) {
+      const remaining = Math.max(1, Math.ceil((totalMs - elapsed) / 1000))
       setSecondsRemaining(remaining)
       setShowModal(true)
     }
@@ -46,6 +54,7 @@ export const useIdleTimer = () => {
   const resetTimer = useCallback(() => {
     if (showModal) return
 
+    const { warningMs } = getLimits()
     localStorage.setItem(STORAGE_KEY, Date.now().toString())
 
     if (timerRef.current) clearTimeout(timerRef.current)
@@ -53,7 +62,7 @@ export const useIdleTimer = () => {
     timerRef.current = setTimeout(() => {
       setSecondsRemaining(COUNTDOWN_SECONDS)
       setShowModal(true)
-    }, WARNING_LIMIT_MS)
+    }, warningMs)
   }, [showModal])
 
   const handleStayActive = () => {
@@ -70,8 +79,10 @@ export const useIdleTimer = () => {
 
     const events = ['mousemove', 'keydown', 'scroll', 'click']
     const handler = () => resetTimer()
+    const onConfigUpdate = () => resetTimer()
 
     events.forEach((ev) => window.addEventListener(ev, handler))
+    window.addEventListener('sci_config_updated', onConfigUpdate)
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
@@ -83,6 +94,7 @@ export const useIdleTimer = () => {
     return () => {
       window.clearTimeout(initialCheckId)
       events.forEach((ev) => window.removeEventListener(ev, handler))
+      window.removeEventListener('sci_config_updated', onConfigUpdate)
       document.removeEventListener('visibilitychange', handleVisibility)
       if (timerRef.current) clearTimeout(timerRef.current)
     }
