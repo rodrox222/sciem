@@ -1,12 +1,20 @@
 import { QRCodeSVG } from 'qrcode.react'
-import { QrCode, BookOpen } from 'lucide-react'
+import {
+  BookOpen,
+  CheckCircle2,
+  IdCard,
+  QrCode,
+  UserRound,
+  XCircle,
+} from 'lucide-react'
+
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from '@/components/ui/dialog'
 import type { EstudianteInscritoExamen } from '@/services/estudiantes.service'
 
@@ -16,10 +24,15 @@ interface EstudianteQrModalProps {
   onClose: () => void
 }
 
-export function EstudianteQrModal({ estudiante, materiaNombre, onClose }: EstudianteQrModalProps) {
+export function EstudianteQrModal({
+  estudiante,
+  materiaNombre,
+  onClose,
+}: EstudianteQrModalProps) {
   if (!estudiante) return null
 
-  // Payload con el Código SIS y la Materia
+  const isHabilitado = estudiante.estado === 'Habilitado'
+
   const qrPayload = JSON.stringify({
     sis: estudiante.codigo_sis,
     materia: materiaNombre || 'General',
@@ -27,71 +40,123 @@ export function EstudianteQrModal({ estudiante, materiaNombre, onClose }: Estudi
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-xs overflow-hidden rounded-2xl border-border bg-card p-0 text-card-foreground shadow-2xl">
-        <DialogHeader className="border-b border-border bg-muted/30 px-5 py-4 text-center">
-          <div className="mx-auto mb-2 grid h-10 w-10 place-items-center rounded-full bg-sci-cyan/10 text-sci-cyan">
-            <QrCode className="h-5 w-5" />
+      <DialogContent
+        showCloseButton={false}
+        className="max-h-[calc(100vh-1.5rem)] max-w-sm overflow-y-auto rounded-2xl border-0 bg-card p-0 text-card-foreground shadow-2xl"
+      >
+        <DialogHeader className="bg-sci-navy px-5 py-5 text-center text-white sm:px-6">
+          <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-white/95 shadow-lg">
+            <QrCode className="h-8 w-8 text-sci-cyan" aria-hidden="true" />
           </div>
-          <DialogTitle className="text-base font-bold text-sci-navy">
-            Pase de Ingreso
+
+          <DialogTitle className="mt-2 text-xl font-extrabold leading-tight text-white">
+            Pase de ingreso
           </DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground">
-            Credencial digital para control de acceso
+
+          <DialogDescription className="text-xs font-medium text-white/80">
+            Credencial digital para el control de acceso
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col items-center gap-4 px-5 py-5 text-center">
-          {/* Gráfico QR */}
-          <div className="rounded-2xl border-2 border-border bg-white p-3 shadow-inner">
-            <QRCodeSVG
-              value={qrPayload}
-              size={180}
-              level="M"
-              includeMargin={false}
+        <div className="space-y-4 px-5 py-5">
+          <section className="flex justify-center">
+            <div className="rounded-2xl border-2 border-sci-cyan/25 bg-white p-4 shadow-sm">
+              <QRCodeSVG
+                value={qrPayload}
+                size={190}
+                level="M"
+                includeMargin={false}
+                title={`Código QR de ${estudiante.nombre_completo}`}
+              />
+            </div>
+          </section>
+
+          <section className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-sci-cyan/10">
+              <UserRound className="h-5 w-5 text-sci-cyan" aria-hidden="true" />
+            </div>
+
+            <div className="min-w-0 text-left">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Estudiante
+              </p>
+              <p className="break-words text-sm font-extrabold leading-snug text-foreground">
+                {estudiante.nombre_completo}
+              </p>
+            </div>
+          </section>
+
+          <section className="flex gap-3 rounded-xl border border-border bg-muted/30 p-3">
+            <BookOpen
+              className="mt-0.5 h-4 w-4 shrink-0 text-sci-cyan"
+              aria-hidden="true"
             />
-          </div>
 
-          {/* Información visible */}
-          <div className="w-full space-y-1 rounded-xl border border-border bg-muted/30 p-3 text-xs">
-            <p className="font-bold text-sci-navy">{estudiante.nombre_completo}</p>
-            
-            <div className="flex items-center justify-center gap-1.5 text-muted-foreground">
-              <BookOpen className="h-3.5 w-3.5 text-sci-cyan" />
-              <span className="font-semibold text-foreground truncate max-w-[200px]">
+            <div className="min-w-0 text-left">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Asignatura
+              </p>
+              <p className="break-words text-sm font-bold leading-snug text-foreground">
                 {materiaNombre || 'Materia no especificada'}
-              </span>
+              </p>
             </div>
+          </section>
 
-            <div className="flex justify-center gap-3 pt-1 text-muted-foreground">
-              <span>SIS: <strong className="text-foreground">{estudiante.codigo_sis}</strong></span>
-              <span>CI: <strong className="text-foreground">{estudiante.ci}</strong></span>
-            </div>
+          <div className="grid grid-cols-2 gap-3">
+            <section className="rounded-xl border border-border bg-muted/30 p-3 text-left">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Código SIS
+              </p>
+              <p className="mt-1 break-all text-sm font-extrabold text-foreground">
+                {estudiante.codigo_sis}
+              </p>
+            </section>
 
-            <div className="pt-1.5">
-              <span
-                className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                  estudiante.estado === 'Habilitado'
-                    ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-700'
-                    : 'border border-red-500/30 bg-red-500/10 text-red-600'
-                }`}
-              >
-                {estudiante.estado}
-              </span>
-            </div>
+            <section className="rounded-xl border border-border bg-muted/30 p-3 text-left">
+              <div className="flex items-center gap-1.5">
+                <IdCard className="h-3.5 w-3.5 text-sci-cyan" aria-hidden="true" />
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  CI
+                </p>
+              </div>
+              <p className="mt-1 break-all text-sm font-extrabold text-foreground">
+                {estudiante.ci}
+                {estudiante.ci_extension ? ` ${estudiante.ci_extension}` : ''}
+              </p>
+            </section>
           </div>
+
+          <section
+            aria-label={`Estado del estudiante: ${estudiante.estado}`}
+            className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 ${
+              isHabilitado
+                ? 'border-emerald-600/30 bg-emerald-600/5 text-emerald-700 dark:text-emerald-400'
+                : 'border-sci-red/30 bg-sci-red/5 text-sci-red'
+            }`}
+          >
+            {isHabilitado ? (
+              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <XCircle className="h-4 w-4" aria-hidden="true" />
+            )}
+
+            <span className="text-xs font-bold">{estudiante.estado}</span>
+          </section>
+
+          <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
+            Presente este código QR al responsable del control de ingreso.
+          </p>
         </div>
 
-        <div className="flex justify-end border-t border-border bg-muted/20 px-5 py-3">
+        <footer className="border-t border-border bg-muted/30 px-5 py-4">
           <Button
             type="button"
-            variant="outline"
-            size="sm"
             onClick={onClose}
-            className="w-full text-xs cursor-pointer"
+            className="w-full cursor-pointer bg-sci-blue font-bold text-white hover:opacity-90"
           >
             Cerrar
           </Button>
-        </div>
+        </footer>
       </DialogContent>
     </Dialog>
   )
