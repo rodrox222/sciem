@@ -51,7 +51,17 @@ class HabilitacionExamenController extends Controller
 
         $estado = $request->input('estado');
         $motivo = trim($request->input('motivo_estado'));
-        $docenteId = $request->user()?->id;
+        
+        $user = $request->user();
+        // Solo guardamos el ID si el usuario autenticado existe en la tabla 'docente'
+        $docenteId = null;
+        if ($user) {
+            if ($user instanceof Docente) {
+                $docenteId = $user->id;
+            } elseif (Docente::where('id', $user->id)->exists()) {
+                $docenteId = $user->id;
+            }
+        }
 
         $examen->estudiantes()->updateExistingPivot($estudianteId, [
             'estado'                    => $estado,

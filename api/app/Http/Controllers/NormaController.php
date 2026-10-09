@@ -29,6 +29,10 @@ class NormaController extends Controller
             $query->where('tipo', ucfirst(strtolower($tipo)));
         }
 
+        if ($estado = $request->query('estado')) {
+            $query->where('estado', ucfirst(strtolower($estado)));
+        }
+
         if ($search = $request->query('search')) {
             $query->where(function ($q) use ($search) {
                 $q->where('titulo', 'ilike', "%{$search}%")
