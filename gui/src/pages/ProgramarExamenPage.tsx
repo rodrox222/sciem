@@ -224,16 +224,25 @@ export default function ProgramarExamenPage() {
     return Object.keys(errors).length === 0
   }
 
+  // Verificación estricta de traslapes en el frontend
   const checkScheduleConflict = async () => {
     const response = await examenesService.list({ fecha: form.fecha, perPage: 100 })
-    return response.data.find(
-      (exam) =>
-        exam.id !== editId &&
-        exam.id_aula === form.id_aula &&
-        exam.estado !== 'Terminado' &&
-        form.hora_ini < normalizeTime(exam.hora_fin) &&
-        endTime > normalizeTime(exam.hora_ini),
-    )
+    const actualIni = normalizeTime(form.hora_ini)
+    const actualFin = endTime
+
+    return response.data.find((exam) => {
+      if (exam.id === editId) return false
+      
+      const mismaAula = exam.id_aula === form.id_aula || exam.aula?.id === form.id_aula
+      if (!mismaAula) return false
+      if (exam.estado === 'Terminado') return false
+
+      const otroIni = normalizeTime(exam.hora_ini)
+      const otroFin = normalizeTime(exam.hora_fin)
+
+      // Se traslapan si: (InicioA < FinB) && (FinA > InicioB)
+      return actualIni < otroFin && actualFin > otroIni
+    })
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -248,7 +257,7 @@ export default function ProgramarExamenPage() {
       const conflict = await checkScheduleConflict()
       if (conflict) {
         throw new Error(
-          `El aula ya está reservada para “${conflict.nombre}” de ${normalizeTime(conflict.hora_ini)} a ${normalizeTime(conflict.hora_fin)}.`
+          `Conflicto de horario: El aula seleccionada ya está ocupada por la evaluación "${conflict.nombre}" de ${normalizeTime(conflict.hora_ini)} a ${normalizeTime(conflict.hora_fin)}.`
         )
       }
 
@@ -298,7 +307,6 @@ export default function ProgramarExamenPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      {/* Encabezado */}
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <Button
@@ -329,7 +337,7 @@ export default function ProgramarExamenPage() {
       </header>
 
       {error && (
-        <div className="flex items-start gap-3 rounded-2xl border border-sci-red/20 bg-sci-red/10 p-4 text-xs font-semibold text-sci-red" role="alert">
+        <div className="flex items-start gap-3 rounded-2xl border border-sci-red/30 bg-sci-red/10 p-4 text-xs font-semibold text-sci-red" role="alert">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
@@ -344,7 +352,6 @@ export default function ProgramarExamenPage() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Bloque 1: Datos del examen */}
           <fieldset className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-xs">
             <legend className="px-2 text-sm font-bold text-sci-navy">
               Datos de la evaluación
@@ -385,7 +392,7 @@ export default function ProgramarExamenPage() {
                   id="examen-materia"
                   value={form.id_materia}
                   onChange={(event) => setField('id_materia', event.target.value)}
-                  className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
+                  className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
                 >
                   <option value="">Seleccionar asignatura</option>
                   {materias.map((subject) => (
@@ -406,7 +413,7 @@ export default function ProgramarExamenPage() {
                     id="ex-docente"
                     value={form.id_docente}
                     onChange={(event) => setField('id_docente', event.target.value)}
-                    className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
+                    className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
                   >
                     <option value="">Seleccionar docente</option>
                     {docentes.map((teacher) => (
@@ -421,7 +428,7 @@ export default function ProgramarExamenPage() {
                     type="text"
                     readOnly
                     value={selectedTeacher ? formatTeacherName(selectedTeacher) : ''}
-                    className="h-11 bg-muted cursor-not-allowed text-xs font-medium"
+                    className="h-11 bg-muted cursor-not-allowed text-xs font-medium border-border"
                   />
                 )}
                 {fieldErrors.id_docente && <p className="text-xs text-sci-red font-medium">{fieldErrors.id_docente}</p>}
@@ -429,7 +436,6 @@ export default function ProgramarExamenPage() {
             </div>
           </fieldset>
 
-          {/* Bloque 2: Horario y ambiente */}
           <fieldset className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-xs">
             <legend className="px-2 text-sm font-bold text-sci-navy">
               Horario y ambiente
@@ -458,7 +464,7 @@ export default function ProgramarExamenPage() {
                   id="ex-aula"
                   value={form.id_aula}
                   onChange={(event) => setField('id_aula', event.target.value)}
-                  className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
+                  className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
                 >
                   <option value="">Seleccionar aula</option>
                   {aulas.map((room) => (
@@ -503,7 +509,6 @@ export default function ProgramarExamenPage() {
             </div>
           </fieldset>
 
-          {/* Bloque 3: Normas aplicables */}
           <fieldset className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-xs">
             <legend className="px-2 text-sm font-bold text-sci-navy">
               Normas aplicables *
@@ -552,7 +557,6 @@ export default function ProgramarExamenPage() {
             </div>
             {fieldErrors.normas && <p className="mt-2 text-xs text-sci-red font-medium">{fieldErrors.normas}</p>}
 
-            {/* Normas particulares */}
             <div className="mt-5 space-y-3 border-t border-border pt-4">
               <h3 className="text-xs font-bold text-sci-navy">Agregar norma particular a este examen</h3>
               <Input
@@ -561,21 +565,21 @@ export default function ProgramarExamenPage() {
                 value={particularTitulo}
                 onChange={(event) => setParticularTitulo(event.target.value)}
                 placeholder="Título de la norma particular"
-                className="h-10 text-xs"
+                className="h-10 text-xs border-border"
               />
               <textarea
                 value={particularDescripcion}
                 onChange={(event) => setParticularDescripcion(event.target.value)}
                 placeholder="Descripción detallada de la regla particular..."
                 rows={2}
-                className="w-full rounded-xl border border-input bg-background p-3 text-xs leading-relaxed outline-none focus:ring-2 focus:ring-sci-blue/20"
+                className="w-full rounded-xl border border-border bg-background p-3 text-xs leading-relaxed outline-none focus:ring-2 focus:ring-sci-blue/20"
               />
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={addParticular}
-                className="cursor-pointer text-xs"
+                className="cursor-pointer text-xs border-border"
               >
                 + Incluir norma particular
               </Button>
@@ -604,7 +608,7 @@ export default function ProgramarExamenPage() {
               variant="outline"
               onClick={() => navigate('/examenes')}
               disabled={saving}
-              className="cursor-pointer"
+              className="cursor-pointer border-border"
             >
               Cancelar
             </Button>

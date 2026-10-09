@@ -13,6 +13,7 @@ return new class extends Migration
             $table->string('titulo', 150);
             $table->text('descripcion');
             $table->enum('tipo', ['General', 'Particular'])->default('General');
+            $table->enum('estado', ['Activo', 'Inactivo'])->default('Activo');
             $table->timestamps();
         });
     }

@@ -26,6 +26,7 @@ import AulasPage from './pages/AulasPage'
 import NormasPage from './pages/NormasPage'
 import { AuditoriaPage } from './pages/AuditoriaPage'
 import ProgramarExamenPage from './pages/ProgramarExamenPage'
+import ConfiguracionPage from './pages/ConfiguracionPage'
 
 
 export default function App() {
@@ -61,6 +62,7 @@ export default function App() {
               <Route path="/aulas" element={<AulasPage />} />
               <Route path="/normas" element={<NormasPage />} />
               <Route path="/dashboard/auditoria" element={<AuditoriaPage />} />
+              <Route path="/configuracion" element={<ConfiguracionPage />} />
             </Route>
 
             {/* Administrador y Docente */}

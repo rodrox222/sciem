@@ -3,6 +3,7 @@ import { Html5Qrcode } from 'html5-qrcode'
 import {
   Camera,
   Clock,
+  Loader2,
   QrCode,
   RefreshCw,
   Search,
@@ -139,8 +140,10 @@ const mapVerificationError = (error: unknown): ResultadoValidacionAcceso => {
 export function DetalleEscanerTab({ exam }: { exam: Examen }) {
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
+  const [isValidating, setIsValidating] = useState(false)
   const [showModal, setShowModal] = useState(false)
-  const [validationResult, setValidationResult] = useState<ResultadoValidacionAcceso | null>(null)
+  const [validationResult, setValidationResult] =
+    useState<ResultadoValidacionAcceso | null>(null)
 
   // Asistencias en tiempo real
   const [asistencias, setAsistencias] = useState<AsistenciaItem[]>([])
@@ -205,8 +208,8 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
       if (isPausedRef.current) return
 
       isPausedRef.current = true
-      setValidationResult({ estado: 'pendiente', codigoQr: decodedText })
-      setShowModal(true)
+      setValidationResult(null)
+      setIsValidating(true)
 
       try {
         const response = await api.post<VerificationResponse>(
@@ -222,9 +225,13 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
           },
           horaIngreso: response.detalles?.hora_ingreso,
         })
+        setShowModal(true)
         void loadAsistencias()
       } catch (error) {
         setValidationResult(mapVerificationError(error))
+        setShowModal(true)
+      } finally {
+        setIsValidating(false)
       }
     },
     [exam.id, loadAsistencias]
@@ -261,6 +268,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
 
   const startScanner = useCallback(async () => {
     setCameraError(null)
+    setIsValidating(false)
     isPausedRef.current = false
 
     await stopScanner()
@@ -338,17 +346,46 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
           {/* Lector de Cámara */}
           <Card className="overflow-hidden rounded-2xl border-border bg-card shadow-xs">
             <CardContent className="flex flex-col items-center justify-center p-4 sm:p-6">
+              <div className="mb-4 w-full max-w-sm text-left">
+                <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-sci-cyan">
+                  Control de ingreso
+                </span>
+                <h2 className="mt-1 flex items-center gap-2 text-lg font-extrabold text-foreground">
+                  <QrCode className="h-5 w-5 text-sci-cyan" aria-hidden="true" />
+                  Escáner de credenciales
+                </h2>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Centre el código QR del estudiante dentro del recuadro para validar su ingreso.
+                </p>
+              </div>
+
               <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border-2 border-border bg-black shadow-inner">
                 <div
                   id={READER_ID}
                   className="aspect-square w-full overflow-hidden [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
                 />
 
-                {cameraActive && !showModal && (
+                {cameraActive && !showModal && !isValidating && (
                   <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                     <div className="h-48 w-48 rounded-2xl border-2 border-sci-cyan/70 shadow-[0_0_15px_rgba(22,143,189,0.3)]">
                       <div className="h-0.5 w-full animate-pulse bg-gradient-to-r from-transparent via-sci-cyan to-transparent" />
                     </div>
+                  </div>
+                )}
+
+                {isValidating && (
+                  <div
+                    className="absolute inset-0 flex flex-col items-center justify-center bg-sci-navy/85 p-6 text-center text-white backdrop-blur-[1px]"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <div className="grid h-14 w-14 place-items-center rounded-full bg-white/95 shadow-lg">
+                      <Loader2 className="h-8 w-8 animate-spin text-sci-cyan" aria-hidden="true" />
+                    </div>
+                    <p className="mt-4 text-sm font-extrabold">Validando ingreso...</p>
+                    <p className="mt-1 text-xs font-medium text-white/75">
+                      Esperando respuesta del sistema
+                    </p>
                   </div>
                 )}
 
@@ -383,6 +420,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
                     variant="outline"
                     size="sm"
                     onClick={() => void stopScanner()}
+                    disabled={isValidating}
                     className="cursor-pointer gap-1.5 text-xs text-sci-red hover:text-sci-red"
                   >
                     <VideoOff className="h-3.5 w-3.5" /> Detener cámara
@@ -392,6 +430,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
                     type="button"
                     size="sm"
                     onClick={() => void startScanner()}
+                    disabled={isValidating}
                     className="cursor-pointer gap-1.5 bg-sci-blue text-xs text-white hover:opacity-90"
                   >
                     <Camera className="h-3.5 w-3.5" /> Encender cámara
@@ -473,26 +512,41 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
 
               <div className="rounded-xl border border-border bg-muted/30 p-3">
                 <p className="text-[11px] text-muted-foreground">Evaluación activa:</p>
-                <p className="truncate font-semibold text-sci-navy">{exam.nombre}</p>
+                <p className="break-words font-semibold leading-snug text-foreground">
+                  {exam.nombre}
+                </p>
               </div>
 
               <div className="rounded-xl border border-border bg-muted/30 p-3">
                 <p className="text-[11px] text-muted-foreground">Ambiente asignado:</p>
-                <p className="font-semibold text-sci-navy">
+                <p className="font-semibold text-foreground">
                   {exam.aula?.nombre ?? 'Aula general'}
                 </p>
               </div>
 
               <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 p-3">
-                <span
-                  className={`h-2.5 w-2.5 rounded-full ${
-                    cameraActive ? 'animate-pulse bg-emerald-500' : 'bg-muted-foreground'
-                  }`}
-                />
+                {isValidating ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-sci-cyan" aria-hidden="true" />
+                ) : (
+                  <span
+                    className={`h-2.5 w-2.5 rounded-full ${
+                      cameraActive ? 'animate-pulse bg-emerald-500' : 'bg-muted-foreground'
+                    }`}
+                  />
+                )}
                 <span className="font-medium text-foreground">
-                  {cameraActive ? 'Lector activo y listo' : 'Lector en espera'}
+                  {isValidating
+                    ? 'Validando ingreso...'
+                    : cameraActive
+                      ? 'Lector activo y listo'
+                      : 'Lector en espera'}
                 </span>
               </div>
+
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                El lector se pausa automáticamente al detectar un QR y se habilita nuevamente al
+                cerrar el resultado.
+              </p>
             </CardContent>
           </Card>
 

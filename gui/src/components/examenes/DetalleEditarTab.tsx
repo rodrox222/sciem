@@ -87,7 +87,20 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
         isAdmin ? examenesService.listDocentes().then((r) => r.data) : Promise.resolve([]),
       ])
       setMaterias(subjects)
-      setAulas(rooms.data)
+      setAulas(
+        rooms.data.some((r) => r.id === exam.id_aula)
+          ? rooms.data
+          : [
+              ...rooms.data,
+              {
+                id: exam.id_aula,
+                nombre: exam.aula?.nombre ?? 'Aula actual',
+                ubicacion: 'Ubicación registrada',
+                capacidad: 0,
+                estado: 'Disponible',
+              },
+            ]
+      )
       setNormas(rules)
       setDocentes(teachers)
     } catch (err) {
@@ -95,7 +108,7 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
     } finally {
       setLoading(false)
     }
-  }, [isAdmin])
+  }, [isAdmin, exam])
 
   useEffect(() => {
     void loadDependencies()
@@ -107,6 +120,25 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
     )
   }
 
+  const checkScheduleConflict = async () => {
+    const response = await examenesService.list({ fecha: form.fecha, perPage: 100 })
+    const actualIni = normalizeTime(form.hora_ini)
+    const actualFin = endTime
+
+    return response.data.find((other) => {
+      if (other.id === exam.id) return false
+
+      const mismaAula = other.id_aula === form.id_aula || other.aula?.id === form.id_aula
+      if (!mismaAula) return false
+      if (other.estado === 'Terminado') return false
+
+      const otroIni = normalizeTime(other.hora_ini)
+      const otroFin = normalizeTime(other.hora_fin)
+
+      return actualIni < otroFin && actualFin > otroIni
+    })
+  }
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setSaving(true)
@@ -114,6 +146,13 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
     setSuccess('')
 
     try {
+      const conflict = await checkScheduleConflict()
+      if (conflict) {
+        throw new Error(
+          `Conflicto de horario: El aula ya se encuentra ocupada por la evaluación "${conflict.nombre}" de ${normalizeTime(conflict.hora_ini)} a ${normalizeTime(conflict.hora_fin)}.`
+        )
+      }
+
       const payload: ExamenPayload = {
         nombre: form.nombre.trim(),
         id_materia: form.id_materia,
@@ -153,7 +192,7 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
       )}
 
       {error && (
-        <div className="flex items-center gap-2 rounded-xl border border-sci-red/20 bg-sci-red/10 p-4 text-xs font-semibold text-sci-red">
+        <div className="flex items-center gap-2 rounded-xl border border-sci-red/30 bg-sci-red/10 p-4 text-xs font-semibold text-sci-red">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
@@ -166,7 +205,7 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
             <Input
               value={form.nombre}
               onChange={(e) => setForm((c) => ({ ...c, nombre: e.target.value }))}
-              className="h-10 text-xs"
+              className="h-10 text-xs border-border"
               required
             />
           </div>
@@ -179,7 +218,7 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
               <select
                 value={form.id_materia}
                 onChange={(e) => setForm((c) => ({ ...c, id_materia: e.target.value }))}
-                className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs"
+                className="h-10 w-full rounded-xl border border-border bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
               >
                 {materias.map((m) => (
                   <option key={m.id} value={m.id}>{m.nombre}</option>
@@ -194,7 +233,7 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
               <select
                 value={form.id_aula}
                 onChange={(e) => setForm((c) => ({ ...c, id_aula: e.target.value }))}
-                className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs"
+                className="h-10 w-full rounded-xl border border-border bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
               >
                 {aulas.map((a) => (
                   <option key={a.id} value={a.id}>{a.nombre} · {a.ubicacion}</option>
@@ -210,7 +249,7 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
                 <select
                   value={form.id_docente}
                   onChange={(e) => setForm((c) => ({ ...c, id_docente: e.target.value }))}
-                  className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs"
+                  className="h-10 w-full rounded-xl border border-border bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
                 >
                   {docentes.map((d) => (
                     <option key={d.id} value={d.id}>{d.nombre}</option>
@@ -227,7 +266,7 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
                 type="date"
                 value={form.fecha}
                 onChange={(e) => setForm((c) => ({ ...c, fecha: e.target.value }))}
-                className="h-10 text-xs"
+                className="h-10 text-xs border-border"
                 required
               />
             </div>
@@ -241,7 +280,7 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
                   type="time"
                   value={form.hora_ini}
                   onChange={(e) => setForm((c) => ({ ...c, hora_ini: e.target.value }))}
-                  className="h-10 text-xs"
+                  className="h-10 text-xs border-border"
                   required
                 />
               </div>
@@ -253,7 +292,7 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
                   min="1"
                   value={form.duracion}
                   onChange={(e) => setForm((c) => ({ ...c, duracion: e.target.value }))}
-                  className="h-10 text-xs"
+                  className="h-10 text-xs border-border"
                   required
                 />
               </div>
@@ -277,7 +316,7 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
                     <span className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded border ${
                       selected ? 'border-sci-blue bg-sci-blue text-white' : 'border-border'
                     }`}>
-                      {selected && <Check className="h-3 w-3" />}
+                      {selected && <Check className="h-3.5 w-3.5" />}
                     </span>
                     <span className="font-semibold text-sci-navy">{rule.titulo}</span>
                   </button>

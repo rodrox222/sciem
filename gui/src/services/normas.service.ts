@@ -2,12 +2,14 @@ import { api } from './api'
 import type { PaginatedResponse } from '@/types/api'
 
 export type NormaTipo = 'General' | 'Particular'
+export type NormaEstado = 'Activo' | 'Inactivo'
 
 export interface Norma {
   id: string
   titulo: string
   descripcion: string
   tipo: NormaTipo
+  estado: NormaEstado
   created_at?: string
   updated_at?: string
 }
@@ -16,6 +18,7 @@ export interface NormaPayload {
   titulo: string
   descripcion: string
   tipo: NormaTipo
+  estado?: NormaEstado
 }
 
 interface NormaMutationResponse {
@@ -26,6 +29,7 @@ interface NormaMutationResponse {
 export interface NormaFilters {
   search?: string
   tipo?: NormaTipo | ''
+  estado?: NormaEstado | ''
   page?: number
   all?: boolean
 }
@@ -35,6 +39,7 @@ const buildQuery = (filters: NormaFilters) => {
 
   if (filters.search) params.set('search', filters.search)
   if (filters.tipo) params.set('tipo', filters.tipo)
+  if (filters.estado) params.set('estado', filters.estado)
   if (filters.page) params.set('page', String(filters.page))
   if (filters.all) params.set('all', '1')
 
@@ -55,7 +60,7 @@ export const normasService = {
     return api.post<NormaMutationResponse>('/normas', payload)
   },
 
-  update(id: string, payload: NormaPayload) {
+  update(id: string, payload: Partial<NormaPayload>) {
     return api.put<NormaMutationResponse>(`/normas/${id}`, payload)
   },
 

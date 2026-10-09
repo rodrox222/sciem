@@ -19,6 +19,7 @@ class Norma extends Model
         'titulo',
         'descripcion',
         'tipo',
+        'estado',
     ];
 
     public function examenes(): BelongsToMany

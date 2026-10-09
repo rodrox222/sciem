@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StorePrerrequisitoRequest;
 use App\Http\Requests\ToggleCumplimientoRequest;
+use App\Models\Docente;
 use App\Models\Estudiante;
 use App\Models\Examen;
 use App\Models\PrerrequisitoExamen;
@@ -47,7 +48,17 @@ class PrerrequisitoController extends Controller
     public function toggleCumplimiento(ToggleCumplimientoRequest $request, string $prerrequisitoId, string $estudianteId): JsonResponse
     {
         $prerrequisito = PrerrequisitoExamen::findOrFail($prerrequisitoId);
-        $docenteId = $request->user()?->id;
+        
+        $user = $request->user();
+        $docenteId = null;
+        if ($user) {
+            if ($user instanceof Docente) {
+                $docenteId = $user->id;
+            } elseif (Docente::where('id', $user->id)->exists()) {
+                $docenteId = $user->id;
+            }
+        }
+
         $cumplido = (bool) $request->input('cumplido');
 
         DB::transaction(function () use ($prerrequisito, $estudianteId, $cumplido, $docenteId) {
