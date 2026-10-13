@@ -24,7 +24,7 @@ class UpdateUserRequest extends FormRequest
             'tipo_usuario'     => ['sometimes', 'string', 'in:admin,docente,auxiliar'],
             'ci'               => [
                 'sometimes',
-                'required',
+                'nullable',
                 'string',
                 'max:20',
                 function ($attribute, $value, $fail) use ($userId) {
