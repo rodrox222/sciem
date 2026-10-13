@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Edit3,
   LoaderCircle,
+  Plus,
   QrCode,
   RefreshCw,
   Search,
@@ -46,7 +47,10 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [prerrequisitos, setPrerrequisitos] = useState<Prerrequisito[]>([])
-
+const [prerrequisitoFormOpen, setPrerrequisitoFormOpen] = useState(false)
+const [prerrequisitoTitulo, setPrerrequisitoTitulo] = useState('')
+const [prerrequisitoDescripcion, setPrerrequisitoDescripcion] = useState('')
+const [savingPrerrequisito, setSavingPrerrequisito] = useState(false)
   // Modales
   const [modalOpen, setModalOpen] = useState(false)
   const [associateModalOpen, setAssociateModalOpen] = useState(false)
@@ -112,6 +116,52 @@ const [prerrequisitosStudent, setPrerrequisitosStudent] =
     e.preventDefault()
     setSearchTerm(searchInput.trim())
   }
+
+const handleSavePrerrequisito = async (e: FormEvent) => {
+  e.preventDefault()
+
+  if (!prerrequisitoTitulo.trim()) {
+    setError('El título del prerrequisito es obligatorio.')
+    return
+  }
+
+  if (prerrequisitoTitulo.trim().length > 150) {
+    setError('El título no puede superar los 150 caracteres.')
+    return
+  }
+
+  if (prerrequisitoDescripcion.trim().length > 500) {
+    setError('La descripción no puede superar los 500 caracteres.')
+    return
+  }
+
+  try {
+    setSavingPrerrequisito(true)
+    setError('')
+    setSuccess('')
+
+    const response = await prerrequisitosService.create(exam.id, {
+      titulo: prerrequisitoTitulo.trim(),
+      descripcion: prerrequisitoDescripcion.trim() || null,
+    })
+
+    setSuccess(response.message || 'Prerrequisito creado correctamente.')
+    setPrerrequisitoFormOpen(false)
+    setPrerrequisitoTitulo('')
+    setPrerrequisitoDescripcion('')
+
+    await loadPrerrequisitos()
+    await loadStudents()
+  } catch (err) {
+    setError(
+      err instanceof Error
+        ? err.message
+        : 'No se pudo crear el prerrequisito.',
+    )
+  } finally {
+    setSavingPrerrequisito(false)
+  }
+}
 
   const openInhabilitar = (student: EstudianteInscritoExamen) => {
     setSuccess('')
@@ -234,18 +284,39 @@ const openEditStudent = async (student: EstudianteInscritoExamen) => {
           </Button>
         </div>
       )}
-{prerrequisitos.length > 0 && (
+{(prerrequisitos.length > 0 || canManage) && (
   <Card className="mb-4 border-sci-cyan/20 bg-white shadow-sm">
     <CardContent className="p-5">
-      <div className="mb-4">
-        <h3 className="text-sm font-bold text-sci-navy">
-          Prerrequisitos del examen
-        </h3>
+      
+<div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+  <div>
+    <h3 className="text-sm font-bold text-sci-navy">
+      Prerrequisitos del examen
+    </h3>
 
-        <p className="mt-1 text-xs text-muted-foreground">
-          Condiciones que deben cumplirse para que un estudiante esté habilitado.
-        </p>
-      </div>
+    <p className="mt-1 text-xs text-muted-foreground">
+      Condiciones que deben cumplirse para que un estudiante esté habilitado.
+    </p>
+  </div>
+
+  {canManage && (
+    <Button
+      type="button"
+      className="gap-2 bg-sci-blue text-xs font-semibold text-white hover:opacity-90"
+      onClick={() => {
+        setError('')
+        setSuccess('')
+        setPrerrequisitoTitulo('')
+        setPrerrequisitoDescripcion('')
+        setPrerrequisitoFormOpen(true)
+      }}
+    >
+      <Plus className="h-4 w-4" />
+      Agregar prerrequisito
+    </Button>
+  )}
+</div>
+
 
       <div className="space-y-3">
         {prerrequisitos.map((prerrequisito) => (
@@ -268,6 +339,88 @@ const openEditStudent = async (student: EstudianteInscritoExamen) => {
     </CardContent>
   </Card>
 )}
+
+{prerrequisitoFormOpen && canManage && (
+  <Card className="border-sci-cyan/30 bg-white shadow-sm">
+    <CardContent className="p-5">
+      <form onSubmit={handleSavePrerrequisito} className="space-y-4">
+        <div>
+          <h3 className="text-sm font-bold text-sci-navy">
+            Nuevo prerrequisito
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Define una condición que deben cumplir los estudiantes.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <label htmlFor="prerrequisito-titulo" className="text-sm font-medium">
+            Título *
+          </label>
+          <Input
+            id="prerrequisito-titulo"
+            value={prerrequisitoTitulo}
+            onChange={(e) => setPrerrequisitoTitulo(e.target.value)}
+            placeholder="Ej. Aprobar la materia anterior"
+            maxLength={150}
+            required
+            disabled={savingPrerrequisito}
+          />
+          <p className="text-xs text-muted-foreground">
+            {prerrequisitoTitulo.length}/150 caracteres
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <label htmlFor="prerrequisito-descripcion" className="text-sm font-medium">
+            Descripción
+          </label>
+          <textarea
+            id="prerrequisito-descripcion"
+            value={prerrequisitoDescripcion}
+            onChange={(e) => setPrerrequisitoDescripcion(e.target.value)}
+            placeholder="Describe qué debe cumplir el estudiante."
+            maxLength={500}
+            rows={3}
+            disabled={savingPrerrequisito}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          />
+          <p className="text-xs text-muted-foreground">
+            {prerrequisitoDescripcion.length}/500 caracteres
+          </p>
+        </div>
+
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={savingPrerrequisito}
+            onClick={() => {
+              setPrerrequisitoFormOpen(false)
+              setPrerrequisitoTitulo('')
+              setPrerrequisitoDescripcion('')
+              setError('')
+            }}
+          >
+            Cancelar
+          </Button>
+
+          <Button
+            type="submit"
+            disabled={savingPrerrequisito}
+            className="gap-2 bg-sci-blue text-white hover:opacity-90"
+          >
+            {savingPrerrequisito && (
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+            )}
+            {savingPrerrequisito ? 'Guardando...' : 'Guardar prerrequisito'}
+          </Button>
+        </div>
+      </form>
+    </CardContent>
+  </Card>
+)}
+
       {/* Buscador */}
       <form onSubmit={handleSearch} className="flex gap-2">
         <div className="relative flex-1">

@@ -14,11 +14,26 @@ export interface PrerrequisitoEstudiante {
   cumplido: boolean
 }
 
+export interface PrerrequisitoPayload {
+  titulo: string
+  descripcion: string | null
+}
 export interface ToggleCumplimientoPayload {
   cumplido: boolean
 }
 
 export const prerrequisitosService = {
+  
+  /**
+   * Crea un prerrequisito para un examen.
+   */
+  create(examId: string, payload: PrerrequisitoPayload) {
+    return api.post<{
+      message: string
+      prerrequisito: Prerrequisito
+    }>(`/examenes/${examId}/prerrequisitos`, payload)
+  },
+
   /**
    * Obtiene los prerrequisitos configurados para un examen.
    */
