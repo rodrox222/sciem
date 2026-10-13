@@ -15,6 +15,7 @@ use App\Http\Controllers\HabilitacionExamenController;
 use App\Http\Controllers\PrerrequisitoController;
 use App\Http\Controllers\VerificacionController;
 use App\Http\Controllers\CargaMasivaEstudianteController;
+use App\Http\Controllers\ConfiguracionSistemaController;
 use App\Models\Admin;
 use App\Models\Docente;
 use App\Models\Auxiliar;
@@ -31,9 +32,9 @@ Route::get('examenes/{id}', [ExamenController::class, 'show']);
 Route::get('/seed-render-now', function () {
     Artisan::call('db:seed', ['--force' => true]);
     return response()->json([
-        'output' => Artisan::output(),
+        'output'         => Artisan::output(),
         'total_docentes' => \App\Models\Docente::count(),
-        'docente' => \App\Models\Docente::first(),
+        'docente'        => \App\Models\Docente::first(),
     ]);
 });
 
@@ -79,6 +80,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:admin,administrador')->group(function () {
         Route::apiResource('users', UserController::class);
         Route::get('auditoria', [AuditoriaController::class, 'index']);
+
+        // Parámetro de inactividad de sesión
+        Route::get('configuracion/inactividad', [ConfiguracionSistemaController::class, 'getTiempoInactividad']);
+        Route::put('configuracion/inactividad', [ConfiguracionSistemaController::class, 'updateTiempoInactividad']);
     });
 
     // --- AULAS ---

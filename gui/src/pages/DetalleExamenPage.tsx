@@ -158,25 +158,43 @@ export default function DetalleExamenPage() {
         onValueChange={(val) => setSearchParams({ tab: val })}
         className="space-y-6"
       >
-        <TabsList className="rounded-xl border border-border bg-card p-1">
-          <TabsTrigger value="info" className="cursor-pointer gap-2 text-xs font-medium">
-            <BookOpen className="h-3.5 w-3.5" /> Ficha Técnica
-          </TabsTrigger>
 
-          <TabsTrigger value="estudiantes" className="cursor-pointer gap-2 text-xs font-medium">
-            <Users className="h-3.5 w-3.5" /> Padrón de Estudiantes
-          </TabsTrigger>
+<TabsList className="flex h-auto w-full flex-wrap items-stretch justify-start gap-1 rounded-xl border border-border bg-card p-1 sm:flex-nowrap sm:items-center">
+
+          
+<TabsTrigger
+  value="info"
+  className="min-w-0 flex-1 cursor-pointer justify-center gap-1.5 whitespace-normal px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
+>
+  <BookOpen className="h-3.5 w-3.5" /> Ficha Técnica
+</TabsTrigger>
+
+          <TabsTrigger
+  value="estudiantes"
+  className="min-w-0 flex-1 cursor-pointer justify-center gap-1.5 whitespace-normal px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
+>
+  <Users className="h-3.5 w-3.5" />
+  Padrón de Estudiantes
+</TabsTrigger>
 
           {canManage && (
-            <TabsTrigger value="escaner" className="cursor-pointer gap-2 text-xs font-medium">
-              <QrCode className="h-3.5 w-3.5 text-sci-cyan" /> Escanear Acceso
-            </TabsTrigger>
+            <TabsTrigger
+  value="escaner"
+  className="min-w-0 flex-1 cursor-pointer justify-center gap-1.5 whitespace-normal px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
+>
+  <QrCode className="h-3.5 w-3.5 text-sci-cyan" />
+  Escanear Acceso
+</TabsTrigger>
           )}
 
           {canEdit && (
-            <TabsTrigger value="editar" className="cursor-pointer gap-2 text-xs font-medium">
-              <PencilLine className="h-3.5 w-3.5" /> Modificar Examen
-            </TabsTrigger>
+           <TabsTrigger
+  value="editar"
+  className="min-w-0 flex-1 cursor-pointer justify-center gap-1.5 whitespace-normal px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
+>
+  <PencilLine className="h-3.5 w-3.5" />
+  Modificar Examen
+</TabsTrigger>
           )}
         </TabsList>
 

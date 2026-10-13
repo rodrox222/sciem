@@ -93,8 +93,9 @@ const [bulkRowErrors, setBulkRowErrors] = useState<
       nextErrors.apellido_paterno = 'El apellido paterno es obligatorio.'
     }
     if (!form.codigo_sis.trim()) nextErrors.codigo_sis = 'El código SIS es obligatorio.'
-    if (!form.ci.trim()) nextErrors.ci = 'El carnet de identidad es obligatorio.'
-    else if (!/^\d+[A-Za-z]?$/.test(form.ci.trim())) {
+    if (!form.ci.trim()) {
+      if (!examMode) nextErrors.ci = 'El carnet de identidad es obligatorio.'
+    } else if (!/^\d+[A-Za-z]?$/.test(form.ci.trim())) {
       nextErrors.ci = 'Usa números y, opcionalmente, una sola letra al final.'
     }
     if (!form.email_institucional.trim()) {
@@ -313,7 +314,7 @@ setBulkFile(null)
 
               <div className="space-y-1.5 text-left">
                 <Label htmlFor="std-ci" className="text-xs font-semibold">
-                  Carnet de identidad *
+                  Carnet de identidad {examMode ? '(opcional)' : '*'}
                 </Label>
                 <Input
                   id="std-ci"
@@ -387,9 +388,9 @@ setBulkFile(null)
       </h3>
 
       <p className="mx-auto mt-2 max-w-md text-xs text-muted-foreground">
-        Selecciona un archivo CSV con los datos de los estudiantes
-        que deseas registrar en el examen.
-      </p>
+  Selecciona un archivo CSV o (.xlsx) con los datos de los estudiantes
+  que deseas registrar en el examen.
+</p>
 
       <label
         htmlFor="bulk-student-file"
@@ -402,7 +403,7 @@ setBulkFile(null)
       <input
         id="bulk-student-file"
         type="file"
-        accept=".csv,.txt"
+        accept=".csv,.txt,.xlsx"
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0] ?? null
@@ -424,8 +425,8 @@ setBulkFile(null)
       />
 
       <p className="mt-3 text-[11px] text-muted-foreground">
-        Formato permitido: CSV · Tamaño máximo: 5 MB
-      </p>
+  Formatos permitidos: CSV y Excel (.xlsx) · Tamaño máximo: 5 MB
+</p>
     </div>
 
     {bulkFile && (
