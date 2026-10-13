@@ -119,7 +119,7 @@ class EstudianteController extends Controller
             $estudiante = Estudiante::updateOrCreate(
                 ['codigo_sis' => $data['codigo_sis']],
                 [
-                    'ci'                  => $data['ci'],
+                    'ci'                  => $data['ci'] ?? null,
                     'ci_extension'        => $data['ci_extension'] ?? null,
                     'nombre'              => $data['nombre'],
                     'apellido_paterno'    => $data['apellido_paterno'],
