@@ -15,14 +15,15 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // Vital en Render para que reconozca HTTPS y no rompa CORS
+        // Necesario en Render para que resuelva HTTPS y no rompa CORS
         $middleware->trustProxies(at: '*');
 
+        // Middleware web limpios (sin HandleInertiaRequests)
         $middleware->web(append: [
-            \App\Http\Middleware\HandleInertiaRequests::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
         ]);
 
+        // Alias para middlewares de roles
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
         ]);
