@@ -44,16 +44,13 @@ export interface ExamenPayload {
   hora_fin: string
   id_aula: string
   id_docente: string
+  normas_ids?: string[]
+  normas_particulares?: { titulo: string; descripcion: string }[]
 }
 
 interface ExamenMutationResponse {
   message: string
   examen: Examen
-}
-
-interface MateriaMutationResponse {
-  message: string
-  materia: CatalogItem
 }
 
 export interface Prerrequisito {
@@ -98,6 +95,10 @@ const buildExamQuery = (filters: ExamenFilters) => {
   return query ? `?${query}` : ''
 }
 
+// Variables de deduplicación y caché en memoria
+let cachedDocentes: DocenteItem[] | null = null
+let pendingDocentesPromise: Promise<DocenteItem[]> | null = null
+
 export const examenesService = {
   list(filters: ExamenFilters = {}) {
     return api.get<PaginatedResponse<Examen>>(`/examenes${buildExamQuery(filters)}`)
@@ -115,16 +116,34 @@ export const examenesService = {
     return api.put<ExamenMutationResponse>(`/examenes/${id}`, payload)
   },
 
-  listMaterias() {
-    return api.get<CatalogItem[]>('/materias?all=1')
+  delete(id: string) {
+    return api.delete<{ message: string }>(`/examenes/${id}`)
   },
 
-  createMateria(nombre: string) {
-    return api.post<MateriaMutationResponse>('/materias', { nombre })
+  async listDocentes(): Promise<{ data: DocenteItem[] }> {
+    if (cachedDocentes && cachedDocentes.length > 0) {
+      return { data: cachedDocentes }
+    }
+
+    if (!pendingDocentesPromise) {
+      pendingDocentesPromise = api
+        .get<DocenteItem[]>('/docentes')
+        .then((docentes) => {
+          cachedDocentes = docentes
+          return docentes
+        })
+        .finally(() => {
+          pendingDocentesPromise = null
+        })
+    }
+
+    const data = await pendingDocentesPromise
+    return { data }
   },
 
-  listDocentes() {
-    return api.get<PaginatedResponse<DocenteItem>>('/users?tipo_usuario=docente&activo=true')
+  clearDocentesCache() {
+    cachedDocentes = null
+    pendingDocentesPromise = null
   },
 
   // --- Prerrequisitos de Examen ---
@@ -135,22 +154,22 @@ export const examenesService = {
   createPrerrequisito(examId: string, payload: PrerrequisitoPayload) {
     return api.post<{ message: string; prerrequisito: Prerrequisito }>(
       `/examenes/${examId}/prerrequisitos`,
-      payload
+      payload,
     )
   },
 
   toggleCumplimiento(prerrequisitoId: string, estudianteId: string, cumplido: boolean) {
     return api.patch<{ message: string }>(
       `/prerrequisitos/${prerrequisitoId}/estudiantes/${estudianteId}`,
-      { cumplido }
+      { cumplido },
     )
   },
 
   // --- Forzado manual docente ---
   cambiarHabilitacion(examId: string, estudianteId: string, payload: HabilitacionPayload) {
-    return api.patch<{ message: string; data: any }>(
+    return api.patch<{ message: string; data: unknown }>(
       `/examenes/${examId}/estudiantes/${estudianteId}/habilitacion`,
-      payload
+      payload,
     )
   },
 }

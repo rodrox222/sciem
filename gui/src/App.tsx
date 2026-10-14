@@ -19,7 +19,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import ExamenesPage from './pages/ExamenesPage'
 import EstudiantesPage from './pages/EstudiantesPage'
 import DetalleExamenPage from './pages/DetalleExamenPage'
-
+import MateriasPage from './pages/MateriasPage'
 // Páginas protegidas por Rol
 import UsuariosPage from './pages/UsuariosPage'
 import AulasPage from './pages/AulasPage'
@@ -63,6 +63,7 @@ export default function App() {
               <Route path="/normas" element={<NormasPage />} />
               <Route path="/dashboard/auditoria" element={<AuditoriaPage />} />
               <Route path="/configuracion" element={<ConfiguracionPage />} />
+              <Route path="/materias" element={<MateriasPage />} />
             </Route>
 
             {/* Administrador y Docente */}

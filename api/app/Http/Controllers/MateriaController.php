@@ -20,9 +20,10 @@ class MateriaController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        
-        // Cachear solo cuando piden el catálogo completo (?all=1) sin búsqueda
-        if ($request->boolean('all') && !$search) {
+        $search = $request->query('search');
+
+        // Cachear cuando piden el catálogo completo (?all=1 o ?all=true) sin búsqueda
+        if ($request->boolean('all') && empty($search)) {
             $materias = Cache::remember('catalogo_materias_all', 600, function () {
                 return Materia::orderBy('nombre', 'asc')->get();
             });
@@ -31,11 +32,10 @@ class MateriaController extends Controller
 
         $query = Materia::query();
 
-        if ($search = $request->query('search')) {
+        if ($search) {
             $query->where('nombre', 'ilike', "%{$search}%");
         }
 
-        // Si mandan ?all=true devuelve la lista completa sin paginar
         if ($request->boolean('all')) {
             return response()->json($query->orderBy('nombre', 'asc')->get());
         }
@@ -52,6 +52,8 @@ class MateriaController extends Controller
     {
         $data = $request->validated();
         $materia = Materia::create($data);
+
+        Cache::forget('catalogo_materias_all');
 
         $this->registrarAuditoria($request, 'MATERIA_CREADA', [
             'materia_id' => $materia->id,
@@ -92,6 +94,8 @@ class MateriaController extends Controller
         $data = $request->validated();
         $materia->update($data);
 
+        Cache::forget('catalogo_materias_all');
+
         $this->registrarAuditoria($request, 'MATERIA_ACTUALIZADA', [
             'materia_id'          => $materia->id,
             'campos_actualizados' => array_keys($data),
@@ -127,13 +131,15 @@ class MateriaController extends Controller
 
         $materia->delete();
 
+        Cache::forget('catalogo_materias_all');
+
         $this->registrarAuditoria($request, 'MATERIA_ELIMINADA', $detalles);
 
         return response()->json(['message' => 'Materia eliminada exitosamente.']);
     }
 
     /**
-     * Registra el evento en logs_auditoria con el nuevo esquema centralizado.
+     * Registra el evento en logs_auditoria con el esquema centralizado.
      */
     private function registrarAuditoria(Request $request, string $accion, array $detalles = []): void
     {
