@@ -15,6 +15,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Cache;
 
 class NormaController extends Controller
 {
@@ -23,23 +24,30 @@ class NormaController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Norma::query();
+        $tipo = $request->query('tipo');
+        $search = $request->query('search');
 
-        if ($tipo = $request->query('tipo')) {
-            $query->where('tipo', ucfirst(strtolower($tipo)));
+        // Cachear catálogo de normas generales
+        if ($request->boolean('all') && $tipo === 'General' && !$search) {
+            $normas = Cache::remember('catalogo_normas_generales', 600, function () {
+                return Norma::where('tipo', 'General')->orderBy('titulo', 'asc')->get();
+            });
+            return response()->json($normas);
         }
 
+        $query = Norma::query();
+        if ($tipo) {
+            $query->where('tipo', ucfirst(strtolower($tipo)));
+        }
         if ($estado = $request->query('estado')) {
             $query->where('estado', ucfirst(strtolower($estado)));
         }
-
-        if ($search = $request->query('search')) {
+        if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('titulo', 'ilike', "%{$search}%")
                   ->orWhere('descripcion', 'ilike', "%{$search}%");
             });
         }
-
         if ($request->boolean('all')) {
             return response()->json($query->orderBy('titulo', 'asc')->get());
         }

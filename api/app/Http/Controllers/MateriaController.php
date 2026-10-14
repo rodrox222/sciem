@@ -11,6 +11,7 @@ use App\Models\LogAuditoria;
 use App\Models\Materia;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class MateriaController extends Controller
 {
@@ -19,6 +20,15 @@ class MateriaController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        
+        // Cachear solo cuando piden el catálogo completo (?all=1) sin búsqueda
+        if ($request->boolean('all') && !$search) {
+            $materias = Cache::remember('catalogo_materias_all', 600, function () {
+                return Materia::orderBy('nombre', 'asc')->get();
+            });
+            return response()->json($materias);
+        }
+
         $query = Materia::query();
 
         if ($search = $request->query('search')) {
@@ -31,9 +41,8 @@ class MateriaController extends Controller
         }
 
         $perPage = (int) $request->query('per_page', 10);
-        $materias = $query->orderBy('nombre', 'asc')->paginate($perPage);
 
-        return response()->json($materias);
+        return response()->json($query->orderBy('nombre', 'asc')->paginate($perPage));
     }
 
     /**

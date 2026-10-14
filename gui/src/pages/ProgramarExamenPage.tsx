@@ -108,16 +108,25 @@ export default function ProgramarExamenPage() {
     setError('')
 
     try {
+      // 1. Obtener usuario o docente si no es admin
       const currentUser = isAdmin ? null : await api.get<DocenteItem>('/me').catch(() => null)
-      const [subjects, rooms, rules, teachers, exam] = await Promise.all([
+
+      // 2. Cargar catálogos usando Promise.allSettled para que si uno falla temporalmente, no rompa la pantalla entera
+      const [subjectsRes, roomsRes, rulesRes, teachersRes, examRes] = await Promise.allSettled([
         examenesService.listMaterias(),
         aulasService.list({ estado: 'Disponible', perPage: 100 }),
         normasService.listAll({ tipo: 'General' }),
         isAdmin
-          ? examenesService.listDocentes().then((response) => response.data)
+          ? examenesService.listDocentes().then((res) => res.data)
           : Promise.resolve(currentUser?.id ? [currentUser] : []),
         editId ? examenesService.get(editId) : Promise.resolve(null),
       ])
+
+      const subjects = subjectsRes.status === 'fulfilled' ? subjectsRes.value : []
+      const rooms = roomsRes.status === 'fulfilled' ? roomsRes.value : { data: [] }
+      const rules = rulesRes.status === 'fulfilled' ? rulesRes.value : []
+      const teachers = teachersRes.status === 'fulfilled' ? teachersRes.value : []
+      const exam = examRes.status === 'fulfilled' ? examRes.value : null
 
       setMaterias(subjects)
       setAulas(
@@ -157,6 +166,11 @@ export default function ProgramarExamenPage() {
         setSelectedNorms((exam.normas ?? []).map((norma) => norma.id))
       } else if (!isAdmin && currentUser?.id) {
         setForm((current) => ({ ...current, id_docente: currentUser.id }))
+      }
+
+      // Si alguna de las peticiones críticas falló por 503, se notifica pero permite reintentar sin bloquear
+      if (subjectsRes.status === 'rejected' || roomsRes.status === 'rejected') {
+        setError('Algunos catálogos tardaron en responder. Si faltan opciones, recarga la página.')
       }
     } catch (loadError) {
       setError(
