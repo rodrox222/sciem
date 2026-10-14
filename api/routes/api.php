@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Artisan;
 // --- RUTAS PÚBLICAS ---
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLink']);
-Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword']);
+Route::resetPasswordRoute = Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword']);
 
 Route::get('examenes', [ExamenController::class, 'index']);
 Route::get('examenes/{id}', [ExamenController::class, 'show']);
@@ -67,7 +67,7 @@ Route::middleware('auth:sanctum')->group(function () {
         ]);
     });
 
-    // Endpoint de roles para selectores en frontend
+    // Endpoint de roles protegido para administración
     Route::get('roles', function () {
         return response()->json([
             ['id' => 'admin', 'nombre' => 'Administrador'],
@@ -146,22 +146,15 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // --- HU 9: PRERREQUISITOS Y HABILITACIÓN ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
-        // Listar estudiantes inscritos al examen con estado de habilitación y auditoría
         Route::get('examenes/{examen}/estudiantes', [HabilitacionExamenController::class, 'index']);
-        // Listar prerrequisitos fijados para el examen
         Route::get('examenes/{examen}/prerrequisitos', [PrerrequisitoController::class, 'index']);
-        // motivo rapido de innabilitacion
         Route::get('examenes/{examen}/estudiantes/{estudiante}/motivo', [HabilitacionExamenController::class, 'motivoInhabilitacion']);
     });
 
     Route::middleware('role:admin,administrador,docente')->group(function () {
-        // Crear un prerrequisito para el examen (inhabilita a quienes no tengan ajuste manual)
         Route::post('examenes/{examen}/prerrequisitos', [PrerrequisitoController::class, 'store']);
-        // Marcar o desmarcar si un estudiante cumplió el prerrequisito
         Route::patch('prerrequisitos/{prerrequisito}/estudiantes/{estudiante}', [PrerrequisitoController::class, 'toggleCumplimiento']);
-        // Forzado manual de habilitación/inhabilitación por parte del docente
         Route::patch('examenes/{examen}/estudiantes/{estudiante}/habilitacion', [HabilitacionExamenController::class, 'update']);
-        // prerrequisitos de un estudiante en un examen
         Route::get('examenes/{examen}/estudiantes/{estudiante}/prerrequisitos', [PrerrequisitoController::class, 'prerrequisitosPorEstudiante']);
     });
 
