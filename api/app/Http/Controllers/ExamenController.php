@@ -31,8 +31,17 @@ class ExamenController extends Controller
             $query->where('estado', $estado);
         }
 
+        // Filtro por fecha única
         if ($fecha = $request->query('fecha')) {
             $query->where('fecha', $fecha);
+        }
+
+        // NUEVO: Filtro por rango de fechas (Ideal para calendarios y semanas completas)
+        if ($fechaDesde = $request->query('fecha_desde')) {
+            $query->where('fecha', '>=', $fechaDesde);
+        }
+        if ($fechaHasta = $request->query('fecha_hasta')) {
+            $query->where('fecha', '<=', $fechaHasta);
         }
 
         $perPage = (int) $request->query('per_page', 10);
@@ -112,9 +121,6 @@ class ExamenController extends Controller
         return response()->json(['message' => 'Examen eliminado exitosamente.']);
     }
 
-    /**
-     * Registra el evento en logs_auditoria con el nuevo esquema centralizado.
-     */
     private function registrarAuditoria(Request $request, string $accion, array $detalles = []): void
     {
         $user = $request->user();

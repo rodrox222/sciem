@@ -24,7 +24,7 @@ export const HomePage = () => {
   const navigate = useNavigate()
   const [selectedDate, setSelectedDate] = useState(() => new Date())
   const [weekExams, setWeekExams] = useState<Record<string, Examen[]>>({})
-  const [failedDates, setFailedDates] = useState<string[]>([])
+  const [hasError, setHasError] = useState(false)
   const [loadedWeek, setLoadedWeek] = useState<string | null>(null)
   
   const weekDays = weekDaysFor(selectedDate)
@@ -50,24 +50,39 @@ export const HomePage = () => {
     let active = true
     const monday = new Date(weekKey + 'T12:00:00')
     const days = weekDaysFor(monday)
-    Promise.allSettled(days.map((day) =>
-      examenesService.list({ fecha: localDate(day), perPage: 100 })
-    )).then((results) => {
-      if (!active) return
-      const exams: Record<string, Examen[]> = {}
-      const failed: string[] = []
-      results.forEach((result, index) => {
-        const day = localDate(days[index])
-        if (result.status === 'fulfilled') {
-          exams[day] = result.value.data.filter((exam) => exam.estado !== 'Terminado')
-        } else {
-          failed.push(day)
-        }
+    const fechaDesde = localDate(days[0])
+    const fechaHasta = localDate(days[6])
+
+    // UNA SOLA PETICIÓN para toda la semana
+    examenesService.list({ fecha_desde: fechaDesde, fecha_hasta: fechaHasta, perPage: 150 } as any)
+      .then((res) => {
+        if (!active) return
+        const exams: Record<string, Examen[]> = {}
+        // Inicializar cada día de la semana vacío
+        days.forEach((d) => {
+          exams[localDate(d)] = []
+        })
+
+        // Clasificar los exámenes por fecha
+        res.data.forEach((exam) => {
+          if (exam.estado !== 'Terminado') {
+            const fechaExamen = exam.fecha ? exam.fecha.slice(0, 10) : ''
+            if (exams[fechaExamen]) {
+              exams[fechaExamen].push(exam)
+            }
+          }
+        })
+
+        setWeekExams(exams)
+        setHasError(false)
+        setLoadedWeek(weekKey)
       })
-      setWeekExams(exams)
-      setFailedDates(failed)
-      setLoadedWeek(weekKey)
-    })
+      .catch(() => {
+        if (!active) return
+        setHasError(true)
+        setLoadedWeek(weekKey)
+      })
+
     return () => { active = false }
   }, [weekKey])
 
@@ -183,16 +198,16 @@ export const HomePage = () => {
             <p className="col-span-full rounded-xl bg-card border border-border p-8 text-center text-muted-foreground">
               Consultando exámenes…
             </p>
-          ) : failedDates.includes(selectedKey) ? (
+          ) : hasError ? (
             <p className="col-span-full rounded-xl bg-card border border-border p-8 text-center text-muted-foreground">
-              No se pudieron consultar los exámenes de este día. Inténtalo de nuevo más tarde.
+              No se pudieron consultar los exámenes de esta semana. Inténtalo de nuevo más tarde.
             </p>
           ) : examsForDay.length > 0 ? (
             examsForDay.map((exam, index) => (
               <ExamCard 
                 key={exam.id} 
                 materia={exam.nombre} 
-                aula={exam.aula?.nombre ?? 'Aula por confirmar'}
+                aula={exam.aula?.nombre ?? 'Aula por confirmar'} 
                 horario={hours(exam)} 
                 estado={exam.estado}
                 tipoBorde={index % 2 === 0 ? 'cyan' : 'amber'}
