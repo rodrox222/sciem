@@ -11,13 +11,14 @@ class StoreUserRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Solo un Administrador autenticado puede registrar nuevos usuarios
         return $this->user() instanceof Admin;
     }
 
     public function rules(): array
     {
         $tipo = $this->input('tipo_usuario');
+        $ciLimpio = trim((string) $this->input('ci'));
+        $extensionLimpia = trim((string) $this->input('ci_extension'));
 
         return [
             'tipo_usuario'     => ['required', 'string', 'in:admin,docente,auxiliar'],
@@ -25,9 +26,7 @@ class StoreUserRequest extends FormRequest
                 'required',
                 'string',
                 'max:20',
-                function ($attribute, $value, $fail) {
-                    $ciLimpio = trim((string) $value);
-
+                function ($attribute, $value, $fail) use ($ciLimpio, $extensionLimpia) {
                     $tablas = [
                         'admin'    => Admin::class,
                         'docente'  => Docente::class,
@@ -35,36 +34,25 @@ class StoreUserRequest extends FormRequest
                     ];
 
                     foreach ($tablas as $modelo) {
-                        if ($modelo::where('ci', $ciLimpio)->exists()) {
-                            $fail('El CI ya se encuentra registrado en el sistema.');
+                        $query = $modelo::where('ci', $ciLimpio);
+
+                        // La unicidad depende de la tupla (ci, ci_extension)
+                        if ($extensionLimpia !== '') {
+                            $query->where('ci_extension', $extensionLimpia);
+                        } else {
+                            $query->where(function ($q) {
+                                $q->whereNull('ci_extension')->orWhere('ci_extension', '');
+                            });
+                        }
+
+                        if ($query->exists()) {
+                            $fail('El CI con la extensión indicada ya se encuentra registrado en el sistema.');
                             return;
                         }
                     }
                 },
             ],
-            'ci_extension'     => [
-                'nullable',
-                'string',
-                'max:10',
-                function ($attribute, $value, $fail) {
-                    $extensionLimpia = trim((string) $value);
-                    if (empty($extensionLimpia)) {
-                        return;
-                    }
-
-                    $tablasConExtension = [
-                        'docente'  => Docente::class,
-                        'auxiliar' => Auxiliar::class,
-                    ];
-
-                    foreach ($tablasConExtension as $modelo) {
-                        if ($modelo::where('ci_extension', $extensionLimpia)->exists()) {
-                            $fail('La extensión de CI ya se encuentra registrada en el sistema.');
-                            return;
-                        }
-                    }
-                },
-            ],
+            'ci_extension'     => ['nullable', 'string', 'max:10'],
             'nombre'           => ['required', 'string', 'max:100'],
             'apellido_paterno' => ['required', 'string', 'max:100'],
             'apellido_materno' => ['nullable', 'string', 'max:100'],

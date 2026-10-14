@@ -72,11 +72,8 @@ export function UsuarioFormModal({
   onOpenChange,
   onSubmit,
 }: UsuarioFormModalProps) {
-  const [formulario, setFormulario] =
-    useState<FormularioUsuario>(formularioInicial)
-
-  const [errores, setErrores] =
-    useState<Record<string, string>>({})
+  const [formulario, setFormulario] = useState<FormularioUsuario>(formularioInicial)
+  const [errores, setErrores] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (!open) return
@@ -129,8 +126,7 @@ export function UsuarioFormModal({
     }
 
     if (!formulario.apellido_paterno.trim()) {
-      nuevosErrores.apellido_paterno =
-        'El apellido paterno es obligatorio.'
+      nuevosErrores.apellido_paterno = 'El apellido paterno es obligatorio.'
     }
 
     if (!formulario.ci.trim()) {
@@ -140,27 +136,19 @@ export function UsuarioFormModal({
     if (formulario.tipo_usuario !== 'admin') {
       if (!formulario.email.trim()) {
         nuevosErrores.email = 'El correo es obligatorio.'
-      } else if (
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formulario.email)
-      ) {
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formulario.email)) {
         nuevosErrores.email = 'Ingrese un correo válido.'
       }
     }
 
     if (!modoEdicion) {
       if (!formulario.password) {
-        nuevosErrores.password =
-          'La contraseña es obligatoria.'
+        nuevosErrores.password = 'La contraseña es obligatoria.'
       } else if (formulario.password.length < 8) {
-        nuevosErrores.password =
-          'La contraseña debe tener al menos 8 caracteres.'
+        nuevosErrores.password = 'La contraseña debe tener al menos 8 caracteres.'
       }
-    } else if (
-      formulario.password &&
-      formulario.password.length < 8
-    ) {
-      nuevosErrores.password =
-        'La contraseña debe tener al menos 8 caracteres.'
+    } else if (formulario.password && formulario.password.length < 8) {
+      nuevosErrores.password = 'La contraseña debe tener al menos 8 caracteres.'
     }
 
     if (!formulario.tipo_usuario) {
@@ -168,13 +156,10 @@ export function UsuarioFormModal({
     }
 
     setErrores(nuevosErrores)
-
     return Object.keys(nuevosErrores).length === 0
   }
 
-  const manejarSubmit = async (
-    e: FormEvent<HTMLFormElement>,
-  ) => {
+  const manejarSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
     if (!validarFormulario()) return
@@ -182,11 +167,9 @@ export function UsuarioFormModal({
     const payload: UsuarioPayload = {
       nombre: formulario.nombre.trim(),
       apellido_paterno: formulario.apellido_paterno.trim(),
-      apellido_materno:
-        formulario.apellido_materno.trim() || null,
+      apellido_materno: formulario.apellido_materno.trim() || null,
       ci: formulario.ci.trim(),
-      ci_extension:
-        formulario.ci_extension.trim() || null,
+      ci_extension: formulario.ci_extension.trim() || null,
       tipo_usuario: formulario.tipo_usuario,
       ...(formulario.tipo_usuario !== 'admin'
         ? { email: formulario.email.trim() }
@@ -198,10 +181,10 @@ export function UsuarioFormModal({
 
     try {
       await onSubmit(payload)
-    } catch (error) {
+    } catch (errorSubmit) {
       const mensaje =
-        error instanceof Error
-          ? error.message
+        errorSubmit instanceof Error
+          ? errorSubmit.message
           : 'No se pudo guardar el usuario.'
 
       setErrores((anterior) => ({
@@ -213,7 +196,6 @@ export function UsuarioFormModal({
 
   const manejarCierre = (abierto: boolean) => {
     if (!abierto && guardando) return
-
     onOpenChange(abierto)
   }
 
@@ -226,7 +208,6 @@ export function UsuarioFormModal({
               <DialogTitle className="text-center text-sci-navy">
                 Operación completada
               </DialogTitle>
-
               <DialogDescription className="text-center">
                 {resultado}
               </DialogDescription>
@@ -252,24 +233,18 @@ export function UsuarioFormModal({
               <div className="flex items-center justify-between pr-8">
                 <div>
                   <DialogTitle className="text-xl font-bold text-sci-navy">
-                    {modoEdicion
-                      ? 'Editar usuario'
-                      : 'Nuevo usuario'}
+                    {modoEdicion ? 'Editar usuario' : 'Nuevo usuario'}
                   </DialogTitle>
-
                   <DialogDescription className="mt-0.5 text-xs">
                     {modoEdicion
-                      ? 'Modifica los datos y el rol del usuario.'
+                      ? 'Modifica los datos personales y de acceso del usuario.'
                       : 'Registra una nueva cuenta institucional en el sistema SCI.'}
                   </DialogDescription>
                 </div>
               </div>
             </DialogHeader>
 
-            <form
-              onSubmit={manejarSubmit}
-              className="space-y-4"
-            >
+            <form onSubmit={manejarSubmit} className="space-y-4">
               {error && (
                 <div className="rounded-xl border border-sci-red/20 bg-sci-red/10 px-4 py-3 text-xs font-semibold text-sci-red">
                   {error}
@@ -287,28 +262,15 @@ export function UsuarioFormModal({
                   <Label className="mb-1.5 block text-xs font-semibold">
                     Nombre *
                   </Label>
-
                   <Input
                     type="text"
                     value={formulario.nombre}
-                    onChange={(e) =>
-                      actualizarCampo(
-                        'nombre',
-                        e.target.value,
-                      )
-                    }
+                    onChange={(e) => actualizarCampo('nombre', e.target.value)}
                     placeholder="Ej. Juan"
-                    className={
-                      errores.nombre
-                        ? 'border-sci-red'
-                        : ''
-                    }
+                    className={errores.nombre ? 'border-sci-red' : ''}
                   />
-
                   {errores.nombre && (
-                    <p className="mt-1 text-xs text-sci-red">
-                      {errores.nombre}
-                    </p>
+                    <p className="mt-1 text-xs text-sci-red">{errores.nombre}</p>
                   )}
                 </div>
 
@@ -316,28 +278,15 @@ export function UsuarioFormModal({
                   <Label className="mb-1.5 block text-xs font-semibold">
                     Apellido paterno *
                   </Label>
-
                   <Input
                     type="text"
                     value={formulario.apellido_paterno}
-                    onChange={(e) =>
-                      actualizarCampo(
-                        'apellido_paterno',
-                        e.target.value,
-                      )
-                    }
+                    onChange={(e) => actualizarCampo('apellido_paterno', e.target.value)}
                     placeholder="Ej. Pérez"
-                    className={
-                      errores.apellido_paterno
-                        ? 'border-sci-red'
-                        : ''
-                    }
+                    className={errores.apellido_paterno ? 'border-sci-red' : ''}
                   />
-
                   {errores.apellido_paterno && (
-                    <p className="mt-1 text-xs text-sci-red">
-                      {errores.apellido_paterno}
-                    </p>
+                    <p className="mt-1 text-xs text-sci-red">{errores.apellido_paterno}</p>
                   )}
                 </div>
               </div>
@@ -346,16 +295,10 @@ export function UsuarioFormModal({
                 <Label className="mb-1.5 block text-xs font-semibold">
                   Apellido materno
                 </Label>
-
                 <Input
                   type="text"
                   value={formulario.apellido_materno}
-                  onChange={(e) =>
-                    actualizarCampo(
-                      'apellido_materno',
-                      e.target.value,
-                    )
-                  }
+                  onChange={(e) => actualizarCampo('apellido_materno', e.target.value)}
                   placeholder="Ej. García"
                 />
               </div>
@@ -365,28 +308,15 @@ export function UsuarioFormModal({
                   <Label className="mb-1.5 block text-xs font-semibold">
                     CI *
                   </Label>
-
                   <Input
                     type="text"
                     value={formulario.ci}
-                    onChange={(e) =>
-                      actualizarCampo(
-                        'ci',
-                        e.target.value,
-                      )
-                    }
+                    onChange={(e) => actualizarCampo('ci', e.target.value)}
                     placeholder="Ej. 1234567"
-                    className={
-                      errores.ci
-                        ? 'border-sci-red'
-                        : ''
-                    }
+                    className={errores.ci ? 'border-sci-red' : ''}
                   />
-
                   {errores.ci && (
-                    <p className="mt-1 text-xs text-sci-red">
-                      {errores.ci}
-                    </p>
+                    <p className="mt-1 text-xs text-sci-red">{errores.ci}</p>
                   )}
                 </div>
 
@@ -394,17 +324,11 @@ export function UsuarioFormModal({
                   <Label className="mb-1.5 block text-xs font-semibold">
                     Extensión
                   </Label>
-
                   <Input
                     type="text"
                     value={formulario.ci_extension}
-                    onChange={(e) =>
-                      actualizarCampo(
-                        'ci_extension',
-                        e.target.value,
-                      )
-                    }
-                    placeholder="Ej. CB"
+                    onChange={(e) => actualizarCampo('ci_extension', e.target.value)}
+                    placeholder="Ej. 1A"
                   />
                 </div>
               </div>
@@ -414,28 +338,15 @@ export function UsuarioFormModal({
                   <Label className="mb-1.5 block text-xs font-semibold">
                     Correo institucional *
                   </Label>
-
                   <Input
                     type="email"
                     value={formulario.email}
-                    onChange={(e) =>
-                      actualizarCampo(
-                        'email',
-                        e.target.value,
-                      )
-                    }
+                    onChange={(e) => actualizarCampo('email', e.target.value)}
                     placeholder="correo@fcyt.umss.edu.bo"
-                    className={
-                      errores.email
-                        ? 'border-sci-red'
-                        : ''
-                    }
+                    className={errores.email ? 'border-sci-red' : ''}
                   />
-
                   {errores.email && (
-                    <p className="mt-1 text-xs text-sci-red">
-                      {errores.email}
-                    </p>
+                    <p className="mt-1 text-xs text-sci-red">{errores.email}</p>
                   )}
                 </div>
               )}
@@ -444,56 +355,36 @@ export function UsuarioFormModal({
                 <Label className="mb-1.5 block text-xs font-semibold">
                   Contraseña {modoEdicion ? '(opcional)' : '*'}
                 </Label>
-
                 <Input
                   type="password"
                   value={formulario.password}
-                  onChange={(e) =>
-                    actualizarCampo(
-                      'password',
-                      e.target.value,
-                    )
-                  }
+                  onChange={(e) => actualizarCampo('password', e.target.value)}
                   placeholder={
                     modoEdicion
                       ? 'Dejar vacío para conservar actual'
                       : 'Mínimo 8 caracteres'
                   }
-                  className={
-                    errores.password
-                      ? 'border-sci-red'
-                      : ''
-                  }
+                  className={errores.password ? 'border-sci-red' : ''}
                 />
-
                 {errores.password && (
-                  <p className="mt-1 text-xs text-sci-red">
-                    {errores.password}
-                  </p>
+                  <p className="mt-1 text-xs text-sci-red">{errores.password}</p>
                 )}
               </div>
 
+              {/* Selector de Rol: bloqueado en modo edición */}
               <div>
                 <Label className="mb-1.5 block text-xs font-semibold">
-                  Rol *
+                  Rol {modoEdicion ? '(no modificable)' : '*'}
                 </Label>
-
                 <Select
                   value={formulario.tipo_usuario}
-                  onValueChange={(valor) =>
-                    actualizarCampo(
-                      'tipo_usuario',
-                      valor,
-                    )
-                  }
-                  disabled={cargandoRoles}
+                  onValueChange={(valor) => actualizarCampo('tipo_usuario', valor)}
+                  disabled={cargandoRoles || modoEdicion}
                 >
                   <SelectTrigger
-                    className={
-                      errores.tipo_usuario
-                        ? 'border-sci-red'
-                        : ''
-                    }
+                    className={`bg-background ${
+                      modoEdicion ? 'cursor-not-allowed bg-muted/60 opacity-80' : ''
+                    } ${errores.tipo_usuario ? 'border-sci-red' : ''}`}
                   >
                     <SelectValue
                       placeholder={
@@ -503,23 +394,16 @@ export function UsuarioFormModal({
                       }
                     />
                   </SelectTrigger>
-
                   <SelectContent>
                     {roles.map((item) => (
-                      <SelectItem
-                        key={item.codigo}
-                        value={item.codigo}
-                      >
+                      <SelectItem key={item.codigo} value={item.codigo}>
                         {item.nombre}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-
                 {errores.tipo_usuario && (
-                  <p className="mt-1 text-xs text-sci-red">
-                    {errores.tipo_usuario}
-                  </p>
+                  <p className="mt-1 text-xs text-sci-red">{errores.tipo_usuario}</p>
                 )}
               </div>
 
@@ -534,7 +418,6 @@ export function UsuarioFormModal({
                   <X className="mr-2 h-4 w-4" />
                   Cancelar
                 </Button>
-
                 <Button
                   type="submit"
                   disabled={guardando}
