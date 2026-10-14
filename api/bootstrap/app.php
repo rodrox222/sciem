@@ -26,6 +26,11 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (QueryException|\PDOException $e, Request $request) {
+            // Si está en local o con debug activado, mostrar el error real para no quedar a ciegas
+            if (config('app.debug')) {
+                return null;
+            }
+
             if ($request->is('api/*') || $request->expectsJson()) {
                 $origin = $request->header('Origin', 'https://sciem-five.vercel.app');
                 return response()->json([

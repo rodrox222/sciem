@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Cache;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ForgotPasswordController;
 use App\Http\Controllers\UserController;
@@ -67,13 +68,26 @@ Route::middleware('auth:sanctum')->group(function () {
         ]);
     });
 
-    // Endpoint de roles protegido para administración
+    // Endpoint de roles estático para selectores
     Route::get('roles', function () {
         return response()->json([
             ['id' => 'admin', 'nombre' => 'Administrador'],
             ['id' => 'docente', 'nombre' => 'Docente'],
             ['id' => 'auxiliar', 'nombre' => 'Auxiliar'],
         ]);
+    });
+
+    // Catálogo directo y compatible con PostgreSQL nativo
+    Route::middleware('role:admin,administrador,docente')->get('docentes', function () {
+        $docentes = \Illuminate\Support\Facades\Cache::remember('catalogo_docentes_activos', 600, function () {
+            return \Illuminate\Support\Facades\DB::table('docente')
+                ->whereRaw('activo is true')
+                ->orderBy('nombre', 'asc')
+                ->select(['id', 'nombre', 'apellido_paterno', 'apellido_materno'])
+                ->get();
+        });
+
+        return response()->json($docentes);
     });
 
     // --- ADMINISTRACIÓN ---
@@ -84,8 +98,8 @@ Route::middleware('auth:sanctum')->group(function () {
                            + \App\Models\Auxiliar::count();
 
             $totalAulasDisponibles = \App\Models\Aula::where('estado', 'Disponible')->count();
-            $totalExamenesActivos = \App\Models\Examen::where('estado', 'Programado')->count();
-            $totalEstudiantes = \App\Models\Estudiante::count();
+            $totalExamenesActivos  = \App\Models\Examen::where('estado', 'Programado')->count();
+            $totalEstudiantes      = \App\Models\Estudiante::count();
 
             return response()->json([
                 'users'    => $totalUsuarios,
@@ -95,7 +109,6 @@ Route::middleware('auth:sanctum')->group(function () {
             ]);
         });
 
-    
         Route::apiResource('users', UserController::class);
         Route::get('auditoria', [AuditoriaController::class, 'index']);
 

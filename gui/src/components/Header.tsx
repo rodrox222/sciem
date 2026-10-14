@@ -19,6 +19,7 @@ const NAV_ITEMS_BY_ROLE: Record<string, NavItem[]> = {
     { name: 'Usuarios', href: '/usuarios' },
     { name: 'Ambientes', href: '/aulas' },
     { name: 'Normativas', href: '/normas' },
+    { name: 'Materias', href: '/materias' },
     { name: 'Exámenes', href: '/examenes' },
     { name: 'Estudiantes', href: '/estudiantes' },
     { name: 'Auditoría', href: '/dashboard/auditoria' },

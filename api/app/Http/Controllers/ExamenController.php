@@ -9,8 +9,10 @@ use App\Models\Auxiliar;
 use App\Models\Docente;
 use App\Models\Examen;
 use App\Models\LogAuditoria;
+use App\Models\Norma;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ExamenController extends Controller
 {
@@ -36,7 +38,7 @@ class ExamenController extends Controller
             $query->where('fecha', $fecha);
         }
 
-        // NUEVO: Filtro por rango de fechas (Ideal para calendarios y semanas completas)
+        // Filtro por rango de fechas
         if ($fechaDesde = $request->query('fecha_desde')) {
             $query->where('fecha', '>=', $fechaDesde);
         }
@@ -53,7 +55,32 @@ class ExamenController extends Controller
     public function store(StoreExamenRequest $request): JsonResponse
     {
         $data = $request->validated();
-        $examen = Examen::create($data);
+
+        $examen = DB::transaction(function () use ($data, $request) {
+            $examen = Examen::create($data);
+
+            // Las normas son opcionales
+            if ($request->has('normas_ids') && is_array($request->input('normas_ids'))) {
+                $examen->normas()->sync($request->input('normas_ids'));
+            }
+
+            // Normas particulares opcionales
+            if ($request->has('normas_particulares') && is_array($request->input('normas_particulares'))) {
+                foreach ($request->input('normas_particulares') as $part) {
+                    if (!empty($part['titulo']) && !empty($part['descripcion'])) {
+                        $nuevaNorma = Norma::create([
+                            'titulo'      => trim($part['titulo']),
+                            'descripcion' => trim($part['descripcion']),
+                            'tipo'        => 'Particular',
+                            'estado'      => 'Activo',
+                        ]);
+                        $examen->normas()->attach($nuevaNorma->id);
+                    }
+                }
+            }
+
+            return $examen;
+        });
 
         $this->registrarAuditoria($request, 'EXAMEN_CREADO', [
             'examen_id'  => $examen->id,
@@ -88,7 +115,28 @@ class ExamenController extends Controller
         }
 
         $data = $request->validated();
-        $examen->update($data);
+
+        DB::transaction(function () use ($examen, $data, $request) {
+            $examen->update($data);
+
+            if ($request->has('normas_ids') && is_array($request->input('normas_ids'))) {
+                $examen->normas()->sync($request->input('normas_ids'));
+            }
+
+            if ($request->has('normas_particulares') && is_array($request->input('normas_particulares'))) {
+                foreach ($request->input('normas_particulares') as $part) {
+                    if (!empty($part['titulo']) && !empty($part['descripcion'])) {
+                        $nuevaNorma = Norma::create([
+                            'titulo'      => trim($part['titulo']),
+                            'descripcion' => trim($part['descripcion']),
+                            'tipo'        => 'Particular',
+                            'estado'      => 'Activo',
+                        ]);
+                        $examen->normas()->attach($nuevaNorma->id);
+                    }
+                }
+            }
+        });
 
         $this->registrarAuditoria($request, 'EXAMEN_ACTUALIZADO', [
             'examen_id'           => $examen->id,

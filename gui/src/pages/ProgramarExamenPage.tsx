@@ -1,51 +1,21 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import {
-  AlertCircle,
-  ArrowLeft,
-  BookOpenCheck,
-  CalendarDays,
-  Check,
-  Clock3,
-  LoaderCircle,
-  MapPin,
-  Save,
-  UserRound,
-} from 'lucide-react'
+import { AlertCircle, ArrowLeft, LoaderCircle, Save } from 'lucide-react'
 
-import { CrearMateriaModal } from '../components/examenes/CrearMateriaModal'
+import { FormDatosEvaluacion } from '@/components/examenes/FormDatosEvaluacion'
+import { FormHorarioAmbiente } from '@/components/examenes/FormHorarioAmbiente'
+import { FormNormasExamen } from '@/components/examenes/FormNormasExamen'
+
 import { aulasService, type Aula } from '../services/aulas.service'
 import { api } from '../services/api'
 import {
   examenesService,
-  type CatalogItem,
   type DocenteItem,
   type ExamenPayload,
 } from '../services/examenes.service'
+import { materiasService, type Materia } from '../services/materias.service'
 import { normasService, type Norma } from '../services/normas.service'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-
-interface FormState {
-  nombre: string
-  id_materia: string
-  fecha: string
-  hora_ini: string
-  duracion: string
-  id_aula: string
-  id_docente: string
-}
-
-const emptyForm: FormState = {
-  nombre: '',
-  id_materia: '',
-  fecha: '',
-  hora_ini: '',
-  duracion: '90',
-  id_aula: '',
-  id_docente: '',
-}
 
 const todayLocal = () => {
   const now = new Date()
@@ -53,10 +23,10 @@ const todayLocal = () => {
   return new Date(now.getTime() - offset).toISOString().slice(0, 10)
 }
 
-const normalizeDate = (date: string) => (date ? date.slice(0, 10) : '')
-const normalizeTime = (time: string) => (time ? time.slice(0, 5) : '')
-const formatTeacherName = (teacher: DocenteItem) =>
-  [teacher.nombre, teacher.apellido ?? [teacher.apellido_paterno, teacher.apellido_materno].filter(Boolean).join(' ')]
+const normalizeDate = (d: string) => (d ? d.slice(0, 10) : '')
+const normalizeTime = (t: string) => (t ? t.slice(0, 5) : '')
+const formatTeacherName = (t: DocenteItem) =>
+  [t.nombre, t.apellido ?? [t.apellido_paterno, t.apellido_materno].filter(Boolean).join(' ')]
     .filter(Boolean)
     .join(' ')
 
@@ -68,12 +38,6 @@ const addMinutes = (time: string, duration: number) => {
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 }
 
-const minutesBetween = (start: string, end: string) => {
-  const [startHour, startMinute] = normalizeTime(start).split(':').map(Number)
-  const [endHour, endMinute] = normalizeTime(end).split(':').map(Number)
-  return endHour * 60 + endMinute - (startHour * 60 + startMinute)
-}
-
 export default function ProgramarExamenPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -81,23 +45,31 @@ export default function ProgramarExamenPage() {
   const role = (localStorage.getItem('user_role') ?? '').toLowerCase()
   const isAdmin = role === 'admin' || role === 'administrador'
 
-  const [form, setForm] = useState<FormState>(emptyForm)
-  const [materias, setMaterias] = useState<CatalogItem[]>([])
-  const [materiaModalOpen, setMateriaModalOpen] = useState(false)
+  const [form, setForm] = useState({
+    nombre: '',
+    id_materia: '',
+    fecha: '',
+    hora_ini: '',
+    duracion: '90',
+    id_aula: '',
+    id_docente: '',
+  })
+
+  const [materias, setMaterias] = useState<Materia[]>([])
   const [aulas, setAulas] = useState<Aula[]>([])
   const [docentes, setDocentes] = useState<DocenteItem[]>([])
-  const selectedTeacher = docentes.find((teacher) => teacher.id === form.id_docente)
-  const [normas, setNormas] = useState<Norma[]>([])
+  const [normasGenerales, setNormasGenerales] = useState<Norma[]>([])
   const [selectedNorms, setSelectedNorms] = useState<string[]>([])
   const [particulares, setParticulares] = useState<{ titulo: string; descripcion: string }[]>([])
-  const [particularTitulo, setParticularTitulo] = useState('')
-  const [particularDescripcion, setParticularDescripcion] = useState('')
-  const [savedExamId, setSavedExamId] = useState<string | null>(null)
+  const [tituloParticular, setTituloParticular] = useState('')
+  const [descParticular, setDescParticular] = useState('')
+
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
+  const selectedTeacher = docentes.find((t) => t.id === form.id_docente)
   const endTime = useMemo(
     () => addMinutes(form.hora_ini, Number(form.duracion)),
     [form.duracion, form.hora_ini],
@@ -108,16 +80,14 @@ export default function ProgramarExamenPage() {
     setError('')
 
     try {
-      // 1. Resolver usuario docente si no es admin
       const currentUser = isAdmin ? null : await api.get<DocenteItem>('/me').catch(() => null)
 
-      // 2. Peticiones de catálogos protegidas contra fallos individuales
       const [subjectsRes, roomsRes, rulesRes, teachersRes, examRes] = await Promise.allSettled([
-        examenesService.listMaterias(),
+        materiasService.listAll(),
         aulasService.list({ estado: 'Disponible', perPage: 100 }),
         normasService.listAll({ tipo: 'General' }),
         isAdmin
-          ? examenesService.listDocentes().then((res) => res.data)
+          ? examenesService.listDocentes().then((res) => res.data).catch(() => [])
           : Promise.resolve(currentUser?.id ? [currentUser] : []),
         editId ? examenesService.get(editId) : Promise.resolve(null),
       ])
@@ -129,29 +99,9 @@ export default function ProgramarExamenPage() {
       const exam = examRes.status === 'fulfilled' ? examRes.value : null
 
       setMaterias(subjects)
-      setAulas(
-        exam?.aula && !rooms.data.some((room) => room.id === exam.id_aula)
-          ? [
-              ...rooms.data,
-              {
-                id: exam.id_aula,
-                nombre: exam.aula.nombre,
-                ubicacion: 'Ubicación registrada',
-                capacidad: 0,
-                estado: 'Disponible',
-              },
-            ]
-          : rooms.data,
-      )
-      setNormas([
-        ...rules,
-        ...(exam?.normas ?? []).filter((norma) => norma.tipo === 'Particular'),
-      ])
-      setDocentes(
-        !isAdmin && exam?.docente && !teachers.some((teacher) => teacher.id === exam.docente?.id)
-          ? [...teachers, exam.docente]
-          : teachers,
-      )
+      setAulas(rooms.data)
+      setNormasGenerales(rules)
+      setDocentes(teachers)
 
       if (exam) {
         setForm({
@@ -159,51 +109,50 @@ export default function ProgramarExamenPage() {
           id_materia: exam.id_materia,
           fecha: normalizeDate(exam.fecha),
           hora_ini: normalizeTime(exam.hora_ini),
-          duracion: String(minutesBetween(exam.hora_ini, exam.hora_fin)),
+          duracion: '90',
           id_aula: exam.id_aula,
           id_docente: exam.id_docente,
         })
-        setSelectedNorms((exam.normas ?? []).map((norma) => norma.id))
+        setSelectedNorms((exam.normas ?? []).map((n) => n.id))
       } else if (!isAdmin && currentUser?.id) {
-        setForm((current) => ({ ...current, id_docente: currentUser.id }))
+        setForm((prev) => ({ ...prev, id_docente: currentUser.id }))
       }
-    } catch (loadError) {
-      setError(
-        loadError instanceof Error ? loadError.message : 'No se pudieron cargar los datos de configuración.',
-      )
     } finally {
       setLoading(false)
     }
   }, [editId, isAdmin])
 
   useEffect(() => {
-    const requestId = window.setTimeout(() => void loadData(), 0)
-    return () => window.clearTimeout(requestId)
+    void loadData()
   }, [loadData])
 
-  const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
-    setForm((current) => ({ ...current, [key]: value }))
-    setFieldErrors((current) => ({ ...current, [key]: '' }))
+  const handleFieldChange = (field: string, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }))
+    setFieldErrors((prev) => ({ ...prev, [field]: '' }))
   }
 
   const toggleNorm = (id: string) => {
-    setSelectedNorms((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    setSelectedNorms((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
     )
-    setFieldErrors((current) => ({ ...current, normas: '' }))
   }
 
   const addParticular = () => {
-    const titulo = particularTitulo.trim()
-    const descripcion = particularDescripcion.trim()
+    const titulo = tituloParticular.trim()
+    const descripcion = descParticular.trim()
     if (!titulo || !descripcion) {
-      setFieldErrors((current) => ({ ...current, particular: 'Completa el título y la descripción.' }))
+      setFieldErrors((prev) => ({ ...prev, particular: 'Completa el título y la descripción.' }))
       return
     }
-    setParticulares((current) => [...current, { titulo, descripcion }])
-    setParticularTitulo('')
-    setParticularDescripcion('')
-    setFieldErrors((current) => ({ ...current, particular: '', normas: '' }))
+    // Se inserta para mostrarse inmediatamente arriba
+    setParticulares((prev) => [{ titulo, descripcion }, ...prev])
+    setTituloParticular('')
+    setDescParticular('')
+    setFieldErrors((prev) => ({ ...prev, particular: '' }))
+  }
+
+  const removeParticular = (index: number) => {
+    setParticulares((prev) => prev.filter((_, idx) => idx !== index))
   }
 
   const validate = () => {
@@ -222,54 +171,24 @@ export default function ProgramarExamenPage() {
     }
     if (!form.id_aula) errors.id_aula = 'Selecciona un aula disponible.'
     if (!form.id_docente) errors.id_docente = 'Selecciona el docente responsable.'
-    if (selectedNorms.length === 0 && particulares.length === 0) {
-      errors.normas = 'Selecciona una norma general o agrega una particular.'
-    }
-    if (particularTitulo.trim() || particularDescripcion.trim()) {
-      errors.particular = 'Pulsa "Agregar norma particular" para incluir el borrador.'
-    }
+
+    // Las normas son opcionales: no se bloquea si no hay normas seleccionadas
 
     setFieldErrors(errors)
     return Object.keys(errors).length === 0
   }
 
-  // Verificación de traslapes en la misma fecha y aula
-  const checkScheduleConflict = async () => {
-    const response = await examenesService.list({ fecha: form.fecha, perPage: 50 })
-    const actualIni = normalizeTime(form.hora_ini)
-    const actualFin = endTime
-
-    return response.data.find((exam) => {
-      if (exam.id === editId) return false
-
-      const mismaAula = exam.id_aula === form.id_aula || exam.aula?.id === form.id_aula
-      if (!mismaAula) return false
-      if (exam.estado === 'Terminado') return false
-
-      const otroIni = normalizeTime(exam.hora_ini)
-      const otroFin = normalizeTime(exam.hora_fin)
-
-      return actualIni < otroFin && actualFin > otroIni
-    })
-  }
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
     setError('')
     if (!validate()) return
 
     setSaving(true)
-    let createdId: string | null = null
-
     try {
-      const conflict = await checkScheduleConflict()
-      if (conflict) {
-        throw new Error(
-          `Conflicto de horario: El aula seleccionada ya está ocupada por la evaluación "${conflict.nombre}" de ${normalizeTime(conflict.hora_ini)} a ${normalizeTime(conflict.hora_fin)}.`,
-        )
-      }
-
-      const payload: ExamenPayload = {
+      const payload: ExamenPayload & {
+        normas_ids?: string[]
+        normas_particulares?: { titulo: string; descripcion: string }[]
+      } = {
         nombre: form.nombre.trim(),
         id_materia: form.id_materia,
         estado: 'Programado',
@@ -278,22 +197,14 @@ export default function ProgramarExamenPage() {
         hora_fin: endTime,
         id_aula: form.id_aula,
         id_docente: form.id_docente,
+        normas_ids: selectedNorms,
+        normas_particulares: particulares,
       }
 
-      const currentId = editId ?? savedExamId
-      const response = currentId
-        ? await examenesService.update(currentId, payload)
-        : await examenesService.create(payload)
-
-      if (!currentId) {
-        createdId = response.examen.id
-        setSavedExamId(createdId)
-      }
-
-      await normasService.assignToExam(response.examen.id, selectedNorms)
-      if (particulares.length > 0) {
-        await normasService.createParticularForExam(response.examen.id, particulares)
-        setParticulares([])
+      if (editId) {
+        await examenesService.update(editId, payload)
+      } else {
+        await examenesService.create(payload)
       }
 
       navigate('/examenes', {
@@ -304,12 +215,8 @@ export default function ProgramarExamenPage() {
             : 'Examen programado correctamente.',
         },
       })
-    } catch (submitError) {
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : 'Ocurrió un error al guardar la programación del examen.',
-      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al guardar el examen.')
     } finally {
       setSaving(false)
     }
@@ -362,255 +269,43 @@ export default function ProgramarExamenPage() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-6">
-          <fieldset className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-xs">
-            <legend className="px-2 text-sm font-bold text-sci-navy">
-              Datos de la evaluación
-            </legend>
-            <div className="grid gap-4 md:grid-cols-2 mt-2">
-              <div className="space-y-1.5 text-left md:col-span-2">
-                <Label htmlFor="ex-nombre" className="text-xs font-semibold">
-                  Nombre de la evaluación *
-                </Label>
-                <Input
-                  id="ex-nombre"
-                  value={form.nombre}
-                  maxLength={150}
-                  onChange={(event) => setField('nombre', event.target.value)}
-                  placeholder="Ej. Primer examen parcial de Álgebra II"
-                  className={`h-11 ${fieldErrors.nombre ? 'border-sci-red' : ''}`}
-                />
-                {fieldErrors.nombre && <p className="text-xs text-sci-red font-medium">{fieldErrors.nombre}</p>}
-              </div>
+          <FormDatosEvaluacion
+            nombre={form.nombre}
+            idMateria={form.id_materia}
+            idDocente={form.id_docente}
+            materias={materias}
+            docentes={docentes}
+            isAdmin={isAdmin}
+            selectedTeacher={selectedTeacher}
+            fieldErrors={fieldErrors}
+            onFieldChange={handleFieldChange}
+            formatTeacherName={formatTeacherName}
+          />
 
-              <div className="space-y-1.5 text-left">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="examen-materia" className="flex items-center gap-1.5 text-xs font-semibold">
-                    <BookOpenCheck className="h-3.5 w-3.5 text-sci-cyan" /> Asignatura *
-                  </Label>
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => setMateriaModalOpen(true)}
-                      disabled={saving}
-                      className="text-xs font-semibold text-sci-blue hover:underline cursor-pointer"
-                    >
-                      + Crear materia
-                    </button>
-                  )}
-                </div>
-                <select
-                  id="examen-materia"
-                  value={form.id_materia}
-                  onChange={(event) => setField('id_materia', event.target.value)}
-                  className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
-                >
-                  <option value="">Seleccionar asignatura</option>
-                  {materias.map((subject) => (
-                    <option key={subject.id} value={subject.id}>
-                      {subject.nombre}
-                    </option>
-                  ))}
-                </select>
-                {fieldErrors.id_materia && <p className="text-xs text-sci-red font-medium">{fieldErrors.id_materia}</p>}
-              </div>
+          <FormHorarioAmbiente
+            fecha={form.fecha}
+            horaIni={form.hora_ini}
+            duracion={form.duracion}
+            idAula={form.id_aula}
+            aulas={aulas}
+            todayLocal={todayLocal()}
+            fieldErrors={fieldErrors}
+            onFieldChange={handleFieldChange}
+          />
 
-              <div className="space-y-1.5 text-left">
-                <Label htmlFor="ex-docente" className="flex items-center gap-1.5 text-xs font-semibold">
-                  <UserRound className="h-3.5 w-3.5 text-sci-cyan" /> Docente responsable *
-                </Label>
-                {isAdmin ? (
-                  <select
-                    id="ex-docente"
-                    value={form.id_docente}
-                    onChange={(event) => setField('id_docente', event.target.value)}
-                    className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
-                  >
-                    <option value="">Seleccionar docente</option>
-                    {docentes.map((teacher) => (
-                      <option key={teacher.id} value={teacher.id}>
-                        {formatTeacherName(teacher)}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <Input
-                    id="ex-docente"
-                    type="text"
-                    readOnly
-                    value={selectedTeacher ? formatTeacherName(selectedTeacher) : ''}
-                    className="h-11 bg-muted cursor-not-allowed text-xs font-medium border-border"
-                  />
-                )}
-                {fieldErrors.id_docente && <p className="text-xs text-sci-red font-medium">{fieldErrors.id_docente}</p>}
-              </div>
-            </div>
-          </fieldset>
-
-          <fieldset className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-xs">
-            <legend className="px-2 text-sm font-bold text-sci-navy">
-              Horario y ambiente
-            </legend>
-            <div className="grid gap-4 md:grid-cols-2 mt-2">
-              <div className="space-y-1.5 text-left">
-                <Label htmlFor="ex-fecha" className="flex items-center gap-1.5 text-xs font-semibold">
-                  <CalendarDays className="h-3.5 w-3.5 text-sci-cyan" /> Fecha *
-                </Label>
-                <Input
-                  id="ex-fecha"
-                  type="date"
-                  min={todayLocal()}
-                  value={form.fecha}
-                  onChange={(event) => setField('fecha', event.target.value)}
-                  className={`h-11 ${fieldErrors.fecha ? 'border-sci-red' : ''}`}
-                />
-                {fieldErrors.fecha && <p className="text-xs text-sci-red font-medium">{fieldErrors.fecha}</p>}
-              </div>
-
-              <div className="space-y-1.5 text-left">
-                <Label htmlFor="ex-aula" className="flex items-center gap-1.5 text-xs font-semibold">
-                  <MapPin className="h-3.5 w-3.5 text-sci-cyan" /> Aula disponible *
-                </Label>
-                <select
-                  id="ex-aula"
-                  value={form.id_aula}
-                  onChange={(event) => setField('id_aula', event.target.value)}
-                  className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
-                >
-                  <option value="">Seleccionar aula</option>
-                  {aulas.map((room) => (
-                    <option key={room.id} value={room.id}>
-                      {room.nombre} · {room.ubicacion} ({room.capacidad || '—'} cap.)
-                    </option>
-                  ))}
-                </select>
-                {fieldErrors.id_aula && <p className="text-xs text-sci-red font-medium">{fieldErrors.id_aula}</p>}
-              </div>
-
-              <div className="space-y-1.5 text-left">
-                <Label htmlFor="ex-hora" className="flex items-center gap-1.5 text-xs font-semibold">
-                  <Clock3 className="h-3.5 w-3.5 text-sci-cyan" /> Hora de inicio *
-                </Label>
-                <Input
-                  id="ex-hora"
-                  type="time"
-                  value={form.hora_ini}
-                  onChange={(event) => setField('hora_ini', event.target.value)}
-                  className={`h-11 ${fieldErrors.hora_ini ? 'border-sci-red' : ''}`}
-                />
-                {fieldErrors.hora_ini && <p className="text-xs text-sci-red font-medium">{fieldErrors.hora_ini}</p>}
-              </div>
-
-              <div className="space-y-1.5 text-left">
-                <Label htmlFor="ex-duracion" className="text-xs font-semibold">
-                  Duración (minutos) *
-                </Label>
-                <Input
-                  id="ex-duracion"
-                  type="number"
-                  onWheel={(event) => event.currentTarget.blur()}
-                  min="1"
-                  step="1"
-                  value={form.duracion}
-                  onChange={(event) => setField('duracion', event.target.value)}
-                  className={`h-11 ${fieldErrors.duracion ? 'border-sci-red' : ''}`}
-                />
-                {fieldErrors.duracion && <p className="text-xs text-sci-red font-medium">{fieldErrors.duracion}</p>}
-              </div>
-            </div>
-          </fieldset>
-
-          <fieldset className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-xs">
-            <legend className="px-2 text-sm font-bold text-sci-navy">
-              Normas aplicables *
-            </legend>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Selecciona normas generales del catálogo oficial o define normas particulares específicas para este examen.
-            </p>
-
-            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-              {normas.map((rule) => {
-                const selected = selectedNorms.includes(rule.id)
-                return (
-                  <button
-                    key={rule.id}
-                    type="button"
-                    onClick={() => toggleNorm(rule.id)}
-                    className={`flex min-h-14 w-full items-start gap-3 rounded-xl border p-3.5 text-left transition cursor-pointer ${
-                      selected
-                        ? 'border-sci-blue bg-sci-blue/5'
-                        : 'border-border bg-card hover:border-sci-cyan'
-                    }`}
-                  >
-                    <span
-                      className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border ${
-                        selected
-                          ? 'border-sci-blue bg-sci-blue text-white'
-                          : 'border-border bg-background'
-                      }`}
-                    >
-                      {selected && <Check className="h-3.5 w-3.5" />}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <strong className="text-xs font-bold text-sci-navy">{rule.titulo}</strong>
-                        <span className="rounded-full border border-sci-cyan/30 bg-sci-cyan/10 px-2 py-0.2 text-[10px] font-semibold text-sci-navy">
-                          {rule.tipo}
-                        </span>
-                      </span>
-                      <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
-                        {rule.descripcion}
-                      </span>
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-            {fieldErrors.normas && <p className="mt-2 text-xs text-sci-red font-medium">{fieldErrors.normas}</p>}
-
-            <div className="mt-5 space-y-3 border-t border-border pt-4">
-              <h3 className="text-xs font-bold text-sci-navy">Agregar norma particular a este examen</h3>
-              <Input
-                type="text"
-                maxLength={150}
-                value={particularTitulo}
-                onChange={(event) => setParticularTitulo(event.target.value)}
-                placeholder="Título de la norma particular"
-                className="h-10 text-xs border-border"
-              />
-              <textarea
-                value={particularDescripcion}
-                onChange={(event) => setParticularDescripcion(event.target.value)}
-                placeholder="Descripción detallada de la regla particular..."
-                rows={2}
-                className="w-full rounded-xl border border-border bg-background p-3 text-xs leading-relaxed outline-none focus:ring-2 focus:ring-sci-blue/20"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addParticular}
-                className="cursor-pointer text-xs border-border"
-              >
-                + Incluir norma particular
-              </Button>
-              {fieldErrors.particular && <p className="text-xs text-sci-red font-medium">{fieldErrors.particular}</p>}
-
-              {particulares.map((norma, index) => (
-                <div key={index} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 p-3 text-xs">
-                  <span>
-                    <strong className="text-foreground">{norma.titulo}</strong> · {norma.descripcion}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setParticulares((current) => current.filter((_, item) => item !== index))}
-                    className="text-sci-red hover:underline font-semibold cursor-pointer"
-                  >
-                    Quitar
-                  </button>
-                </div>
-              ))}
-            </div>
-          </fieldset>
+          <FormNormasExamen
+            normasGenerales={normasGenerales}
+            selectedNorms={selectedNorms}
+            particulares={particulares}
+            tituloParticular={tituloParticular}
+            descParticular={descParticular}
+            fieldErrors={fieldErrors}
+            onToggleNorm={toggleNorm}
+            onTituloParticularChange={setTituloParticular}
+            onDescParticularChange={setDescParticular}
+            onAddParticular={addParticular}
+            onRemoveParticular={removeParticular}
+          />
 
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button
@@ -632,21 +327,6 @@ export default function ProgramarExamenPage() {
             </Button>
           </div>
         </form>
-      )}
-
-      {isAdmin && materiaModalOpen && (
-        <CrearMateriaModal
-          onOpenChange={setMateriaModalOpen}
-          onCreated={(materia) => {
-            setMaterias((current) =>
-              [...current.filter((item) => item.id !== materia.id), materia].sort((a, b) =>
-                a.nombre.localeCompare(b.nombre, 'es'),
-              ),
-            )
-            setField('id_materia', materia.id)
-            setMateriaModalOpen(false)
-          }}
-        />
       )}
     </div>
   )
