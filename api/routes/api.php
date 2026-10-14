@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Artisan;
 // --- RUTAS PÚBLICAS ---
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLink']);
-Route::resetPasswordRoute = Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword']);
+Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword']);
 
 Route::get('examenes', [ExamenController::class, 'index']);
 Route::get('examenes/{id}', [ExamenController::class, 'show']);

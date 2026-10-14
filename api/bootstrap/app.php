@@ -5,7 +5,6 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
-use PDOException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -15,21 +14,18 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // Necesario en Render para que resuelva HTTPS y no rompa CORS
         $middleware->trustProxies(at: '*');
 
-        // Middleware web limpios (sin HandleInertiaRequests)
         $middleware->web(append: [
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
         ]);
 
-        // Alias para middlewares de roles
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->render(function (QueryException|PDOException $e, Request $request) {
+        $exceptions->render(function (QueryException|\PDOException $e, Request $request) {
             if ($request->is('api/*') || $request->expectsJson()) {
                 $origin = $request->header('Origin', 'https://sciem-five.vercel.app');
                 return response()->json([
