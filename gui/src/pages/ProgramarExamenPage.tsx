@@ -108,10 +108,10 @@ export default function ProgramarExamenPage() {
     setError('')
 
     try {
-      // 1. Obtener usuario o docente si no es admin
+      // 1. Resolver usuario docente si no es admin
       const currentUser = isAdmin ? null : await api.get<DocenteItem>('/me').catch(() => null)
 
-      // 2. Cargar catálogos usando Promise.allSettled para que si uno falla temporalmente, no rompa la pantalla entera
+      // 2. Peticiones de catálogos protegidas contra fallos individuales
       const [subjectsRes, roomsRes, rulesRes, teachersRes, examRes] = await Promise.allSettled([
         examenesService.listMaterias(),
         aulasService.list({ estado: 'Disponible', perPage: 100 }),
@@ -166,11 +166,6 @@ export default function ProgramarExamenPage() {
         setSelectedNorms((exam.normas ?? []).map((norma) => norma.id))
       } else if (!isAdmin && currentUser?.id) {
         setForm((current) => ({ ...current, id_docente: currentUser.id }))
-      }
-
-      // Si alguna de las peticiones críticas falló por 503, se notifica pero permite reintentar sin bloquear
-      if (subjectsRes.status === 'rejected' || roomsRes.status === 'rejected') {
-        setError('Algunos catálogos tardaron en responder. Si faltan opciones, recarga la página.')
       }
     } catch (loadError) {
       setError(
@@ -238,15 +233,15 @@ export default function ProgramarExamenPage() {
     return Object.keys(errors).length === 0
   }
 
-  // Verificación estricta de traslapes en el frontend
+  // Verificación de traslapes en la misma fecha y aula
   const checkScheduleConflict = async () => {
-    const response = await examenesService.list({ fecha: form.fecha, perPage: 100 })
+    const response = await examenesService.list({ fecha: form.fecha, perPage: 50 })
     const actualIni = normalizeTime(form.hora_ini)
     const actualFin = endTime
 
     return response.data.find((exam) => {
       if (exam.id === editId) return false
-      
+
       const mismaAula = exam.id_aula === form.id_aula || exam.aula?.id === form.id_aula
       if (!mismaAula) return false
       if (exam.estado === 'Terminado') return false
@@ -254,7 +249,6 @@ export default function ProgramarExamenPage() {
       const otroIni = normalizeTime(exam.hora_ini)
       const otroFin = normalizeTime(exam.hora_fin)
 
-      // Se traslapan si: (InicioA < FinB) && (FinA > InicioB)
       return actualIni < otroFin && actualFin > otroIni
     })
   }
@@ -271,7 +265,7 @@ export default function ProgramarExamenPage() {
       const conflict = await checkScheduleConflict()
       if (conflict) {
         throw new Error(
-          `Conflicto de horario: El aula seleccionada ya está ocupada por la evaluación "${conflict.nombre}" de ${normalizeTime(conflict.hora_ini)} a ${normalizeTime(conflict.hora_fin)}.`
+          `Conflicto de horario: El aula seleccionada ya está ocupada por la evaluación "${conflict.nombre}" de ${normalizeTime(conflict.hora_ini)} a ${normalizeTime(conflict.hora_fin)}.`,
         )
       }
 
@@ -290,6 +284,7 @@ export default function ProgramarExamenPage() {
       const response = currentId
         ? await examenesService.update(currentId, payload)
         : await examenesService.create(payload)
+
       if (!currentId) {
         createdId = response.examen.id
         setSavedExamId(createdId)
@@ -300,6 +295,7 @@ export default function ProgramarExamenPage() {
         await normasService.createParticularForExam(response.examen.id, particulares)
         setParticulares([])
       }
+
       navigate('/examenes', {
         replace: true,
         state: {
@@ -312,7 +308,7 @@ export default function ProgramarExamenPage() {
       setError(
         submitError instanceof Error
           ? submitError.message
-          : 'Ocurrió un error al guardar la programación del examen.'
+          : 'Ocurrió un error al guardar la programación del examen.',
       )
     } finally {
       setSaving(false)
@@ -340,11 +336,11 @@ export default function ProgramarExamenPage() {
           </h1>
         </div>
 
-        {endTime && (
+        {form.hora_ini && endTime && (
           <div className="rounded-2xl border border-sci-cyan/30 bg-sci-cyan/10 px-5 py-3 text-xs shadow-xs">
             <p className="text-muted-foreground font-medium">Horario calculado</p>
             <p className="mt-0.5 font-bold text-sci-navy text-sm">
-              {form.hora_ini} - {endTime}
+              {form.hora_ini} – {endTime}
             </p>
           </div>
         )}
