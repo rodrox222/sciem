@@ -54,6 +54,8 @@ class AulaController extends Controller
         $data = $request->validated();
         $aula = Aula::create($data);
 
+        Cache::forget('catalogo_aulas_disponibles');
+
         $this->registrarAuditoria($request, 'AULA_CREADA', [
             'aula_id'   => $aula->id,
             'nombre'    => $aula->nombre,
@@ -94,6 +96,8 @@ class AulaController extends Controller
         $data = $request->validated();
         $aula->update($data);
 
+        Cache::forget('catalogo_aulas_disponibles');
+
         $this->registrarAuditoria($request, 'AULA_ACTUALIZADA', [
             'aula_id'             => $aula->id,
             'campos_actualizados' => array_keys($data),
@@ -123,6 +127,8 @@ class AulaController extends Controller
 
         $aula->delete();
 
+        Cache::forget('catalogo_aulas_disponibles');
+
         $this->registrarAuditoria($request, 'AULA_ELIMINADA', $detalles);
 
         return response()->json(['message' => 'Aula eliminada exitosamente.']);
@@ -145,16 +151,16 @@ class AulaController extends Controller
         $nombreCompleto = trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}");
 
         LogAuditoria::create([
-            'user_type'          => get_class($user),
-            'user_id'            => $user->id,
-            'rol_en_el_momento'  => $rol,
-            'usuario_nombre'     => $nombreCompleto !== '' ? $nombreCompleto : $user->nombre,
-            'usuario_email'      => $user->email ?? null,
-            'modulo'             => 'AULAS',
-            'accion'             => $accion,
-            'ip_origen'          => $request->ip() ?? '127.0.0.1',
-            'user_agent'         => $request->userAgent(),
-            'detalles'           => $detalles,
+            'user_type'         => get_class($user),
+            'user_id'           => $user->id,
+            'rol_en_el_momento' => $rol,
+            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : $user->nombre,
+            'usuario_email'     => $user->email ?? null,
+            'modulo'            => 'AULAS',
+            'accion'            => $accion,
+            'ip_origen'         => $request->ip() ?? '127.0.0.1',
+            'user_agent'        => $request->userAgent(),
+            'detalles'          => $detalles,
         ]);
     }
 }

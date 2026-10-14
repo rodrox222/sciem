@@ -40,6 +40,12 @@ const topBorderStyles: Record<NormaEstado, string> = {
   Inactivo: 'bg-sci-red',
 }
 
+const todayLocal = () => {
+  const now = new Date()
+  const offset = now.getTimezoneOffset() * 60_000
+  return new Date(now.getTime() - offset).toISOString().slice(0, 10)
+}
+
 export default function NormasPage() {
   const [normas, setNormas] = useState<Norma[]>([])
   const [searchInput, setSearchInput] = useState('')
@@ -123,11 +129,16 @@ export default function NormasPage() {
     if (norma.estado === 'Activo') {
       setChangingId(norma.id)
       try {
-        const response = await examenesService.list({ perPage: 100 })
+        // Consultar exámenes activos a futuro
+        const response = await examenesService.list({
+          estado: 'Programado',
+          fecha_desde: todayLocal(),
+          perPage: 50,
+        })
         const now = new Date()
 
         const asociados = (response.data || []).filter((exam) => {
-          if (!exam.fecha || exam.estado !== 'Programado') return false
+          if (!exam.fecha) return false
 
           const cleanDate = exam.fecha.slice(0, 10)
           const cleanTime = (exam.hora_ini || '00:00').slice(0, 5)
@@ -227,7 +238,7 @@ export default function NormasPage() {
         </article>
       </div>
 
-      {/* Buscador y Filtros con Shadcn UI */}
+      {/* Buscador y Filtros */}
       <section className="rounded-2xl border border-border bg-card shadow-xs">
         <div className="border-b border-border p-4 sm:p-5">
           <form onSubmit={applySearch} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_200px_auto]">
@@ -464,7 +475,7 @@ export default function NormasPage() {
                         </span>
                         <span className="flex items-center gap-1 font-medium">
                           <Clock className="h-3 w-3 text-sci-amber" />
-                          {ex.hora_ini.slice(0, 5)} - {ex.hora_fin.slice(0, 5)}
+                          {ex.hora_ini.slice(0, 5)} – {ex.hora_fin.slice(0, 5)}
                         </span>
                       </div>
                     </div>
