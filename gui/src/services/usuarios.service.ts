@@ -65,6 +65,9 @@ const buildQuery = (filters: UsuarioFilters): string => {
   return query ? `?${query}` : ''
 }
 
+// Caché en memoria para evitar saturar con peticiones idénticas
+let cachedRoles: Rol[] | null = null
+
 export const usuariosService = {
   list(filters: UsuarioFilters = {}) {
     return api.get<PaginatedResponse<Usuario>>(`/users${buildQuery(filters)}`)
@@ -91,12 +94,19 @@ export const usuariosService = {
   },
 
   async listRoles(): Promise<Rol[]> {
+    // Si ya los tenemos en memoria, retornamos de inmediato sin ir a la red
+    if (cachedRoles && cachedRoles.length > 0) {
+      return cachedRoles
+    }
+
     const raw = await api.get<RawRolItem[] | { data: RawRolItem[] }>('/roles')
     const lista = Array.isArray(raw) ? raw : raw?.data ?? []
 
-    return lista.map((item: RawRolItem) => ({
+    cachedRoles = lista.map((item: RawRolItem) => ({
       codigo: String(item.codigo ?? item.value ?? item.valor ?? item.id ?? item.tipo_usuario ?? ''),
       nombre: item.nombre ?? item.label ?? item.descripcion ?? item.nombre_rol ?? '',
     }))
+
+    return cachedRoles
   },
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Plus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -20,16 +20,14 @@ import type { PaginatedResponse } from '@/types/api'
 
 export default function UsuariosPage() {
   // ============================================================
-  // ESTADO DE USUARIOS
+  // ESTADO DE USUARIOS Y ROLES
   // ============================================================
-
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [roles, setRoles] = useState<Rol[]>([])
 
   // ============================================================
   // FILTROS
   // ============================================================
-
   const [busqueda, setBusqueda] = useState('')
   const [rol, setRol] = useState('')
   const [estado, setEstado] = useState('')
@@ -37,24 +35,21 @@ export default function UsuariosPage() {
   // ============================================================
   // PAGINACIÓN
   // ============================================================
-
   const [paginaActual, setPaginaActual] = useState(1)
 
-  const [paginacion, setPaginacion] =
-    useState<PaginatedResponse<Usuario>>({
-      current_page: 1,
-      last_page: 1,
-      total: 0,
-      per_page: 10,
-      from: null,
-      to: null,
-      data: [],
-    })
+  const [paginacion, setPaginacion] = useState<PaginatedResponse<Usuario>>({
+    current_page: 1,
+    last_page: 1,
+    total: 0,
+    per_page: 10,
+    from: null,
+    to: null,
+    data: [],
+  })
 
   // ============================================================
   // CARGA Y ERRORES
   // ============================================================
-
   const [cargando, setCargando] = useState(true)
   const [cargandoRoles, setCargandoRoles] = useState(true)
 
@@ -64,11 +59,9 @@ export default function UsuariosPage() {
   // ============================================================
   // FORMULARIO CREAR / EDITAR
   // ============================================================
-
   const [mostrarModal, setMostrarModal] = useState(false)
   const [modoEdicion, setModoEdicion] = useState(false)
-  const [usuarioEditando, setUsuarioEditando] =
-    useState<Usuario | null>(null)
+  const [usuarioEditando, setUsuarioEditando] = useState<Usuario | null>(null)
 
   const [guardando, setGuardando] = useState(false)
   const [resultadoFormulario, setResultadoFormulario] = useState('')
@@ -76,7 +69,6 @@ export default function UsuariosPage() {
   // ============================================================
   // CAMBIO DE ESTADO
   // ============================================================
-
   const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false)
   const [usuarioEstado, setUsuarioEstado] = useState<Usuario | null>(null)
 
@@ -84,10 +76,35 @@ export default function UsuariosPage() {
   const [resultadoEstado, setResultadoEstado] = useState('')
 
   // ============================================================
+  // CARGAR ROLES (Con caché en cliente)
+  // ============================================================
+  useEffect(() => {
+    let activo = true
+
+    const cargarRoles = async () => {
+      try {
+        setCargandoRoles(true)
+        setErrorRoles('')
+        const listaRoles = await usuariosService.listRoles()
+        if (activo) setRoles(listaRoles)
+      } catch {
+        if (activo) setErrorRoles('No se pudieron cargar los roles.')
+      } finally {
+        if (activo) setCargandoRoles(false)
+      }
+    }
+
+    void cargarRoles()
+
+    return () => {
+      activo = false
+    }
+  }, [])
+
+  // ============================================================
   // CARGAR USUARIOS
   // ============================================================
-
-  const cargarUsuarios = async () => {
+  const cargarUsuarios = useCallback(async () => {
     try {
       setCargando(true)
       setError('')
@@ -103,50 +120,20 @@ export default function UsuariosPage() {
       setPaginacion(datos)
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : 'No se pudieron cargar los usuarios.',
+        err instanceof Error ? err.message : 'No se pudieron cargar los usuarios.',
       )
     } finally {
       setCargando(false)
     }
-  }
-
-  // ============================================================
-  // CARGAR ROLES
-  // ============================================================
+  }, [paginaActual, busqueda, rol, estado])
 
   useEffect(() => {
-    const cargarRoles = async () => {
-      try {
-        setCargandoRoles(true)
-        setErrorRoles('')
-
-        const listaRoles = await usuariosService.listRoles()
-
-        setRoles(listaRoles)
-      } catch {
-        setErrorRoles('No se pudieron cargar los roles.')
-      } finally {
-        setCargandoRoles(false)
-      }
-    }
-
-    cargarRoles()
-  }, [])
-
-  // ============================================================
-  // EFECTO PARA CARGAR USUARIOS
-  // ============================================================
-
-  useEffect(() => {
-    cargarUsuarios()
-  }, [busqueda, rol, estado, paginaActual])
+    void cargarUsuarios()
+  }, [cargarUsuarios])
 
   // ============================================================
   // REINICIAR PAGINACIÓN AL CAMBIAR FILTROS
   // ============================================================
-
   useEffect(() => {
     if (paginaActual !== 1) {
       setPaginaActual(1)
@@ -156,45 +143,27 @@ export default function UsuariosPage() {
   // ============================================================
   // UTILIDADES
   // ============================================================
-
   const obtenerNombreRol = (codigoRol: string) => {
-    const rolEncontrado = roles.find(
-      (item) => item.codigo === codigoRol,
-    )
-
+    const rolEncontrado = roles.find((item) => item.codigo === codigoRol)
     return rolEncontrado?.nombre || codigoRol
   }
 
   // ============================================================
   // FILTROS
   // ============================================================
-
-  const manejarBusqueda = (valor: string) => {
-    setBusqueda(valor)
-  }
-
-  const manejarRol = (valor: string) => {
-    setRol(valor === 'todos' ? '' : valor)
-  }
-
-  const manejarEstado = (valor: string) => {
-    setEstado(valor === 'todos' ? '' : valor)
-  }
+  const manejarBusqueda = (valor: string) => setBusqueda(valor)
+  const manejarRol = (valor: string) => setRol(valor === 'todos' ? '' : valor)
+  const manejarEstado = (valor: string) => setEstado(valor === 'todos' ? '' : valor)
 
   // ============================================================
-  // CREAR USUARIO
+  // CREAR / EDITAR USUARIO
   // ============================================================
-
   const abrirModalNuevoUsuario = () => {
     setModoEdicion(false)
     setUsuarioEditando(null)
     setResultadoFormulario('')
     setMostrarModal(true)
   }
-
-  // ============================================================
-  // EDITAR USUARIO
-  // ============================================================
 
   const abrirModalEditarUsuario = (usuario: Usuario) => {
     setModoEdicion(true)
@@ -203,52 +172,30 @@ export default function UsuariosPage() {
     setMostrarModal(true)
   }
 
-  // ============================================================
-  // CERRAR FORMULARIO
-  // ============================================================
-
   const cerrarModal = () => {
     if (guardando) return
-
     setMostrarModal(false)
     setModoEdicion(false)
     setUsuarioEditando(null)
     setResultadoFormulario('')
   }
 
-  // ============================================================
-  // GUARDAR USUARIO
-  // ============================================================
-
-  const manejarGuardarUsuario = async (
-    payload: UsuarioPayload,
-  ) => {
+  const manejarGuardarUsuario = async (payload: UsuarioPayload) => {
     try {
       setGuardando(true)
 
       if (modoEdicion && usuarioEditando) {
-        await usuariosService.update(
-          usuarioEditando.id,
-          payload,
-        )
-
-        setResultadoFormulario(
-          'Usuario actualizado correctamente.',
-        )
+        await usuariosService.update(usuarioEditando.id, payload)
+        setResultadoFormulario('Usuario actualizado correctamente.')
       } else {
         await usuariosService.create(payload)
-
-        setResultadoFormulario(
-          'Usuario creado correctamente.',
-        )
+        setResultadoFormulario('Usuario creado correctamente.')
       }
 
       await cargarUsuarios()
     } catch (err) {
       throw new Error(
-        err instanceof Error
-          ? err.message
-          : 'No se pudo guardar el usuario.',
+        err instanceof Error ? err.message : 'No se pudo guardar el usuario.',
       )
     } finally {
       setGuardando(false)
@@ -258,28 +205,18 @@ export default function UsuariosPage() {
   // ============================================================
   // CONFIRMACIÓN DE CAMBIO DE ESTADO
   // ============================================================
-
   const abrirConfirmacionEstado = (usuario: Usuario) => {
     setUsuarioEstado(usuario)
     setResultadoEstado('')
     setMostrarConfirmacion(true)
   }
 
-  // ============================================================
-  // CERRAR CONFIRMACIÓN
-  // ============================================================
-
   const cerrarConfirmacionEstado = () => {
     if (cambiandoEstado) return
-
     setMostrarConfirmacion(false)
     setUsuarioEstado(null)
     setResultadoEstado('')
   }
-
-  // ============================================================
-  // CAMBIAR ESTADO DEL USUARIO
-  // ============================================================
 
   const cambiarEstadoUsuario = async () => {
     if (!usuarioEstado) return
@@ -289,53 +226,35 @@ export default function UsuariosPage() {
 
       if (usuarioEstado.activo) {
         await usuariosService.desactivar(usuarioEstado.id)
-
-        setResultadoEstado(
-          'Usuario desactivado correctamente.',
-        )
+        setResultadoEstado('Usuario desactivado correctamente.')
       } else {
         await usuariosService.activar(usuarioEstado.id)
-
-        setResultadoEstado(
-          'Usuario activado correctamente.',
-        )
+        setResultadoEstado('Usuario activado correctamente.')
       }
 
       await cargarUsuarios()
     } catch (err) {
       setResultadoEstado(
-        err instanceof Error
-          ? err.message
-          : 'Error al cambiar estado.',
+        err instanceof Error ? err.message : 'Error al cambiar estado.',
       )
     } finally {
       setCambiandoEstado(false)
     }
   }
 
-  // ============================================================
-  // RENDER
-  // ============================================================
-
   return (
     <div className="space-y-6">
-      {/* ========================================================
-          ENCABEZADO
-      ======================================================== */}
-
+      {/* ENCABEZADO */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-sci-cyan">
             Administración del Sistema
           </span>
-
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-sci-navy sm:text-3xl">
             Gestión de usuarios
           </h1>
-
           <p className="mt-1 text-sm text-muted-foreground">
-            Administra las cuentas, roles y accesos oficiales al
-            sistema SCI.
+            Administra las cuentas, roles y accesos oficiales al sistema SCI.
           </p>
         </div>
 
@@ -349,10 +268,7 @@ export default function UsuariosPage() {
         </Button>
       </div>
 
-      {/* ========================================================
-          FILTROS
-      ======================================================== */}
-
+      {/* FILTROS */}
       <UsuarioFilters
         busqueda={busqueda}
         rol={rol || 'todos'}
@@ -365,10 +281,7 @@ export default function UsuariosPage() {
         onEstadoChange={manejarEstado}
       />
 
-      {/* ========================================================
-          LISTA DE USUARIOS
-      ======================================================== */}
-
+      {/* LISTA DE USUARIOS */}
       {cargando ? (
         <div className="rounded-2xl border border-border bg-card p-12 text-center text-sm text-muted-foreground">
           Cargando registros de usuarios...
@@ -379,8 +292,7 @@ export default function UsuariosPage() {
         </div>
       ) : usuarios.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-card p-12 text-center text-sm text-muted-foreground">
-          No se encontraron usuarios registrados con los
-          filtros seleccionados.
+          No se encontraron usuarios registrados con los filtros seleccionados.
         </div>
       ) : (
         <div className="space-y-3">
@@ -397,20 +309,14 @@ export default function UsuariosPage() {
         </div>
       )}
 
-      {/* ========================================================
-          PAGINACIÓN
-      ======================================================== */}
-
+      {/* PAGINACIÓN */}
       <UsuariosPagination
         paginacion={paginacion}
         paginaActual={paginaActual}
         onPaginaChange={setPaginaActual}
       />
 
-      {/* ========================================================
-          MODAL CREAR / EDITAR
-      ======================================================== */}
-
+      {/* MODAL CREAR / EDITAR */}
       <UsuarioFormModal
         open={mostrarModal}
         modoEdicion={modoEdicion}
@@ -430,10 +336,7 @@ export default function UsuariosPage() {
         onSubmit={manejarGuardarUsuario}
       />
 
-      {/* ========================================================
-          CONFIRMACIÓN DE ESTADO
-      ======================================================== */}
-
+      {/* CONFIRMACIÓN DE ESTADO */}
       {usuarioEstado && (
         <ConfirmModal
           open={mostrarConfirmacion}
@@ -453,12 +356,18 @@ export default function UsuariosPage() {
             resultadoEstado
               ? resultadoEstado
               : usuarioEstado.activo
-                ? `¿Está seguro de desactivar la cuenta de ${[usuarioEstado.nombre, usuarioEstado.apellido_paterno, usuarioEstado.apellido_materno]
+                ? `¿Está seguro de desactivar la cuenta de ${[
+                    usuarioEstado.nombre,
+                    usuarioEstado.apellido_paterno,
+                    usuarioEstado.apellido_materno,
+                  ]
                     .filter(Boolean)
-                    .join(
-                      ' ',
-                    )}? No podrá ingresar al sistema.`
-                : `¿Desea habilitar nuevamente el acceso para ${[usuarioEstado.nombre, usuarioEstado.apellido_paterno, usuarioEstado.apellido_materno]
+                    .join(' ')}? No podrá ingresar al sistema.`
+                : `¿Desea habilitar nuevamente el acceso para ${[
+                    usuarioEstado.nombre,
+                    usuarioEstado.apellido_paterno,
+                    usuarioEstado.apellido_materno,
+                  ]
                     .filter(Boolean)
                     .join(' ')}?`
           }
@@ -478,14 +387,8 @@ export default function UsuariosPage() {
               : cambiarEstadoUsuario
           }
           onCancel={cerrarConfirmacionEstado}
-          variant={
-            usuarioEstado.activo
-              ? 'destructive'
-              : 'default'
-          }
-          showCancel={
-            !cambiandoEstado && !resultadoEstado
-          }
+          variant={usuarioEstado.activo ? 'destructive' : 'default'}
+          showCancel={!cambiandoEstado && !resultadoEstado}
         />
       )}
     </div>
