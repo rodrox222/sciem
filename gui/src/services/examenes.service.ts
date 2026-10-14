@@ -79,6 +79,8 @@ export interface ExamenFilters {
   search?: string
   estado?: ExamenEstado | ''
   fecha?: string
+  fecha_desde?: string
+  fecha_hasta?: string
   page?: number
   perPage?: number
 }
@@ -88,6 +90,8 @@ const buildExamQuery = (filters: ExamenFilters) => {
   if (filters.search) params.set('search', filters.search)
   if (filters.estado) params.set('estado', filters.estado)
   if (filters.fecha) params.set('fecha', filters.fecha)
+  if (filters.fecha_desde) params.set('fecha_desde', filters.fecha_desde)
+  if (filters.fecha_hasta) params.set('fecha_hasta', filters.fecha_hasta)
   if (filters.page) params.set('page', String(filters.page))
   if (filters.perPage) params.set('per_page', String(filters.perPage))
   const query = params.toString()
