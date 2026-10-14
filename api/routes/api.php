@@ -78,6 +78,24 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // --- ADMINISTRACIÓN ---
     Route::middleware('role:admin,administrador')->group(function () {
+        Route::get('dashboard/stats', function () {
+            $totalUsuarios = \App\Models\Admin::count() 
+                           + \App\Models\Docente::count() 
+                           + \App\Models\Auxiliar::count();
+
+            $totalAulasDisponibles = \App\Models\Aula::where('estado', 'Disponible')->count();
+            $totalExamenesActivos = \App\Models\Examen::where('estado', 'Programado')->count();
+            $totalEstudiantes = \App\Models\Estudiante::count();
+
+            return response()->json([
+                'users'    => $totalUsuarios,
+                'rooms'    => $totalAulasDisponibles,
+                'exams'    => $totalExamenesActivos,
+                'students' => $totalEstudiantes,
+            ]);
+        });
+
+    
         Route::apiResource('users', UserController::class);
         Route::get('auditoria', [AuditoriaController::class, 'index']);
 

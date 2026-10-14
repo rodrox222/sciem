@@ -92,6 +92,12 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'require'),
+            //Ajustes para el supa
+            'options' => extension_loaded('pdo_pgsql') ? [
+                PDO::ATTR_EMULATE_PREPARES => true, // Evita conflictos con poolers
+                PDO::ATTR_PERSISTENT => false,      // Cierra la conexión al terminar el request
+                PDO::ATTR_TIMEOUT => 5,             // Timeout rápido en vez de colgarse
+            ] : [],
         ],
 
         'sqlsrv' => [
