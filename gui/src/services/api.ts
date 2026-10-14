@@ -36,11 +36,12 @@ const parseResponse = async (response: Response): Promise<unknown> => {
 };
 
 /**
- * Cliente principal para peticiones HTTP a la API de Laravel.
+ * Cliente principal para peticiones HTTP a la API de Laravel con reintento ante 503
  */
 export async function apiRequest<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  retries = 2
 ): Promise<T> {
   const token = localStorage.getItem('auth_token');
   const headers = new Headers(options.headers);
@@ -68,10 +69,20 @@ export async function apiRequest<T>(
       headers,
     });
   } catch {
+    if (retries > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      return apiRequest<T>(path, options, retries - 1);
+    }
     throw new ApiError(
       'No se pudo conectar con el servidor. Verifica que los contenedores de Docker estén activos.',
       0
     );
+  }
+
+  // Si Supabase devuelve 503 por colisión momentánea en el pooler, reintenta tras 250ms
+  if (response.status === 503 && retries > 0) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return apiRequest<T>(path, options, retries - 1);
   }
 
   const payload = await parseResponse(response);
