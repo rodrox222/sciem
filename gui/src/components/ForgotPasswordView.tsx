@@ -1,7 +1,7 @@
 // src/components/ForgotPasswordView.tsx
 import React from 'react'
 import { useForgotPassword } from '@/hooks/useForgotPassword'
-import { AuthSidebar } from './auth/AuthSidebar'
+import { LoginBranding } from './login/LoginBranding'
 import { RequestStepForm } from './auth/RequestStepForm'
 import { SentConfirmation } from './auth/SentConfirmation'
 import { ResetPasswordForm } from './auth/ResetPasswordForm'
@@ -31,12 +31,14 @@ export const ForgotPasswordView: React.FC<ForgotPasswordProps> = ({
   } = useForgotPassword({ onSuccess, onBackToLogin })
 
   return (
-    <div className="w-full max-w-[980px] bg-card rounded-3xl shadow-xl border border-border flex flex-col md:flex-row overflow-hidden text-card-foreground">
-      {/* Banner lateral izquierdo (solo visible en pantallas md en adelante) */}
-      <AuthSidebar />
+    <div className="w-full max-w-[1100px] min-h-[520px] bg-white rounded-3xl shadow-xl border border-border flex flex-col md:flex-row overflow-hidden text-card-foreground">
+     {/* Panel institucional con el diseño original del inicio de sesión */}
+<div className="hidden md:flex md:w-[46%]">
+  <LoginBranding />
+</div>
 
       {/* Formulario derecho */}
-      <div className="w-full md:w-[62%] p-6 sm:p-10 lg:p-12 flex flex-col justify-center">
+      <div className="w-full md:w-[54%] p-6 sm:p-10 lg:p-12 flex flex-col justify-center">
         <span className="text-[11px] font-bold text-sci-cyan tracking-wider uppercase block">
           GESTIÓN DE ACCESO
         </span>
