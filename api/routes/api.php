@@ -207,5 +207,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // HU 18: MODULO DE ESTUDIANTES
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::post('estudiantes/{id}/completar-datos', [EstudianteController::class, 'completarDatos']);
+        // subir foto de estudiante (HU18-T6) requiere autenticación y autorización
+        Route::post('estudiantes/{id}/foto', [EstudianteController::class, 'subirFoto']);
     });
 });
