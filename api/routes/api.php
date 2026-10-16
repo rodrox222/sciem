@@ -17,6 +17,7 @@ use App\Http\Controllers\PrerrequisitoController;
 use App\Http\Controllers\VerificacionController;
 use App\Http\Controllers\CargaMasivaEstudianteController;
 use App\Http\Controllers\ConfiguracionSistemaController;
+use App\Http\Controllers\IntentoNoAutorizadoController;
 use App\Models\Admin;
 use App\Models\Docente;
 use App\Models\Auxiliar;
@@ -196,4 +197,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/examenes/{id}/registro-manual', [VerificacionController::class, 'registrarIngresoManual']);
     Route::get('/examenes/{id}/asistencias', [VerificacionController::class, 'listarAsistencias']);
+
+    // --- HU 13: REGISTRO Y CONSULTA DE INTENTOS NO CORRESPONDIENTES ---
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::get('examenes/{id_examen}/intentos-no-autorizados', [IntentoNoAutorizadoController::class, 'index']);
+        Route::post('examenes/{id_examen}/intentos-no-autorizados', [IntentoNoAutorizadoController::class, 'store']);
+    });
 });

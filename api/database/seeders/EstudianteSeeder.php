@@ -44,6 +44,17 @@ class EstudianteSeeder extends Seeder
                 'email_institucional' => '202301641@est.umss.edu',
                 'activo'              => true,
             ],
+            [
+                'id'                  => (string) Str::uuid(),
+                'codigo_sis'          => '202400000',
+                'ci'                  => '44455878',
+                'ci_extension'        => null,
+                'nombre'              => 'Rodrigo',
+                'apellido_paterno'    => 'Fernandez',
+                'apellido_materno'    => 'Gomez',
+                'email_institucional' => '202400000@est.umss.edu',
+                'activo'              => true,
+            ],
         ];
 
         foreach ($estudiantes as $estudiante) {
