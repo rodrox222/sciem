@@ -198,9 +198,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/examenes/{id}/registro-manual', [VerificacionController::class, 'registrarIngresoManual']);
     Route::get('/examenes/{id}/asistencias', [VerificacionController::class, 'listarAsistencias']);
 
-    // --- HU 13: REGISTRO Y CONSULTA DE INTENTOS NO CORRESPONDIENTES ---
+    // HU 13: REGISTRO Y CONSULTA DE INTENTOS NO CORRESPONDIENTES 
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('examenes/{id_examen}/intentos-no-autorizados', [IntentoNoAutorizadoController::class, 'index']);
         Route::post('examenes/{id_examen}/intentos-no-autorizados', [IntentoNoAutorizadoController::class, 'store']);
+    });
+
+    // HU 18: MODULO DE ESTUDIANTES
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::post('estudiantes/{id}/completar-datos', [EstudianteController::class, 'completarDatos']);
     });
 });

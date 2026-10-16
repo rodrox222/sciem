@@ -205,4 +205,33 @@ class EstudianteController extends Controller
             'detalles'          => $detalles,
         ]);
     }
+
+    public function completarDatos(CompletarDatosEstudianteRequest $request, string $id): JsonResponse
+    {
+        $estudiante = Estudiante::findOrFail($id);
+
+        $estudiante->ci = $request->input('ci');
+        $estudiante->ci_extension = $request->input('ci_extension');
+
+        // Si ya cuenta con foto guardada, se marca completado el primer acceso
+        if (!empty($estudiante->foto_perfil_url)) {
+            $estudiante->primer_acceso_completado = true;
+        }
+
+        $estudiante->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Datos de identidad registrados exitosamente.',
+            'data'    => [
+                'id'                       => $estudiante->id,
+                'codigo_sis'               => $estudiante->codigo_sis,
+                'ci'                       => $estudiante->ci,
+                'ci_extension'             => $estudiante->ci_extension,
+                'nombre_completo'          => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
+                'foto_perfil_url'          => $estudiante->foto_perfil_url,
+                'primer_acceso_completado' => $estudiante->primer_acceso_completado,
+            ],
+        ], 200);
+    }
 }
