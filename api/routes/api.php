@@ -166,6 +166,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- ESTUDIANTES (Padrón general) ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('estudiantes', [EstudianteController::class, 'index']);
+        Route::get('estudiantes/buscar', [EstudianteController::class, 'buscar']);
         Route::get('estudiantes/{identificador}', [EstudianteController::class, 'show']);
     });
 
