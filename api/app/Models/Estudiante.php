@@ -4,13 +4,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
-class Estudiante extends Model
+class Estudiante extends Authenticatable
 {
-    use HasFactory, HasUuids;
+    use HasApiTokens, HasFactory, HasUuids, Notifiable;
 
     protected $table = 'estudiantes';
     protected $keyType = 'string';
@@ -24,9 +26,15 @@ class Estudiante extends Model
         'apellido_paterno',
         'apellido_materno',
         'email_institucional',
+        'password',
         'foto_perfil_url',
         'primer_acceso_completado',
         'activo',
+    ];
+
+    protected $hidden = [
+        'password',
+        'remember_token',
     ];
 
     protected function casts(): array
@@ -34,6 +42,7 @@ class Estudiante extends Model
         return [
             'activo'                   => 'boolean',
             'primer_acceso_completado' => 'boolean',
+            'password'                 => 'hashed',
         ];
     }
 

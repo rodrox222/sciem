@@ -23,13 +23,13 @@ class CompletarDatosEstudianteRequest extends FormRequest
                 'required',
                 'string',
                 'max:20',
-                // Evita que dos estudiantes tengan exactamente el mismo CI y extensión
                 Rule::unique('estudiantes', 'ci')
                     ->where(function ($query) {
                         return $query->where('ci_extension', $this->input('ci_extension'));
                     })
                     ->ignore($idEstudiante),
             ],
+            // 'nullable' permite dejarlo vacío o no mandarlo en el JSON
             'ci_extension' => [
                 'nullable',
                 'string',

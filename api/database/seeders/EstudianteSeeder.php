@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Estudiante;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Hash;
 
 class EstudianteSeeder extends Seeder
 {
@@ -46,14 +47,15 @@ class EstudianteSeeder extends Seeder
             ],
             [
                 'id'                  => (string) Str::uuid(),
-                'codigo_sis'          => '202400000',
-                'ci'                  => '44455878',
-                'ci_extension'        => null,
-                'nombre'              => 'Matias',
-                'apellido_paterno'    => 'Vargas',
-                'apellido_materno'    => 'Mamani',
-                'email_institucional' => '202400000@est.umss.edu',
+                'codigo_sis'          => '20202020',
+                'ci'                  => '8765431',
+                'ci_extension'        => 'CB',
+                'nombre'              => 'goku',
+                'apellido_paterno'    => 'mamani',
+                'apellido_materno'    => 'cr7',
+                'email_institucional' => '20202020@est.umss.edu',
                 'activo'              => true,
+                'password'            => Hash::make('12345678'), // Solo Mamani tiene contraseña manual
             ],
         ];
 

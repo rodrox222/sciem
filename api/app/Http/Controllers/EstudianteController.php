@@ -188,21 +188,24 @@ class EstudianteController extends Controller
     {
         $user = $request->user();
 
-        $rol = match (get_class($user)) {
-            Admin::class    => 'admin',
-            Docente::class  => 'docente',
-            Auxiliar::class => 'auxiliar',
-            default         => 'desconocido',
+        $rol = match ($user ? get_class($user) : null) {
+            Admin::class      => 'admin',
+            Docente::class    => 'docente',
+            Auxiliar::class   => 'auxiliar',
+            Estudiante::class => 'estudiante',
+            default           => 'desconocido',
         };
 
-        $nombreCompleto = trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}");
+        $nombreCompleto = $user 
+            ? trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}")
+            : 'Sistema';
 
         LogAuditoria::create([
-            'user_type'         => get_class($user),
-            'user_id'           => $user->id,
+            'user_type'         => $user ? get_class($user) : null,
+            'user_id'           => $user?->id,
             'rol_en_el_momento' => $rol,
-            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : $user->nombre,
-            'usuario_email'     => $user->email ?? null,
+            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : ($user->nombre ?? 'Sistema'),
+            'usuario_email'     => $user->email_institucional ?? $user->email ?? null,
             'modulo'            => 'ESTUDIANTES',
             'accion'            => $accion,
             'ip_origen'         => $request->ip() ?? '127.0.0.1',
@@ -346,5 +349,132 @@ class EstudianteController extends Controller
 
         $sinVersion = preg_replace('/^v\d+\//', '', $partes[1]);
         return preg_replace('/\.[^.]+$/', '', $sinVersion);
+    }
+
+    /**
+     * HU18 Consultar exámenes inscritos y estado de habilitación
+     */
+    public function misExamenes(Request $request, string $id): JsonResponse
+    {
+        $estudiante = Estudiante::find($id);
+
+        if (!$estudiante) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'El estudiante no existe en el sistema.',
+                'error_type' => 'ESTUDIANTE_NO_ENCONTRADO',
+            ], 404);
+        }
+
+        // Obtiene exclusivamente los exámenes donde el estudiante figura en estudiante_examen
+        $examenes = $estudiante->examenes()
+            ->with([
+                'materia:id,nombre',
+                'aula:id,nombre',
+                'docente:id,nombre,apellido_paterno,apellido_materno'
+            ])
+            ->orderBy('fecha', 'asc')
+            ->get()
+            ->map(function ($examen) {
+                $docenteNombre = $examen->docente 
+                    ? trim("{$examen->docente->nombre} {$examen->docente->apellido_paterno} {$examen->docente->apellido_materno}")
+                    : null;
+
+                return [
+                    'id_examen'     => $examen->id,
+                    'nombre'        => $examen->nombre,
+                    'materia'       => $examen->materia?->nombre,
+                    'aula'          => $examen->aula?->nombre ?? $examen->aula,
+                    'docente'       => $docenteNombre,
+                    'fecha'         => $examen->fecha,
+                    'hora_ini'      => $examen->hora_ini ?? $examen->hora_inicio,
+                    'hora_fin'      => $examen->hora_fin,
+                    'estado'        => $examen->pivot->estado, // 'Habilitado' o 'Inhabilitado'
+                    'motivo_estado' => $examen->pivot->motivo_estado,
+                ];
+            });
+
+        return response()->json([
+            'success'        => true,
+            'total_examenes' => $examenes->count(),
+            'examenes'       => $examenes,
+        ], 200);
+    }
+
+    /**
+     * HU18 Generar token firmado para el código QR dinámico
+     */
+    public function generarTokenQr(Request $request, string $idEstudiante, string $idExamen): JsonResponse
+    {
+        $estudiante = Estudiante::find($idEstudiante);
+        if (!$estudiante) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'Estudiante no encontrado.',
+                'error_type' => 'ESTUDIANTE_NO_ENCONTRADO'
+            ], 404);
+        }
+
+        // Requiere registro obligatorio previo (CI y Foto facial)
+        if (!$estudiante->primer_acceso_completado) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'Debe registrar su Carnet de Identidad y foto de perfil antes de generar su QR.',
+                'error_type' => 'REGISTRO_INCOMPLETO'
+            ], 403);
+        }
+
+        // Verificar inscripción al examen
+        $inscripcion = DB::table('estudiante_examen')
+            ->where('id_estudiante', $idEstudiante)
+            ->where('id_examen', $idExamen)
+            ->first();
+
+        if (!$inscripcion) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'No se encuentra registrado en este examen.',
+                'error_type' => 'NO_INSCRITO'
+            ], 404);
+        }
+
+        // Solo genera QR si está Habilitado
+        if ($inscripcion->estado !== 'Habilitado') {
+            return response()->json([
+                'success'       => false,
+                'message'       => 'No se puede generar el código QR: el estudiante no está habilitado.',
+                'error_type'    => 'ESTUDIANTE_INHABILITADO',
+                'motivo_estado' => $inscripcion->motivo_estado,
+            ], 403);
+        }
+
+        // Criptografía: Payload firmado con 15 minutos de caducidad
+        $expiraEn = now()->addMinutes(15)->timestamp;
+        $payload = [
+            'id_estudiante' => $estudiante->id,
+            'codigo_sis'    => $estudiante->codigo_sis,
+            'ci'            => $estudiante->ci,
+            'id_examen'     => $idExamen,
+            'exp'           => $expiraEn,
+            'nonce'         => \Illuminate\Support\Str::random(10),
+        ];
+
+        $payloadBase64 = base64_encode(json_encode($payload));
+        $firma = hash_hmac('sha256', $payloadBase64, config('app.key'));
+        $qrToken = "{$payloadBase64}.{$firma}";
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Token QR generado exitosamente.',
+            'data'    => [
+                'qr_token'    => $qrToken,
+                'expira_en'   => date('c', $expiraEn),
+                'estudiante'  => [
+                    'codigo_sis'      => $estudiante->codigo_sis,
+                    'nombre_completo' => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
+                    'foto_url'        => $estudiante->foto_perfil_url,
+                ],
+            ],
+        ], 200);
     }
 }

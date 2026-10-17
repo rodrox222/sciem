@@ -205,9 +205,14 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // HU 18: MODULO DE ESTUDIANTES
-    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
-        Route::post('estudiantes/{id}/completar-datos', [EstudianteController::class, 'completarDatos']);
-        // subir foto de estudiante (HU18-T6) requiere autenticación y autorización
+    Route::middleware('role:auxiliar,estudiante')->group(function () {
+        // HU18: Completar o cambiar CI
+        Route::match(['post', 'patch'], 'estudiantes/{id}/completar-datos', [EstudianteController::class, 'completarDatos']);
+        // HU18: Subir foto facial a Cloudinary
         Route::post('estudiantes/{id}/foto', [EstudianteController::class, 'subirFoto']);
+        // HU18: Consultar exámenes inscritos y estado de habilitación
+        Route::get('estudiantes/{id}/examenes', [EstudianteController::class, 'misExamenes']);
+        // HU18: Generar token QR dinámico
+        Route::post('estudiantes/{id}/examenes/{idExamen}/qr-token', [EstudianteController::class, 'generarTokenQr']);
     });
 });
