@@ -18,11 +18,11 @@ use App\Http\Controllers\VerificacionController;
 use App\Http\Controllers\CargaMasivaEstudianteController;
 use App\Http\Controllers\ConfiguracionSistemaController;
 use App\Http\Controllers\IntentoNoAutorizadoController;
+use App\Http\Controllers\EscanerController;
 use App\Models\Admin;
 use App\Models\Docente;
 use App\Models\Auxiliar;
 use Illuminate\Support\Facades\Artisan;
-
 // --- RUTAS PÚBLICAS ---
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLink']);
@@ -201,7 +201,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // HU 13: REGISTRO Y CONSULTA DE INTENTOS NO CORRESPONDIENTES 
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('examenes/{id_examen}/intentos-no-autorizados', [IntentoNoAutorizadoController::class, 'index']);
-        Route::post('examenes/{id_examen}/intentos-no-autorizados', [IntentoNoAutorizadoController::class, 'store']);
+        Route::post('examenes/{id_examen}/escanear-ingreso', [EscanerController::class, 'escanear']);    
     });
 
     // HU 18: MODULO DE ESTUDIANTES

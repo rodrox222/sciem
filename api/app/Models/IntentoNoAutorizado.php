@@ -16,17 +16,14 @@ class IntentoNoAutorizado extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        'id',
         'id_examen',
-        'codigo_sis',
-        'ci',
-        'ci_extension',
         'id_estudiante',
-        'registrado_por_id',
-        'registrado_por_rol',
-        'fecha_hora',
+        'identificador_presentado',
+        'tipo_intento',
         'motivo',
-        'observacion',
+        'registrado_por_user_type',
+        'registrado_por_user_id',
+        'fecha_hora',
     ];
 
     protected function casts(): array

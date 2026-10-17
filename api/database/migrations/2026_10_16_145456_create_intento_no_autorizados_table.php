@@ -11,40 +11,17 @@ return new class extends Migration
         Schema::create('intentos_no_autorizados', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('id_examen');
-            
-            // Campos separados 
-            $table->string('codigo_sis', 20)->nullable();
-            $table->string('ci', 20)->nullable();
-            $table->string('ci_extension', 10)->nullable();
-
-            // Referencia al estudiante
-            $table->uuid('id_estudiante')->nullable();
-
-            // Quién registró el intento (Docente o Auxiliar)
-            $table->uuid('registrado_por_id')->nullable();
-            $table->string('registrado_por_rol', 50)->nullable(); 
-
-            $table->timestampTz('fecha_hora');
-            $table->string('motivo', 255)->default('No matriculado en el examen');
-            $table->text('observacion')->nullable();
+            $table->uuid('id_estudiante')->nullable(); 
+            $table->string('identificador_presentado', 50)->nullable(); 
+            $table->enum('tipo_intento', ['INHABILITADO', 'NO_INSCRITO']);
+            $table->text('motivo')->nullable(); 
+            $table->string('registrado_por_user_type')->nullable(); 
+            $table->uuid('registrado_por_user_id')->nullable();
+            $table->timestamp('fecha_hora');
             $table->timestamps();
 
-            // Llaves foráneas
-            $table->foreign('id_examen')
-                  ->references('id')
-                  ->on('examenes')
-                  ->onDelete('cascade');
-
-            $table->foreign('id_estudiante')
-                  ->references('id')
-                  ->on('estudiantes')
-                  ->nullOnDelete();
-
-            // Índices para consultas de alta velocidad en el panel
-            $table->index('id_examen');
-            $table->index('codigo_sis');
-            $table->index('ci');
-            $table->index('fecha_hora');
+            $table->foreign('id_examen')->references('id')->on('examenes')->onDelete('cascade');
+            $table->foreign('id_estudiante')->references('id')->on('estudiantes')->nullOnDelete();
         });
     }
 
