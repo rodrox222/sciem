@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react'
 
+import { ExpulsionForm } from '@/components/examenes/ExpulsionForm'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -609,6 +610,15 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
                     </div>
                   </div>
                 </div>
+
+                {selectedEligibility.asistencia && (
+                  <ExpulsionForm
+                    key={selectedStudent.id}
+                    exam={exam}
+                    estudiante={selectedStudent}
+                    asistencia={selectedEligibility.asistencia}
+                  />
+                )}
 
                 <Button
                   type="button"

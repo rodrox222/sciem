@@ -21,6 +21,31 @@ export interface AsistenciasExpulsionResponse {
   asistencias: AsistenciaExpulsion[]
 }
 
+export interface RegistroExpulsionPayload {
+  id_estudiante: string
+  motivo: string
+}
+
+export interface ResponsableExpulsion {
+  id: string
+  rol: string
+  nombre: string
+}
+
+export interface ExpulsionRegistrada {
+  id: string
+  id_examen: string
+  id_estudiante: string
+  motivo: string
+  fecha_hora: string
+  responsable: ResponsableExpulsion
+}
+
+export interface RegistroExpulsionResponse {
+  message: string
+  expulsion: ExpulsionRegistrada
+}
+
 const buildSearchQuery = (key: 'search' | 'qr_data', value: string) => {
   const params = new URLSearchParams()
   params.set(key, value)
@@ -43,6 +68,13 @@ export const expulsionesService = {
   listarAsistencias(examId: string) {
     return api.get<AsistenciasExpulsionResponse>(
       `/examenes/${examId}/asistencias`,
+    )
+  },
+
+  registrarExpulsion(examId: string, payload: RegistroExpulsionPayload) {
+    return api.post<RegistroExpulsionResponse>(
+      `/examenes/${examId}/expulsiones`,
+      payload,
     )
   },
 }
