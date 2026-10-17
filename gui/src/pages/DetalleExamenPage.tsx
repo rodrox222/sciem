@@ -7,6 +7,7 @@ import {
   Users,
   PencilLine,
   QrCode,
+  UserX,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,7 @@ import { DetalleInfoTab } from '@/components/examenes/DetalleInfoTab'
 import { DetalleEstudiantesTab } from '@/components/examenes/DetalleEstudiantesTab'
 import { DetalleEditarTab } from '@/components/examenes/DetalleEditarTab'
 import { DetalleEscanerTab } from '@/components/examenes/DetalleEscanerTab'
+import { DetalleExpulsionesTab } from '@/components/examenes/DetalleExpulsionesTab'
 
 const estadoBadges: Record<ExamenEstado, string> = {
   Programado: 'border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy',
@@ -34,10 +36,14 @@ export default function DetalleExamenPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const activeTab = searchParams.get('tab') || 'info'
 
   const role = (localStorage.getItem('user_role') ?? '').toLowerCase()
   const canManage = ['admin', 'administrador', 'docente', 'auxiliar'].includes(role)
+  const canExpel = ['docente', 'auxiliar'].includes(role)
+
+  const requestedTab = searchParams.get('tab') || 'info'
+  const activeTab =
+    requestedTab === 'expulsiones' && !canExpel ? 'info' : requestedTab
 
   const [exam, setExam] = useState<Examen | null>(null)
   const [loading, setLoading] = useState(true)
@@ -117,7 +123,6 @@ export default function DetalleExamenPage() {
 
   return (
     <div className="space-y-6">
-      {/* Encabezado contextual */}
       <header className="space-y-3">
         <Button
           type="button"
@@ -152,49 +157,55 @@ export default function DetalleExamenPage() {
         </div>
       </header>
 
-      {/* Navegación por pestañas */}
       <Tabs
         value={activeTab}
         onValueChange={(val) => setSearchParams({ tab: val })}
         className="space-y-6"
       >
-
-<TabsList className="flex h-auto w-full flex-wrap items-stretch justify-start gap-1 rounded-xl border border-border bg-card p-1 sm:flex-nowrap sm:items-center">
-
-          
-<TabsTrigger
-  value="info"
-  className="min-w-0 flex-1 cursor-pointer justify-center gap-1.5 whitespace-normal px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
->
-  <BookOpen className="h-3.5 w-3.5" /> Ficha Técnica
-</TabsTrigger>
+        <TabsList className="flex h-auto w-full flex-nowrap items-center justify-start gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <TabsTrigger
+            value="info"
+            className="shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-3 py-2 text-center text-[11px] font-medium sm:gap-2 sm:text-xs"
+          >
+            <BookOpen className="h-3.5 w-3.5" /> Ficha Técnica
+          </TabsTrigger>
 
           <TabsTrigger
-  value="estudiantes"
-  className="min-w-0 flex-1 cursor-pointer justify-center gap-1.5 whitespace-normal px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
->
-  <Users className="h-3.5 w-3.5" />
-  Padrón de Estudiantes
-</TabsTrigger>
+            value="estudiantes"
+            className="shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-3 py-2 text-center text-[11px] font-medium sm:gap-2 sm:text-xs"
+          >
+            <Users className="h-3.5 w-3.5" />
+            Padrón de Estudiantes
+          </TabsTrigger>
 
           {canManage && (
             <TabsTrigger
-  value="escaner"
-  className="min-w-0 flex-1 cursor-pointer justify-center gap-1.5 whitespace-normal px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
->
-  <QrCode className="h-3.5 w-3.5 text-sci-cyan" />
-  Escanear Acceso
-</TabsTrigger>
+              value="escaner"
+              className="shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-3 py-2 text-center text-[11px] font-medium sm:gap-2 sm:text-xs"
+            >
+              <QrCode className="h-3.5 w-3.5 text-sci-cyan" />
+              Escanear Acceso
+            </TabsTrigger>
+          )}
+
+          {canExpel && (
+            <TabsTrigger
+              value="expulsiones"
+              className="shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-3 py-2 text-center text-[11px] font-medium sm:gap-2 sm:text-xs"
+            >
+              <UserX className="h-3.5 w-3.5 text-sci-red" />
+              Expulsiones
+            </TabsTrigger>
           )}
 
           {canEdit && (
-           <TabsTrigger
-  value="editar"
-  className="min-w-0 flex-1 cursor-pointer justify-center gap-1.5 whitespace-normal px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
->
-  <PencilLine className="h-3.5 w-3.5" />
-  Modificar Examen
-</TabsTrigger>
+            <TabsTrigger
+              value="editar"
+              className="shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-3 py-2 text-center text-[11px] font-medium sm:gap-2 sm:text-xs"
+            >
+              <PencilLine className="h-3.5 w-3.5" />
+              Modificar Examen
+            </TabsTrigger>
           )}
         </TabsList>
 
@@ -209,6 +220,12 @@ export default function DetalleExamenPage() {
         {canManage && (
           <TabsContent value="escaner">
             <DetalleEscanerTab exam={exam} />
+          </TabsContent>
+        )}
+
+        {canExpel && (
+          <TabsContent value="expulsiones">
+            <DetalleExpulsionesTab exam={exam} />
           </TabsContent>
         )}
 
