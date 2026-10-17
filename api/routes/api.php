@@ -17,6 +17,7 @@ use App\Http\Controllers\PrerrequisitoController;
 use App\Http\Controllers\VerificacionController;
 use App\Http\Controllers\CargaMasivaEstudianteController;
 use App\Http\Controllers\ConfiguracionSistemaController;
+use App\Http\Controllers\ExpulsionController;
 use App\Models\Admin;
 use App\Models\Docente;
 use App\Models\Auxiliar;
@@ -192,6 +193,14 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- HU 10: ESCANEO QR Y CONTROL DE ACCESO ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::post('examenes/{id}/verificar-ingreso', [VerificacionController::class, 'verificarIngreso']);
+    });
+
+    // --- HU 15: REGISTRO DE EXPULSIONES ---
+    Route::middleware('role:docente,auxiliar')->group(function () {
+        Route::post(
+            'examenes/{id}/expulsiones',
+            [ExpulsionController::class, 'store']
+        );
     });
 
     Route::post('/examenes/{id}/registro-manual', [VerificacionController::class, 'registrarIngresoManual']);
