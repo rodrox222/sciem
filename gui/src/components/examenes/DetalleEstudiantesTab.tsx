@@ -21,6 +21,13 @@ import { InhabilitarEstudianteModal } from '@/components/estudiantes/Inhabilitar
 import { EstudianteQrModal } from '@/components/estudiantes/EstudianteQrModal'
 import { PrerrequisitosEstudianteModal } from '@/components/estudiantes/PrerrequisitosEstudianteModal'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   prerrequisitosService,
   type Prerrequisito,
 } from '@/services/prerrequisitos.service'
@@ -340,23 +347,39 @@ const openEditStudent = async (student: EstudianteInscritoExamen) => {
   </Card>
 )}
 
-{prerrequisitoFormOpen && canManage && (
-  <Card className="border-sci-cyan/30 bg-white shadow-sm">
-    <CardContent className="p-5">
-      <form onSubmit={handleSavePrerrequisito} className="space-y-4">
-        <div>
-          <h3 className="text-sm font-bold text-sci-navy">
-            Nuevo prerrequisito
-          </h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Define una condición que deben cumplir los estudiantes.
-          </p>
-        </div>
 
+{prerrequisitoFormOpen && canManage && (
+  <Dialog
+    open={prerrequisitoFormOpen}
+    onOpenChange={(open) => {
+      if (!savingPrerrequisito) {
+        setPrerrequisitoFormOpen(open)
+
+        if (!open) {
+          setPrerrequisitoTitulo('')
+          setPrerrequisitoDescripcion('')
+          setError('')
+        }
+      }
+    }}
+  >
+    <DialogContent className="sm:max-w-lg">
+      <DialogHeader>
+        <DialogTitle>Nuevo prerrequisito</DialogTitle>
+        <DialogDescription>
+          Define una condición que deben cumplir los estudiantes.
+        </DialogDescription>
+      </DialogHeader>
+
+      <form onSubmit={handleSavePrerrequisito} className="space-y-4">
         <div className="space-y-2">
-          <label htmlFor="prerrequisito-titulo" className="text-sm font-medium">
+          <label
+            htmlFor="prerrequisito-titulo"
+            className="text-sm font-medium"
+          >
             Título *
           </label>
+
           <Input
             id="prerrequisito-titulo"
             value={prerrequisitoTitulo}
@@ -366,25 +389,31 @@ const openEditStudent = async (student: EstudianteInscritoExamen) => {
             required
             disabled={savingPrerrequisito}
           />
+
           <p className="text-xs text-muted-foreground">
             {prerrequisitoTitulo.length}/150 caracteres
           </p>
         </div>
 
         <div className="space-y-2">
-          <label htmlFor="prerrequisito-descripcion" className="text-sm font-medium">
+          <label
+            htmlFor="prerrequisito-descripcion"
+            className="text-sm font-medium"
+          >
             Descripción
           </label>
+
           <textarea
             id="prerrequisito-descripcion"
             value={prerrequisitoDescripcion}
             onChange={(e) => setPrerrequisitoDescripcion(e.target.value)}
             placeholder="Describe qué debe cumplir el estudiante."
             maxLength={500}
-            rows={3}
+            rows={4}
             disabled={savingPrerrequisito}
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           />
+
           <p className="text-xs text-muted-foreground">
             {prerrequisitoDescripcion.length}/500 caracteres
           </p>
@@ -413,13 +442,16 @@ const openEditStudent = async (student: EstudianteInscritoExamen) => {
             {savingPrerrequisito && (
               <LoaderCircle className="h-4 w-4 animate-spin" />
             )}
-            {savingPrerrequisito ? 'Guardando...' : 'Guardar prerrequisito'}
+            {savingPrerrequisito
+              ? 'Guardando...'
+              : 'Guardar prerrequisito'}
           </Button>
         </div>
       </form>
-    </CardContent>
-  </Card>
+    </DialogContent>
+  </Dialog>
 )}
+
 
       {/* Buscador */}
       <form onSubmit={handleSearch} className="flex gap-2">
