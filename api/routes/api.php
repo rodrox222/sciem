@@ -205,14 +205,17 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // HU 18: MODULO DE ESTUDIANTES
-    Route::middleware('role:auxiliar,estudiante')->group(function () {
-        // HU18: Completar o cambiar CI
-        Route::match(['post', 'patch'], 'estudiantes/{id}/completar-datos', [EstudianteController::class, 'completarDatos']);
-        // HU18: Subir foto facial a Cloudinary
-        Route::post('estudiantes/{id}/foto', [EstudianteController::class, 'subirFoto']);
-        // HU18: Consultar exámenes inscritos y estado de habilitación
-        Route::get('estudiantes/{id}/examenes', [EstudianteController::class, 'misExamenes']);
-        // HU18: Generar token QR dinámico
-        Route::post('estudiantes/{id}/examenes/{idExamen}/qr-token', [EstudianteController::class, 'generarTokenQr']);
+    Route::middleware('role:estudiante')->prefix('estudiante')->group(function () {
+        // Completar o cambiar CI
+        Route::match(['post', 'patch'], '/completar-datos', [EstudianteController::class, 'completarDatos']);
+        
+        // Subir foto facial a Cloudinary
+        Route::post('/foto', [EstudianteController::class, 'subirFoto']);
+        
+        // Consultar exámenes inscritos y estado de habilitación
+        Route::get('/mis-examenes', [EstudianteController::class, 'misExamenes']);
+        
+        // Generar token QR dinámico para un examen específico
+        Route::post('/examenes/{idExamen}/qr-token', [EstudianteController::class, 'generarTokenQr']);
     });
 });

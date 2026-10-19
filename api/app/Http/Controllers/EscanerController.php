@@ -26,7 +26,7 @@ class EscanerController extends Controller
         $expiraEn = null;
         $qrData = [];
 
-        // 1. Detección robusta de formato (JSON directo de React o Token firmado Base64/JWT)
+        // Detección robusta de formato (JSON directo de React o Token firmado Base64/JWT)
         $trimmedQr = trim($rawQr);
         if (str_starts_with($trimmedQr, '{') && str_ends_with($trimmedQr, '}')) {
             $qrData = json_decode($trimmedQr, true) ?? [];
@@ -46,7 +46,7 @@ class EscanerController extends Controller
         $rol = $usuario ? ($usuario->rol ?? class_basename($usuario)) : 'docente';
         $userId = $usuario?->id;
 
-        // 2. Validar expiración si el QR incluye fecha límite
+        // Validar expiración si el QR incluye fecha límite
         if ($expiraEn && Carbon::now()->greaterThan($expiraEn)) {
             return response()->json([
                 'success'   => false,
@@ -55,7 +55,7 @@ class EscanerController extends Controller
             ], 403);
         }
 
-        // 3. Validar correspondencia de examen si viene dentro del token
+        // Validar correspondencia de examen si viene dentro del token
         if ($idExamenToken && $idExamenToken !== $examen->id) {
             IntentoNoAutorizado::create([
                 'id_examen'                => $examen->id,
@@ -75,7 +75,7 @@ class EscanerController extends Controller
             ], 403);
         }
 
-        // 4. Validar materia si el QR la especifica
+        // Validar materia si el QR la especifica
         $materiaQr = $qrData['materia'] ?? null;
         if ($materiaQr && $examen->materia && strcasecmp(trim($materiaQr), trim($examen->materia->nombre)) !== 0) {
             IntentoNoAutorizado::create([
@@ -96,7 +96,7 @@ class EscanerController extends Controller
             ], 403);
         }
 
-        // 5. Buscar estudiante en el sistema universitario
+        // Buscar estudiante en el sistema universitario
         $estudiante = Estudiante::where('codigo_sis', $codigoSis)->first();
 
         if (!$estudiante) {
@@ -118,7 +118,7 @@ class EscanerController extends Controller
             ], 403);
         }
 
-        // 6. CASO A: Verificar si está matriculado en este examen
+        // CASO A: Verificar si está matriculado en este examen
         $inscripcion = DB::table('estudiante_examen')
             ->where('id_examen', $examen->id)
             ->where('id_estudiante', $estudiante->id)
@@ -147,7 +147,7 @@ class EscanerController extends Controller
             ], 403);
         }
 
-        // 7. CASO B: Verificar si está inhabilitado por prerrequisitos
+        // CASO B: Verificar si está inhabilitado por prerrequisitos
         $estado = $inscripcion->estado ?? 'Inhabilitado';
 
         if ($estado !== 'Habilitado') {
@@ -174,11 +174,13 @@ class EscanerController extends Controller
                 'estudiante' => [
                     'nombre' => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
                     'sis'    => $estudiante->codigo_sis,
+                    'ci'       => $estudiante->ci,
+                    'foto_url' => $estudiante->foto_perfil_url,
                 ]
             ], 403);
         }
 
-        // 8. Si cumple todo, registrar ingreso en la tabla pivote
+        // Si cumple todo, registrar ingreso en la tabla pivote
         DB::table('estudiante_examen')
             ->where('id_examen', $examen->id)
             ->where('id_estudiante', $estudiante->id)
@@ -193,6 +195,8 @@ class EscanerController extends Controller
             'estudiante' => [
                 'nombre' => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
                 'sis'    => $estudiante->codigo_sis,
+                'ci'       => $estudiante->ci,
+                'foto_url' => $estudiante->foto_perfil_url,
             ]
         ], 200);
     }

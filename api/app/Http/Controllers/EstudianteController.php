@@ -13,11 +13,12 @@ use App\Models\LogAuditoria;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 use App\Http\Requests\CompletarDatosEstudianteRequest;
 use App\Http\Requests\SubirFotoEstudianteRequest;
-use Cloudinary\Cloudinary;
 use Illuminate\Support\Facades\Log;
+use Cloudinary\Cloudinary;
 
 class EstudianteController extends Controller
 {
@@ -214,30 +215,41 @@ class EstudianteController extends Controller
         ]);
     }
 
-    public function completarDatos(CompletarDatosEstudianteRequest $request, string $id): JsonResponse
+    public function completarDatos(CompletarDatosEstudianteRequest $request): JsonResponse
     {
-        $estudiante = Estudiante::findOrFail($id);
+        /** @var Estudiante $estudiante */
+        $estudiante = $request->user();
 
-        $estudiante->ci = $request->input('ci');
-        $estudiante->ci_extension = $request->input('ci_extension');
-
-        // Si ya cuenta con foto guardada, se marca completado el primer acceso
-        if (!empty($estudiante->foto_perfil_url)) {
-            $estudiante->primer_acceso_completado = true;
+        if (!$estudiante instanceof Estudiante) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Esta acción solo está permitida para estudiantes.',
+            ], 403);
         }
 
+        $data = $request->validated();
+
+        if (empty($estudiante->foto_perfil_url)) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'Debe subir su fotografía de perfil antes de completar el registro.',
+                'error_type' => 'FOTO_REQUERIDA'
+            ], 422);
+        }
+
+        $estudiante->ci                       = trim($data['ci']);
+        $estudiante->ci_extension             = !empty($data['ci_extension']) ? strtoupper(trim($data['ci_extension'])) : null;
+        $estudiante->primer_acceso_completado = true;
         $estudiante->save();
 
         return response()->json([
             'success' => true,
-            'message' => 'Datos de identidad registrados exitosamente.',
+            'message' => 'Perfil completado exitosamente.',
             'data'    => [
                 'id'                       => $estudiante->id,
                 'codigo_sis'               => $estudiante->codigo_sis,
                 'ci'                       => $estudiante->ci,
                 'ci_extension'             => $estudiante->ci_extension,
-                'nombre_completo'          => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
-                'foto_perfil_url'          => $estudiante->foto_perfil_url,
                 'primer_acceso_completado' => $estudiante->primer_acceso_completado,
             ],
         ], 200);
@@ -246,127 +258,67 @@ class EstudianteController extends Controller
     /**
      * HU18 Subir y almacenar fotografía facial en Cloudinary
      */
-    public function subirFoto(SubirFotoEstudianteRequest $request, string $id): JsonResponse
+    public function subirFoto(Request $request): JsonResponse
     {
-        $estudiante = Estudiante::find($id);
+        /** @var Estudiante $estudiante */
+        $estudiante = $request->user();
 
-        if (!$estudiante) {
+        if (!$estudiante instanceof Estudiante) {
             return response()->json([
-                'success'    => false,
-                'message'    => 'El estudiante no existe en el sistema.',
-                'error_type' => 'ESTUDIANTE_NO_ENCONTRADO',
-            ], 404);
+                'success' => false,
+                'message' => 'Esta acción solo está permitida para estudiantes.',
+            ], 403);
         }
 
-        try {
-            $cloudinary = new Cloudinary(env('CLOUDINARY_URL'));
+        $request->validate([
+            'foto' => 'required|image|mimes:jpeg,png,jpg|max:5120',
+        ]);
 
-            // Eliminar foto previa en Cloudinary si ya existía para ahorrar cuota
-            if (!empty($estudiante->foto_perfil_url)) {
-                $publicIdAnterior = $this->extraerPublicId($estudiante->foto_perfil_url);
-                if ($publicIdAnterior) {
-                    try {
-                        $cloudinary->uploadApi()->destroy($publicIdAnterior);
-                    } catch (\Throwable $th) {
-                        Log::warning("No se pudo eliminar foto previa en Cloudinary: " . $th->getMessage());
-                    }
-                }
-            }
+        $cloudinary = new Cloudinary(config('cloudinary.cloud_url') ?? env('CLOUDINARY_URL'));
 
-            // Subir la imagen recibida
-            $archivo = $request->file('foto');
-            $resultado = $cloudinary->uploadApi()->upload(
-                $archivo->getRealPath(),
-                [
-                    'folder'         => 'sciem/estudiantes_facial',
-                    'public_id'      => "facial_{$estudiante->codigo_sis}_" . time(),
-                    'overwrite'      => true,
-                    'resource_type'  => 'image',
-                    'transformation' => [
-                        'width'   => 500,
-                        'height'  => 500,
-                        'crop'    => 'thumb',
-                        'gravity' => 'face',
-                        'quality' => 'auto',
-                    ],
-                ]
-            );
+        $uploadResult = $cloudinary->uploadApi()->upload(
+            $request->file('foto')->getRealPath(),
+            [
+                'folder' => 'sciem/estudiantes_facial',
+            ]
+        );
 
-            // Guardar URL HTTPS en PostgreSQL
-            $estudiante->foto_perfil_url = $resultado['secure_url'];
+        $estudiante->foto_perfil_url = $uploadResult['secure_url'];
 
-            // Si ya cuenta con CI registrado, se completa el primer acceso
-            if (!empty($estudiante->ci)) {
-                $estudiante->primer_acceso_completado = true;
-            }
+        $estudiante->primer_acceso_completado = !empty($estudiante->foto_perfil_url) && !empty($estudiante->ci);
+        $estudiante->save();
 
-            $estudiante->save();
-
-            $this->registrarAuditoria($request, 'FOTO_FACIAL_ACTUALIZADA', [
-                'estudiante_id' => $estudiante->id,
-                'codigo_sis'    => $estudiante->codigo_sis,
-                'url'           => $estudiante->foto_perfil_url,
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Fotografía facial validada y guardada exitosamente.',
-                'data'    => [
-                    'id'                       => $estudiante->id,
-                    'codigo_sis'               => $estudiante->codigo_sis,
-                    'ci'                       => $estudiante->ci,
-                    'ci_extension'             => $estudiante->ci_extension,
-                    'foto_perfil_url'          => $estudiante->foto_perfil_url,
-                    'primer_acceso_completado' => (bool) $estudiante->primer_acceso_completado,
-                ],
-            ], 200);
-
-        } catch (\Throwable $e) {
-            Log::error("Error Cloudinary: " . $e->getMessage());
-
-            return response()->json([
-                'success'    => false,
-                'message'    => 'Error al conectar con el servicio de almacenamiento en la nube.',
-                'error_type' => 'FALLO_CLOUDINARY',
-                'detalle'    => $e->getMessage(),
-            ], 500);
-        }
+        return response()->json([
+            'success' => true,
+            'message' => 'Fotografía facial validada y guardada exitosamente.',
+            'data'    => [
+                'id'                       => $estudiante->id,
+                'codigo_sis'               => $estudiante->codigo_sis,
+                'ci'                       => $estudiante->ci,
+                'ci_extension'             => $estudiante->ci_extension,
+                'foto_perfil_url'          => $estudiante->foto_perfil_url,
+                'primer_acceso_completado' => (bool) $estudiante->primer_acceso_completado,
+            ],
+        ], 200);
     }
 
-    /**
-     * Helper para extraer el public_id de la URL de Cloudinary
-     */
-    private function extraerPublicId(?string $url): ?string
-    {
-        if (!$url || !str_contains($url, 'res.cloudinary.com')) {
-            return null;
-        }
-
-        $partes = explode('/upload/', $url);
-        if (count($partes) < 2) {
-            return null;
-        }
-
-        $sinVersion = preg_replace('/^v\d+\//', '', $partes[1]);
-        return preg_replace('/\.[^.]+$/', '', $sinVersion);
-    }
 
     /**
      * HU18 Consultar exámenes inscritos y estado de habilitación
      */
-    public function misExamenes(Request $request, string $id): JsonResponse
-    {
-        $estudiante = Estudiante::find($id);
 
-        if (!$estudiante) {
+    public function misExamenes(Request $request): JsonResponse
+    {
+        /** @var Estudiante $estudiante */
+        $estudiante = $request->user();
+
+        if (!$estudiante instanceof Estudiante) {
             return response()->json([
-                'success'    => false,
-                'message'    => 'El estudiante no existe en el sistema.',
-                'error_type' => 'ESTUDIANTE_NO_ENCONTRADO',
-            ], 404);
+                'success' => false,
+                'message' => 'Esta acción solo está permitida para estudiantes.',
+            ], 403);
         }
 
-        // Obtiene exclusivamente los exámenes donde el estudiante figura en estudiante_examen
         $examenes = $estudiante->examenes()
             ->with([
                 'materia:id,nombre',
@@ -389,7 +341,7 @@ class EstudianteController extends Controller
                     'fecha'         => $examen->fecha,
                     'hora_ini'      => $examen->hora_ini ?? $examen->hora_inicio,
                     'hora_fin'      => $examen->hora_fin,
-                    'estado'        => $examen->pivot->estado, // 'Habilitado' o 'Inhabilitado'
+                    'estado'        => $examen->pivot->estado,
                     'motivo_estado' => $examen->pivot->motivo_estado,
                 ];
             });
@@ -404,29 +356,45 @@ class EstudianteController extends Controller
     /**
      * HU18 Generar token firmado para el código QR dinámico
      */
-    public function generarTokenQr(Request $request, string $idEstudiante, string $idExamen): JsonResponse
+    public function generarTokenQr(Request $request, string $idExamen): JsonResponse
     {
-        $estudiante = Estudiante::find($idEstudiante);
-        if (!$estudiante) {
+        /** @var Estudiante $estudiante */
+        $estudiante = $request->user();
+
+        if (!$estudiante instanceof Estudiante) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Esta acción solo está permitida para estudiantes.',
+            ], 403);
+        }
+
+        if (!Str::isUuid($idExamen)) {
             return response()->json([
                 'success'    => false,
-                'message'    => 'Estudiante no encontrado.',
-                'error_type' => 'ESTUDIANTE_NO_ENCONTRADO'
+                'message'    => 'El identificador del examen no es válido.',
+                'error_type' => 'EXAMEN_INVALIDO',
             ], 404);
         }
 
-        // Requiere registro obligatorio previo (CI y Foto facial)
+        $examen = Examen::find($idExamen);
+        if (!$examen) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'El examen especificado no existe.',
+                'error_type' => 'EXAMEN_NO_ENCONTRADO',
+            ], 404);
+        }
+
         if (!$estudiante->primer_acceso_completado) {
             return response()->json([
                 'success'    => false,
                 'message'    => 'Debe registrar su Carnet de Identidad y foto de perfil antes de generar su QR.',
-                'error_type' => 'REGISTRO_INCOMPLETO'
+                'error_type' => 'REGISTRO_INCOMPLETO',
             ], 403);
         }
 
-        // Verificar inscripción al examen
         $inscripcion = DB::table('estudiante_examen')
-            ->where('id_estudiante', $idEstudiante)
+            ->where('id_estudiante', $estudiante->id)
             ->where('id_examen', $idExamen)
             ->first();
 
@@ -434,11 +402,10 @@ class EstudianteController extends Controller
             return response()->json([
                 'success'    => false,
                 'message'    => 'No se encuentra registrado en este examen.',
-                'error_type' => 'NO_INSCRITO'
+                'error_type' => 'NO_INSCRITO',
             ], 404);
         }
 
-        // Solo genera QR si está Habilitado
         if ($inscripcion->estado !== 'Habilitado') {
             return response()->json([
                 'success'       => false,
@@ -448,7 +415,6 @@ class EstudianteController extends Controller
             ], 403);
         }
 
-        // Criptografía: Payload firmado con 15 minutos de caducidad
         $expiraEn = now()->addMinutes(15)->timestamp;
         $payload = [
             'id_estudiante' => $estudiante->id,
@@ -456,7 +422,7 @@ class EstudianteController extends Controller
             'ci'            => $estudiante->ci,
             'id_examen'     => $idExamen,
             'exp'           => $expiraEn,
-            'nonce'         => \Illuminate\Support\Str::random(10),
+            'nonce'         => Str::random(10),
         ];
 
         $payloadBase64 = base64_encode(json_encode($payload));
