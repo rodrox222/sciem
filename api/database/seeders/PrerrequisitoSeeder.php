@@ -10,7 +10,6 @@ use App\Models\Materia;
 use App\Models\PrerrequisitoExamen;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 class PrerrequisitoSeeder extends Seeder
@@ -87,20 +86,8 @@ class PrerrequisitoSeeder extends Seeder
             );
         }
 
-        // Obtener los estudiantes existentes y asegurar que su contraseña 
-        $estudiantes = Estudiante::all();
-
-        foreach ($estudiantes as $estudiante) {
-            $passwordGenerada = $this->generarPasswordEstudiante(
-                $estudiante->codigo_sis,
-                $estudiante->nombre,
-                $estudiante->apellido_paterno,
-                $estudiante->apellido_materno
-            );
-
-            $estudiante->password = Hash::make($passwordGenerada);
-            $estudiante->save();
-        }
+        // Obtener los estudiantes creados por EstudianteSeeder
+        $estudiantes = Estudiante::orderBy('codigo_sis')->get();
 
         // Vincular y evaluar el cumplimiento de los 3 estudiantes de muestra
         if ($estudiantes->count() > 0) {
@@ -108,7 +95,7 @@ class PrerrequisitoSeeder extends Seeder
             $req2 = 'bbbbbbbb-2222-2222-2222-222222222222';
             $req3 = 'cccccccc-3333-3333-3333-333333333333';
 
-            // Estudiante 1: Cumple los 3 -> Habilitado
+            // Estudiante 1 (Carlos): Cumple los 3 -> Habilitado
             if (isset($estudiantes[0])) {
                 $e1 = $estudiantes[0]->id;
                 $this->asignarCumplimiento($req1, $e1, true, $docente->id);
@@ -128,7 +115,7 @@ class PrerrequisitoSeeder extends Seeder
                 );
             }
 
-            // Estudiante 2: Falta Sprint 1 -> Inhabilitada
+            // Estudiante 2 (Mariana): Falta Sprint 1 -> Inhabilitada
             if (isset($estudiantes[1])) {
                 $e2 = $estudiantes[1]->id;
                 $this->asignarCumplimiento($req1, $e2, true, $docente->id);
@@ -139,7 +126,7 @@ class PrerrequisitoSeeder extends Seeder
                     ['id_examen' => $examen->id, 'id_estudiante' => $e2],
                     [
                         'estado'                    => 'Inhabilitado',
-                        'motivo_estado'             => null,
+                        'motivo_estado'             => 'Falta aprobación de Defensa de Sprint 1.',
                         'ajuste_manual'             => false,
                         'modificado_por_docente_id' => null,
                         'fecha_ajuste_manual'       => null,
@@ -148,7 +135,7 @@ class PrerrequisitoSeeder extends Seeder
                 );
             }
 
-            // Estudiante 3: Falta asistencia -> Inhabilitado
+            // Estudiante 3 (Rodrigo): Falta asistencia -> Inhabilitado
             if (isset($estudiantes[2])) {
                 $e3 = $estudiantes[2]->id;
                 $this->asignarCumplimiento($req1, $e3, false, $docente->id);
@@ -159,7 +146,7 @@ class PrerrequisitoSeeder extends Seeder
                     ['id_examen' => $examen->id, 'id_estudiante' => $e3],
                     [
                         'estado'                    => 'Inhabilitado',
-                        'motivo_estado'             => null,
+                        'motivo_estado'             => 'No cumple con el 80% de asistencia mínima.',
                         'ajuste_manual'             => false,
                         'modificado_por_docente_id' => null,
                         'fecha_ajuste_manual'       => null,
@@ -169,7 +156,7 @@ class PrerrequisitoSeeder extends Seeder
             }
         }
 
-        $this->command->info("Examen con UUID {$examenIdFijo}, 3 prerrequisitos y estudiantes actualizados con su contraseña por fórmula.");
+        $this->command->info("Examen con UUID {$examenIdFijo} y prerrequisitos asociados exitosamente.");
     }
 
     private function asignarCumplimiento(string $prerrequisitoId, string $estudianteId, bool $cumplido, ?string $docenteId): void
@@ -187,31 +174,5 @@ class PrerrequisitoSeeder extends Seeder
                 'updated_at'              => now(),
             ]
         );
-    }
-
-    /**
-     * Genera la contraseña combinando Código SIS + Iniciales de nombres y apellidos en mayúsculas
-     */
-    private function generarPasswordEstudiante(string $sis, string $nombres, string $paterno, ?string $materno): string
-    {
-        $iniciales = '';
-
-        foreach (preg_split('/\s+/', trim($nombres)) as $nombre) {
-            if ($nombre !== '') {
-                $iniciales .= mb_substr($nombre, 0, 1);
-            }
-        }
-
-        if (!empty($paterno)) {
-            $partesPaterno = preg_split('/\s+/', trim($paterno));
-            $iniciales .= mb_substr($partesPaterno[0], 0, 1);
-        }
-
-        if (!empty($materno)) {
-            $partesMaterno = preg_split('/\s+/', trim($materno));
-            $iniciales .= mb_substr($partesMaterno[0], 0, 1);
-        }
-
-        return $sis . mb_strtoupper($iniciales);
     }
 }
