@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class UserController extends Controller
@@ -59,7 +60,7 @@ class UserController extends Controller
     }
 
     /**
-     * Crear un nuevo usuario compatible con PostgreSQL
+     * Crear un nuevo usuario compatible con el Pooler de PostgreSQL/Supabase
      */
     public function store(StoreUserRequest $request): JsonResponse
     {
@@ -67,7 +68,7 @@ class UserController extends Controller
         $tipo = $data['tipo_usuario'];
         unset($data['tipo_usuario']);
 
-        $activo = isset($data['activo'])
+        $activoBool = isset($data['activo'])
             ? filter_var($data['activo'], FILTER_VALIDATE_BOOLEAN)
             : true;
 
@@ -75,10 +76,12 @@ class UserController extends Controller
             unset($data['email']);
         }
 
+        // Blindaje contra la emulación de PDO: inyectar el literal SQL directo
+        $data['activo'] = $activoBool ? DB::raw('true') : DB::raw('false');
+
         $modelClass = $this->obtenerClaseModelo($tipo);
         $user = new $modelClass();
         $user->fill($data);
-        $user->activo = $activo;
         $user->save();
 
         try {
@@ -139,7 +142,8 @@ class UserController extends Controller
         }
 
         if (isset($data['activo'])) {
-            $data['activo'] = filter_var($data['activo'], FILTER_VALIDATE_BOOLEAN);
+            $esActivo = filter_var($data['activo'], FILTER_VALIDATE_BOOLEAN);
+            $data['activo'] = $esActivo ? DB::raw('true') : DB::raw('false');
         }
 
         $user->update($data);
@@ -178,7 +182,7 @@ class UserController extends Controller
             return $error;
         }
 
-        $user->activo = false;
+        $user->activo = DB::raw('false');
         $user->save();
 
         try {
@@ -288,7 +292,7 @@ class UserController extends Controller
         }
 
         if ($activo !== null) {
-            $query->where('activo', $activo);
+            $query->whereRaw('activo is ' . ($activo ? 'true' : 'false'));
         }
     }
 
@@ -299,7 +303,7 @@ class UserController extends Controller
         }
 
         if ($tipo === 'admin' && $user->activo) {
-            $adminsActivos = Admin::where('activo', true)->count();
+            $adminsActivos = Admin::whereRaw('activo is true')->count();
             if ($adminsActivos <= 1) {
                 return response()->json([
                     'message' => 'No se puede desactivar al único administrador activo.'
