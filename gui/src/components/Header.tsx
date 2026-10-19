@@ -35,6 +35,9 @@ const NAV_ITEMS_BY_ROLE: Record<string, NavItem[]> = {
     { name: 'Control de ingreso', href: '/control' },
     { name: 'Aulas', href: '/aulas' },
   ],
+   estudiante: [
+    { name: 'Mi módulo', href: '/estudiante' },
+  ],
 };
 
 export const Header: React.FC = () => {

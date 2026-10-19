@@ -5,7 +5,7 @@ import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute'
 import PublicLayout from './layouts/PublicLayout'
 import MainLayout from './layouts/MainLayout'
 import AuthLayout from './layouts/AuthLayout'
-
+import EstudianteDashboardPage from './pages/EstudianteDashboardPage'
 // Páginas públicas
 import { HomePage } from './pages/HomePage'
 import CronogramaPublicPage from './pages/CronogramaPublicPage'
@@ -52,6 +52,12 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<MainLayout />}>
             <Route path="/dashboard" element={<DashboardPage />} />
+            <Route element={<ProtectedRoute allowedRoles={['estudiante']} />}>
+  <Route
+    path="/estudiante"
+    element={<EstudianteDashboardPage />}
+  />
+</Route>
             <Route path="/examenes" element={<ExamenesPage />} />
             <Route path="/estudiantes" element={<EstudiantesPage />} />
             <Route path="/examenes" element={<ExamenesPage />} />
