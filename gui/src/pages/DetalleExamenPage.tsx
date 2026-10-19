@@ -7,6 +7,7 @@ import {
   Users,
   PencilLine,
   QrCode,
+  ShieldAlert,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -186,7 +187,15 @@ export default function DetalleExamenPage() {
   Escanear Acceso
 </TabsTrigger>
           )}
-
+          {canManage && (
+            <TabsTrigger
+              value="intentos"
+              className="min-w-0 flex-1 cursor-pointer justify-center gap-1.5 whitespace-normal px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
+            >
+              <ShieldAlert className="h-3.5 w-3.5 text-sci-amber" />
+              Intentos no autorizados
+            </TabsTrigger>
+          )}
           {canEdit && (
            <TabsTrigger
   value="editar"
@@ -215,6 +224,28 @@ export default function DetalleExamenPage() {
         {canEdit && (
           <TabsContent value="editar">
             <DetalleEditarTab exam={exam} onUpdated={loadExam} />
+          </TabsContent>
+        )}
+                {canManage && (
+          <TabsContent value="intentos">
+            <div className="rounded-2xl border border-border bg-card p-6">
+              <h2 className="text-base font-bold text-sci-navy">
+                Intentos no autorizados
+              </h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Consulta el historial de intentos no autorizados de este examen.
+              </p>
+              <Button
+                type="button"
+                className="mt-4 cursor-pointer gap-2 bg-sci-blue text-white hover:opacity-90"
+                onClick={() =>
+                  navigate(`/examenes/${id}/intentos-no-autorizados`)
+                }
+              >
+                <ShieldAlert className="h-4 w-4" />
+                Ver historial de intentos
+              </Button>
+            </div>
           </TabsContent>
         )}
       </Tabs>
