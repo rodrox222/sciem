@@ -39,7 +39,7 @@ export default function DetalleExamenPage() {
 
   const role = (localStorage.getItem('user_role') ?? '').toLowerCase()
   const canManage = ['admin', 'administrador', 'docente', 'auxiliar'].includes(role)
-  const canExpel = ['docente', 'auxiliar'].includes(role)
+  const canExpel = canManage
 
   const requestedTab = searchParams.get('tab') || 'info'
   const activeTab =
@@ -162,17 +162,17 @@ export default function DetalleExamenPage() {
         onValueChange={(val) => setSearchParams({ tab: val })}
         className="space-y-6"
       >
-        <TabsList className="flex h-auto w-full flex-nowrap items-center justify-start gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <TabsList className="flex h-auto w-full min-w-0 flex-nowrap items-stretch justify-start gap-1 overflow-x-auto overscroll-x-contain rounded-xl border border-border bg-card p-1 touch-pan-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch] lg:overflow-visible sm:items-center">
           <TabsTrigger
             value="info"
-            className="shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-3 py-2 text-center text-[11px] font-medium sm:gap-2 sm:text-xs"
+            className="min-w-0 flex-none shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
           >
             <BookOpen className="h-3.5 w-3.5" /> Ficha Técnica
           </TabsTrigger>
 
           <TabsTrigger
             value="estudiantes"
-            className="shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-3 py-2 text-center text-[11px] font-medium sm:gap-2 sm:text-xs"
+            className="min-w-0 flex-none shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
           >
             <Users className="h-3.5 w-3.5" />
             Padrón de Estudiantes
@@ -181,7 +181,7 @@ export default function DetalleExamenPage() {
           {canManage && (
             <TabsTrigger
               value="escaner"
-              className="shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-3 py-2 text-center text-[11px] font-medium sm:gap-2 sm:text-xs"
+              className="min-w-0 flex-none shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
             >
               <QrCode className="h-3.5 w-3.5 text-sci-cyan" />
               Escanear Acceso
@@ -191,7 +191,7 @@ export default function DetalleExamenPage() {
           {canExpel && (
             <TabsTrigger
               value="expulsiones"
-              className="shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-3 py-2 text-center text-[11px] font-medium sm:gap-2 sm:text-xs"
+              className="min-w-0 flex-none shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
             >
               <UserX className="h-3.5 w-3.5 text-sci-red" />
               Expulsiones
@@ -201,7 +201,7 @@ export default function DetalleExamenPage() {
           {canEdit && (
             <TabsTrigger
               value="editar"
-              className="shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-3 py-2 text-center text-[11px] font-medium sm:gap-2 sm:text-xs"
+              className="min-w-0 flex-none shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
             >
               <PencilLine className="h-3.5 w-3.5" />
               Modificar Examen

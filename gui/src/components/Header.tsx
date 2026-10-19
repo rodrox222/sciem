@@ -87,7 +87,7 @@ export const Header: React.FC = () => {
           </div>
 
           {/* Escudos institucionales (Desktop) */}
-          <div className="hidden lg:flex items-center gap-8">
+          <div className="hidden xl:flex items-center gap-8">
             <div className="flex items-center gap-2.5">
               <img src={logoFcyt} alt="FCyT" className="h-8 w-auto object-contain" />
               <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">
@@ -149,7 +149,7 @@ export const Header: React.FC = () => {
               variant="ghost"
               size="icon"
               onClick={() => setMobileOpen((prev) => !prev)}
-              className="sm:hidden"
+              className="xl:hidden"
               aria-label="Alternar menú de navegación"
             >
               {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -158,7 +158,7 @@ export const Header: React.FC = () => {
         </div>
 
         {/* Navegación Desktop */}
-        <nav className="hidden sm:flex justify-center border-t border-border pt-1 text-xs sm:text-sm font-medium">
+        <nav className="hidden xl:flex justify-center border-t border-border pt-1 text-xs sm:text-sm font-medium">
           {isAuthenticated ? (
             navItems.map((item) => {
               const active = location.pathname === item.href;
@@ -215,7 +215,7 @@ export const Header: React.FC = () => {
 
         {/* Menú Desplegable Móvil */}
         {mobileOpen && (
-          <nav className="border-t border-border py-3 sm:hidden space-y-1">
+          <nav className="border-t border-border py-3 xl:hidden space-y-1">
             {isAuthenticated ? (
               <>
                 {navItems.map((item) => (

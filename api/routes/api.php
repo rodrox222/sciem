@@ -197,7 +197,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // --- HU 15: REGISTRO DE EXPULSIONES ---
-    Route::middleware('role:docente,auxiliar')->group(function () {
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::post(
             'examenes/{id}/expulsiones',
             [ExpulsionController::class, 'store']
