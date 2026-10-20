@@ -64,4 +64,27 @@ class Estudiante extends Authenticatable
     {
         return $this->hasMany(LogAsistencia::class, 'id_estudiante');
     }
+
+    public static function generarPasswordPorDefecto(string $codigoSis, string $nombre, ?string $paterno = null, ?string $materno = null): string
+    {
+        $iniciales = '';
+
+        // Primera letra del primer nombre
+        $nombres = explode(' ', trim($nombre));
+        if (!empty($nombres[0])) {
+            $iniciales .= mb_substr($nombres[0], 0, 1);
+        }
+
+        // Primera letra del apellido paterno
+        if (!empty($paterno)) {
+            $iniciales .= mb_substr(trim($paterno), 0, 1);
+        }
+
+        // Primera letra del apellido materno
+        if (!empty($materno)) {
+            $iniciales .= mb_substr(trim($materno), 0, 1);
+        }
+
+        return trim($codigoSis) . mb_strtoupper($iniciales);
+    }
 }
