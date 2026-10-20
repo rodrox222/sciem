@@ -12,6 +12,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class UserController extends Controller
 {
@@ -58,25 +60,41 @@ class UserController extends Controller
     }
 
     /**
-     * Crear un nuevo usuario
+     * Crear un nuevo usuario compatible con el Pooler de PostgreSQL/Supabase
      */
     public function store(StoreUserRequest $request): JsonResponse
     {
         $data = $request->validated();
-        $data['activo'] = $data['activo'] ?? true;
         $tipo = $data['tipo_usuario'];
         unset($data['tipo_usuario']);
 
-        $modelClass = $this->obtenerClaseModelo($tipo);
-        $user = $modelClass::create($data);
+        $activoBool = isset($data['activo'])
+            ? filter_var($data['activo'], FILTER_VALIDATE_BOOLEAN)
+            : true;
 
-        $this->registrarLog($request, 'USUARIO_CREADO', [
-            'tipo_usuario' => $tipo,
-            'target_id'    => $user->id,
-            'ci'           => $user->ci,
-            'ci_extension' => $user->ci_extension ?? null,
-            'email'        => $user->email ?? null,
-        ]);
+        if ($tipo === 'admin') {
+            unset($data['email']);
+        }
+
+        // Blindaje contra la emulación de PDO: inyectar el literal SQL directo
+        $data['activo'] = $activoBool ? DB::raw('true') : DB::raw('false');
+
+        $modelClass = $this->obtenerClaseModelo($tipo);
+        $user = new $modelClass();
+        $user->fill($data);
+        $user->save();
+
+        try {
+            $this->registrarLog($request, 'USUARIO_CREADO', [
+                'tipo_usuario' => $tipo,
+                'target_id'    => (string) $user->id,
+                'ci'           => $user->ci,
+                'ci_extension' => $user->ci_extension ?? null,
+                'email'        => $user->email ?? null,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('No se pudo registrar log de auditoría al crear usuario: ' . $e->getMessage());
+        }
 
         return response()->json([
             'message' => 'Usuario creado exitosamente.',
@@ -99,7 +117,7 @@ class UserController extends Controller
     }
 
     /**
-     * Actualizar datos de un usuario por su UUID (sin cambio de rol entre tablas)
+     * Actualizar datos de un usuario por su UUID
      */
     public function update(UpdateUserRequest $request, string $id): JsonResponse
     {
@@ -113,26 +131,32 @@ class UserController extends Controller
         $tipoActual = $res['tipo'];
         $data = $request->validated();
 
-        // El rol nunca se modifica en la edición
         unset($data['tipo_usuario']);
 
-        // Si no se envió contraseña nueva, no tocarla
         if (empty($data['password'])) {
             unset($data['password']);
         }
 
-        // Si el usuario es admin, asegurar que no intente guardar email
         if ($tipoActual === 'admin') {
             unset($data['email']);
         }
 
+        if (isset($data['activo'])) {
+            $esActivo = filter_var($data['activo'], FILTER_VALIDATE_BOOLEAN);
+            $data['activo'] = $esActivo ? DB::raw('true') : DB::raw('false');
+        }
+
         $user->update($data);
 
-        $this->registrarLog($request, 'USUARIO_ACTUALIZADO', [
-            'tipo_usuario'        => $tipoActual,
-            'target_id'           => $user->id,
-            'campos_actualizados' => array_keys($data),
-        ]);
+        try {
+            $this->registrarLog($request, 'USUARIO_ACTUALIZADO', [
+                'tipo_usuario'        => $tipoActual,
+                'target_id'           => (string) $user->id,
+                'campos_actualizados' => array_keys($data),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('No se pudo registrar log de auditoría al actualizar usuario: ' . $e->getMessage());
+        }
 
         return response()->json([
             'message' => 'Usuario actualizado exitosamente.',
@@ -158,14 +182,18 @@ class UserController extends Controller
             return $error;
         }
 
-        $user->activo = false;
+        $user->activo = DB::raw('false');
         $user->save();
 
-        $this->registrarLog($request, 'USUARIO_DESACTIVADO', [
-            'tipo_usuario' => $tipo,
-            'target_id'    => $user->id,
-            'motivo'       => 'Baja lógica desde módulo de usuarios',
-        ]);
+        try {
+            $this->registrarLog($request, 'USUARIO_DESACTIVADO', [
+                'tipo_usuario' => $tipo,
+                'target_id'    => (string) $user->id,
+                'motivo'       => 'Baja lógica desde módulo de usuarios',
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('No se pudo registrar log de auditoría al desactivar usuario: ' . $e->getMessage());
+        }
 
         return response()->json(['message' => 'Usuario desactivado exitosamente.']);
     }
@@ -240,7 +268,7 @@ class UserController extends Controller
             'apellido_paterno' => $u->apellido_paterno,
             'apellido_materno' => $u->apellido_materno,
             'email'            => $u->email ?? null,
-            'activo'           => $u->activo,
+            'activo'           => (bool) $u->activo,
             'tipo_usuario'     => $tipo,
             'ultimo_acceso'    => $u->ultimo_acceso,
             'created_at'       => $u->created_at,
@@ -264,7 +292,7 @@ class UserController extends Controller
         }
 
         if ($activo !== null) {
-            $query->where('activo', $activo);
+            $query->whereRaw('activo is ' . ($activo ? 'true' : 'false'));
         }
     }
 
@@ -275,7 +303,7 @@ class UserController extends Controller
         }
 
         if ($tipo === 'admin' && $user->activo) {
-            $adminsActivos = Admin::where('activo', true)->count();
+            $adminsActivos = Admin::whereRaw('activo is true')->count();
             if ($adminsActivos <= 1) {
                 return response()->json([
                     'message' => 'No se puede desactivar al único administrador activo.'

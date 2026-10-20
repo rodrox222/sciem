@@ -30,9 +30,9 @@ class PrerrequisitoController extends Controller
             // Regla: si se agrega un nuevo prerrequisito, los estudiantes sin ajuste manual pasan a Inhabilitado
             DB::table('estudiante_examen')
                 ->where('id_examen', $examen->id)
-                ->where('ajuste_manual', false)
+                ->whereRaw('ajuste_manual is false')
                 ->update([
-                    'estado' => 'Inhabilitado',
+                    'estado'     => 'Inhabilitado',
                     'updated_at' => now(),
                 ]);
 
@@ -40,7 +40,7 @@ class PrerrequisitoController extends Controller
         });
 
         return response()->json([
-            'message' => 'Prerrequisito creado. Se ha actualizado el estado de los alumnos.',
+            'message'       => 'Prerrequisito creado. Se ha actualizado el estado de los alumnos.',
             'prerrequisito' => $prerrequisito,
         ], 201);
     }
@@ -64,7 +64,7 @@ class PrerrequisitoController extends Controller
         DB::transaction(function () use ($prerrequisito, $estudianteId, $cumplido, $docenteId) {
             $prerrequisito->estudiantes()->syncWithoutDetaching([
                 $estudianteId => [
-                    'cumplido'                => $cumplido,
+                    'cumplido'                => $cumplido ? DB::raw('true') : DB::raw('false'),
                     'fecha_cumplimiento'      => $cumplido ? now() : null,
                     'revisado_por_docente_id' => $docenteId,
                     'updated_at'              => now(),
@@ -78,7 +78,7 @@ class PrerrequisitoController extends Controller
                 ->join('prerrequisitos_examen', 'estudiante_prerrequisito.id_prerrequisito', '=', 'prerrequisitos_examen.id')
                 ->where('prerrequisitos_examen.id_examen', $prerrequisito->id_examen)
                 ->where('estudiante_prerrequisito.id_estudiante', $estudianteId)
-                ->where('estudiante_prerrequisito.cumplido', true)
+                ->whereRaw('estudiante_prerrequisito.cumplido is true')
                 ->count();
 
             // Si no fue modificado manualmente, recalcular habilitación
@@ -87,7 +87,7 @@ class PrerrequisitoController extends Controller
                 ->where('id_estudiante', $estudianteId)
                 ->first();
 
-            if ($pivot && !$pivot->ajuste_manual) {
+            if ($pivot && !filter_var($pivot->ajuste_manual, FILTER_VALIDATE_BOOLEAN)) {
                 $nuevoEstado = ($cumplidosCount === $totalReqs) ? 'Habilitado' : 'Inhabilitado';
                 DB::table('estudiante_examen')
                     ->where('id_examen', $prerrequisito->id_examen)
@@ -146,7 +146,7 @@ class PrerrequisitoController extends Controller
                     'id'          => $item->id,
                     'titulo'      => $item->titulo,
                     'descripcion' => $item->descripcion,
-                    'cumplido'    => (bool) $item->cumplido,
+                    'cumplido'    => filter_var($item->cumplido, FILTER_VALIDATE_BOOLEAN),
                 ];
             });
 

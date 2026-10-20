@@ -60,6 +60,7 @@ export async function apiRequest<T>(
   // Normaliza el path para asegurar que empiece con slash
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   const url = `${getBaseUrl()}${cleanPath}`;
+  const method = (options.method ?? 'GET').toUpperCase();
 
   let response: Response;
 
@@ -69,7 +70,8 @@ export async function apiRequest<T>(
       headers,
     });
   } catch {
-    if (retries > 0) {
+    // Solo reintentar peticiones de lectura si hay fallo de conexión
+    if (retries > 0 && method === 'GET') {
       await new Promise((resolve) => setTimeout(resolve, 300));
       return apiRequest<T>(path, options, retries - 1);
     }
@@ -79,8 +81,9 @@ export async function apiRequest<T>(
     );
   }
 
-  // Si Supabase devuelve 503 por colisión momentánea en el pooler, reintenta tras 250ms
-  if (response.status === 503 && retries > 0) {
+  // Si Supabase devuelve 503 por colisión momentánea en el pooler,
+  // reintenta únicamente si el método es GET (lectura idempotente)
+  if (response.status === 503 && retries > 0 && method === 'GET') {
     await new Promise((resolve) => setTimeout(resolve, 250));
     return apiRequest<T>(path, options, retries - 1);
   }
@@ -96,6 +99,7 @@ export async function apiRequest<T>(
     if (response.status === 401) {
       localStorage.removeItem('auth_token');
       localStorage.removeItem('auth_user');
+      localStorage.removeItem('user_role');
     }
 
     throw new ApiError(
