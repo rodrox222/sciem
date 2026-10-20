@@ -55,10 +55,10 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl font-bold text-sci-navy">
             <Megaphone className="h-5 w-5 text-sci-cyan" />
-            Publicar Aviso Operativo
+            Publicar Aviso
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Crea un comunicado general. Si marcas "Es Pública", se verá en la pantalla de inicio.
+            Crea un comunicado general. Si marcas "Pública", se verá en la pantalla de inicio.
           </DialogDescription>
         </DialogHeader>
 
@@ -74,7 +74,7 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
             <Input
               required
               maxLength={255}
-              placeholder="Ej: Cambio de aula, Asueto, Inundación..."
+              placeholder="Ej: Cambio o cierre de aula,..."
               value={formData.titulo}
               onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
               className="text-sm"
@@ -103,7 +103,7 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
               >
                 <option value="Normal">Normal</option>
                 <option value="Alta">Alta</option>
-                <option value="Urgente">Urgente (Rojo)</option>
+                <option value="Urgente">Urgente</option>
               </select>
             </div>
 

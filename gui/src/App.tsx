@@ -9,6 +9,7 @@ import EstudianteDashboardPage from './pages/EstudianteDashboardPage'
 // Páginas públicas
 import { HomePage } from './pages/HomePage'
 import CronogramaPublicPage from './pages/CronogramaPublicPage'
+import { NoticiasPage } from './pages/NoticiasPage'
 
 // Páginas de autenticación
 import { LoginPage } from './pages/LoginPage'
@@ -38,6 +39,7 @@ export default function App() {
         <Route element={<PublicLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/cronograma" element={<CronogramaPublicPage />} />
+          <Route path="/noticias" element={<NoticiasPage />} />
         </Route>
 
         {/* 2. Rutas de acceso (Login y recuperación) con AuthLayout */}

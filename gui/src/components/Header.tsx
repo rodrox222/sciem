@@ -246,7 +246,7 @@ export const Header: React.FC = () => {
                   onClick={() => { setIsNoticiaModalOpen(true); setMobileOpen(false); }}
                   className="block w-full rounded-lg px-4 py-2.5 text-left text-sm font-bold text-sci-cyan hover:bg-muted cursor-pointer"
                 >
-                  + Publicar Aviso Operativo
+                  + Publicar Aviso
                 </button>
               )}
               {isAuthenticated ? (
