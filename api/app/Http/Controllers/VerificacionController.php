@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Estudiante;
 use App\Models\Examen;
 use App\Models\LogAsistencia;
+use App\Models\IntentoNoAutorizado;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -93,7 +94,13 @@ class VerificacionController extends Controller
                 "El código SIS {$codigoSis} no pertenece a ningún estudiante registrado en el sistema.",
                 $qrData
             );
-
+$this->registrarIntentoNoAutorizado(
+    $examen->id,
+    null,
+    $codigoSis,
+    'NO_INSCRITO',
+    "El código SIS {$codigoSis} no pertenece a ningún estudiante registrado en el sistema."
+);
             return response()->json([
                 'resultado' => 'RECHAZADO_NO_INSCRITO',
                 'message'   => 'Estudiante no registrado en el sistema.',
@@ -114,7 +121,13 @@ class VerificacionController extends Controller
                 'El estudiante está registrado pero no forma parte de la nómina de este examen.',
                 $qrData
             );
-
+$this->registrarIntentoNoAutorizado(
+    $examen->id,
+    $estudiante->id,
+    $codigoSis,
+    'NO_INSCRITO',
+    'El estudiante está registrado pero no forma parte de la nómina de este examen.'
+);
             return response()->json([
                 'resultado' => 'RECHAZADO_NO_INSCRITO',
                 'message'   => 'El estudiante no se encuentra inscrito en esta evaluación.',
@@ -135,7 +148,13 @@ class VerificacionController extends Controller
                 "Ingreso denegado por inhabilitación. Motivo: {$motivo}",
                 $qrData
             );
-
+$this->registrarIntentoNoAutorizado(
+    $examen->id,
+    $estudiante->id,
+    $codigoSis,
+    'INHABILITADO',
+    $motivo
+);
             return response()->json([
                 'resultado' => 'RECHAZADO_INHABILITADO',
                 'message'   => 'Estudiante inhabilitado para rendir este examen.',
@@ -371,4 +390,22 @@ class VerificacionController extends Controller
             'fecha_escaneo'         => Carbon::now('America/La_Paz'),
         ]);
     }
+    private function registrarIntentoNoAutorizado(
+    string $idExamen,
+    ?string $idEstudiante,
+    ?string $identificadorPresentado,
+    string $tipoIntento,
+    ?string $motivo
+): void {
+    IntentoNoAutorizado::create([
+        'id_examen' => $idExamen,
+        'id_estudiante' => $idEstudiante,
+        'identificador_presentado' => $identificadorPresentado,
+        'tipo_intento' => $tipoIntento,
+        'motivo' => $motivo,
+        'registrado_por_user_type' => null,
+        'registrado_por_user_id' => null,
+        'fecha_hora' => Carbon::now('America/La_Paz'),
+    ]);
+}
 }
