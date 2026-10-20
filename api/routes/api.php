@@ -228,5 +228,8 @@ Route::middleware('auth:sanctum')->group(function () {
         
         // Generar token QR dinámico para un examen específico
         Route::post('/examenes/{idExamen}/qr-token', [EstudianteController::class, 'generarTokenQr']);
+
+        // cambio de contraseña
+        Route::put('/cambiar-password', [EstudianteController::class, 'cambiarPassword']);
     });
 });

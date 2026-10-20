@@ -19,6 +19,8 @@ use App\Http\Requests\CompletarDatosEstudianteRequest;
 use App\Http\Requests\SubirFotoEstudianteRequest;
 use Illuminate\Support\Facades\Log;
 use Cloudinary\Cloudinary;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rules\Password;
 
 class EstudianteController extends Controller
 {
@@ -96,6 +98,16 @@ class EstudianteController extends Controller
     public function store(StoreEstudianteRequest $request): JsonResponse
     {
         $data = $request->validated();
+
+        if (empty($data['password'])) {
+            $data['password'] = Estudiante::generarPasswordPorDefecto(
+                $data['codigo_sis'],
+                $data['nombre'],
+                $data['apellido_paterno'] ?? null,
+                $data['apellido_materno'] ?? null
+            );
+        }
+
         $estudiante = Estudiante::create($data);
 
         $this->registrarAuditoria($request, 'ESTUDIANTE_CREADO', [
@@ -169,19 +181,42 @@ class EstudianteController extends Controller
         $estado = $data['estado'] ?? $estadoPorDefecto;
 
         $estudiante = DB::transaction(function () use ($examen, $data, $estado) {
-            $estudiante = Estudiante::updateOrCreate(
-                ['codigo_sis' => $data['codigo_sis']],
-                [
+            // Buscar si ya existe el estudiante por su código SIS
+            $estudiante = Estudiante::where('codigo_sis', $data['codigo_sis'])->first();
+
+            if (!$estudiante) {
+                // Si no existe, calculamos la contraseña por defecto (ej: 20202020JPG)
+                $defaultPassword = Estudiante::generarPasswordPorDefecto(
+                    $data['codigo_sis'],
+                    $data['nombre'],
+                    $data['apellido_paterno'] ?? null,
+                    $data['apellido_materno'] ?? null
+                );
+
+                $estudiante = Estudiante::create([
+                    'codigo_sis'          => $data['codigo_sis'],
                     'ci'                  => $data['ci'] ?? null,
                     'ci_extension'        => $data['ci_extension'] ?? null,
                     'nombre'              => $data['nombre'],
                     'apellido_paterno'    => $data['apellido_paterno'],
                     'apellido_materno'    => $data['apellido_materno'] ?? null,
                     'email_institucional' => $data['email_institucional'],
+                    'password'            => $defaultPassword, // Eloquent aplica Hash::make automáticamente por el cast
                     'activo'              => true,
-                ]
-            );
+                ]);
+            } else {
+                // Si ya existe, actualizamos sus datos sin tocar su contraseña
+                $estudiante->update([
+                    'ci'                  => $data['ci'] ?? $estudiante->ci,
+                    'ci_extension'        => $data['ci_extension'] ?? $estudiante->ci_extension,
+                    'nombre'              => $data['nombre'],
+                    'apellido_paterno'    => $data['apellido_paterno'],
+                    'apellido_materno'    => $data['apellido_materno'] ?? null,
+                    'email_institucional' => $data['email_institucional'],
+                ]);
+            }
 
+            // Vincular a la tabla intermedia del examen
             $examen->estudiantes()->syncWithoutDetaching([
                 $estudiante->id => [
                     'estado'        => $estado,
@@ -331,8 +366,12 @@ class EstudianteController extends Controller
         );
 
         $estudiante->foto_perfil_url = $uploadResult['secure_url'];
+        // ACTIVAR DESPUÉS (cuando se vuelva a exigir foto obligatoria):
+        //$estudiante->primer_acceso_completado = !empty($estudiante->foto_perfil_url) && !empty($estudiante->ci);
 
-        $estudiante->primer_acceso_completado = !empty($estudiante->foto_perfil_url) && !empty($estudiante->ci);
+        // TEMPORAL: Solo se valida que tenga CI
+        $estudiante->primer_acceso_completado = !empty($estudiante->ci);
+
         $estudiante->save();
 
         return response()->json([
@@ -462,14 +501,11 @@ class EstudianteController extends Controller
             ], 403);
         }
 
-        $expiraEn = now()->addMinutes(15)->timestamp;
         $payload = [
             'id_estudiante' => $estudiante->id,
             'codigo_sis'    => $estudiante->codigo_sis,
             'ci'            => $estudiante->ci,
             'id_examen'     => $idExamen,
-            'exp'           => $expiraEn,
-            'nonce'         => Str::random(10),
         ];
 
         $payloadBase64 = base64_encode(json_encode($payload));
@@ -480,9 +516,8 @@ class EstudianteController extends Controller
             'success' => true,
             'message' => 'Token QR generado exitosamente.',
             'data'    => [
-                'qr_token'    => $qrToken,
-                'expira_en'   => date('c', $expiraEn),
-                'estudiante'  => [
+                'qr_token'   => $qrToken,
+                'estudiante' => [
                     'codigo_sis'      => $estudiante->codigo_sis,
                     'nombre_completo' => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
                     'foto_url'        => $estudiante->foto_perfil_url,
@@ -490,4 +525,64 @@ class EstudianteController extends Controller
             ],
         ], 200);
     }
+
+    /**
+     * Cambiar contraseña del estudiante autenticado
+     * PUT /api/estudiante/cambiar-password
+     */
+    public function cambiarPassword(Request $request): JsonResponse
+    {
+        /** @var Estudiante $estudiante */
+        $estudiante = $request->user();
+
+        if (!$estudiante instanceof Estudiante) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Esta acción solo está permitida para estudiantes.',
+            ], 403);
+        }
+
+        $request->validate([
+            'current_password' => ['required', 'string'],
+            'new_password'     => ['required', 'string', 'min:8', 'confirmed'],
+        ], [
+            'current_password.required' => 'Debe ingresar su contraseña actual.',
+            'new_password.required'     => 'Debe ingresar la nueva contraseña.',
+            'new_password.min'          => 'La nueva contraseña debe tener al menos 8 caracteres.',
+            'new_password.confirmed'    => 'La confirmación de la nueva contraseña no coincide.',
+        ]);
+
+        // Verificar si la contraseña actual proporcionada es correcta
+        if (!Hash::check($request->input('current_password'), $estudiante->password)) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'La contraseña actual ingresada es incorrecta.',
+                'error_type' => 'PASSWORD_ACTUAL_INCORRECTA',
+            ], 422);
+        }
+
+        // Evitar que vuelva a usar la misma contraseña
+        if (Hash::check($request->input('new_password'), $estudiante->password)) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'La nueva contraseña no puede ser igual a la anterior.',
+                'error_type' => 'MISMA_PASSWORD',
+            ], 422);
+        }
+
+        // Actualizar contraseña con hash
+        $estudiante->password = Hash::make($request->input('new_password'));
+        $estudiante->save();
+
+        $this->registrarAuditoria($request, 'ESTUDIANTE_PASSWORD_ACTUALIZADA', [
+            'estudiante_id' => $estudiante->id,
+            'codigo_sis'    => $estudiante->codigo_sis,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Contraseña actualizada exitosamente.',
+        ], 200);
+    }
+
 }

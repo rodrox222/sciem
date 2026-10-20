@@ -12,9 +12,7 @@ return new class extends Migration
             $table->uuid('id')->primary();
             $table->uuid('id_examen');
             $table->uuid('id_estudiante')->nullable(); 
-            $table->string('identificador_presentado', 50)->nullable(); 
-            $table->enum('tipo_intento', ['INHABILITADO', 'NO_INSCRITO']);
-            $table->text('motivo')->nullable(); 
+            $table->string('tipo_intento', 30);
             $table->string('registrado_por_user_type')->nullable(); 
             $table->uuid('registrado_por_user_id')->nullable();
             $table->timestamp('fecha_hora');

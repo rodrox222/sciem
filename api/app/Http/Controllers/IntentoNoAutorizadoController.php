@@ -24,7 +24,6 @@ class IntentoNoAutorizadoController extends Controller
             ], 404);
         }
 
-        // Cargamos el examen con su materia y aula una sola vez para la cabecera
         $examen = Examen::with(['materia:id,nombre', 'aula:id,nombre'])->find($idExamen);
         if (!$examen) {
             return response()->json([
@@ -46,15 +45,13 @@ class IntentoNoAutorizadoController extends Controller
                 $estudiante = $intento->estudiante;
 
                 return [
-                    'id'                       => $intento->id,
-                    'identificador_presentado' => $intento->identificador_presentado,
-                    'tipo_intento'             => $intento->tipo_intento,
-                    'motivo'                   => $intento->motivo,
-                    'fecha_hora'               => $intento->fecha_hora,
-                    'codigo_sis'               => $estudiante?->codigo_sis ?? $intento->identificador_presentado,
+                    'id'           => $intento->id,
+                    'tipo_intento' => $intento->tipo_intento,
+                    'fecha_hora'   => $intento->fecha_hora,
+                    'codigo_sis'   => $estudiante?->codigo_sis ?? null,
 
-                    // Datos del estudiante si fue identificado
-                    'estudiante'               => $estudiante ? [
+                    // Datos del estudiante si existe en el sistema
+                    'estudiante'   => $estudiante ? [
                         'id'              => $estudiante->id,
                         'codigo_sis'      => $estudiante->codigo_sis,
                         'ci'              => $estudiante->ci,
