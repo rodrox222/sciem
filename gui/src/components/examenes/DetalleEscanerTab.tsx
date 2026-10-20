@@ -76,10 +76,10 @@ const mapVerificationError = (error: unknown): ResultadoValidacionAcceso => {
     }
   }
 
-  const payload =
-    error.errors && typeof error.errors === 'object'
-      ? (error.errors as unknown as VerificationErrorPayload)
-      : undefined
+ const payload =
+  error.data && typeof error.data === 'object'
+    ? (error.data as VerificationErrorPayload)
+    : undefined
 
   switch (payload?.resultado) {
     case 'RECHAZADO_YA_INGRESO':

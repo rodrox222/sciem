@@ -44,6 +44,53 @@ class EstudianteController extends Controller
         $perPage = (int) $request->query('per_page', 10);
         return response()->json($query->orderBy('apellido_paterno', 'asc')->paginate($perPage));
     }
+    /**
+     * Buscar estudiantes por nombre, código SIS, CI o QR (HU15).
+     */
+    public function buscar(Request $request): JsonResponse
+    {
+        $request->validate([
+            'search' => 'nullable|string|max:255',
+            'qr_data' => 'nullable|string|max:2000',
+        ]);
+
+        $search = trim((string) $request->query('search', ''));
+        $qrData = $request->query('qr_data');
+
+        if ($qrData !== null) {
+            $datosQr = json_decode($qrData, true);
+
+            if (!is_array($datosQr) || empty($datosQr['sis'])) {
+                return response()->json([
+                    'message' => 'El QR no es válido o no contiene el código SIS.',
+                ], 422);
+            }
+
+            $search = trim((string) $datosQr['sis']);
+        }
+
+        if ($search === '') {
+            return response()->json([
+                'message' => 'Debes proporcionar search o qr_data.',
+            ], 422);
+        }
+
+        $estudiantes = Estudiante::query()
+            ->where(function ($query) use ($search) {
+                $query->where('nombre', 'ilike', "%{$search}%")
+                    ->orWhere('apellido_paterno', 'ilike', "%{$search}%")
+                    ->orWhere('apellido_materno', 'ilike', "%{$search}%")
+                    ->orWhere('codigo_sis', 'ilike', "%{$search}%")
+                    ->orWhere('ci', 'ilike', "%{$search}%");
+            })
+            ->orderBy('apellido_paterno', 'asc')
+            ->limit(20)
+            ->get();
+
+        return response()->json([
+            'estudiantes' => $estudiantes,
+        ]);
+    }
 
     /**
      * Registrar un estudiante en el padrón general.

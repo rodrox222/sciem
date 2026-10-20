@@ -19,10 +19,12 @@ use App\Http\Controllers\CargaMasivaEstudianteController;
 use App\Http\Controllers\ConfiguracionSistemaController;
 use App\Http\Controllers\IntentoNoAutorizadoController;
 use App\Http\Controllers\EscanerController;
+use App\Http\Controllers\ExpulsionController;
 use App\Models\Admin;
 use App\Models\Docente;
 use App\Models\Auxiliar;
 use Illuminate\Support\Facades\Artisan;
+
 // --- RUTAS PÚBLICAS ---
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLink']);
@@ -80,7 +82,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Catálogo directo y compatible con PostgreSQL nativo
     Route::middleware('role:admin,administrador,docente')->get('docentes', function () {
-        $docentes = \Illuminate\Support\Facades\Cache::remember('catalogo_docentes_activos', 600, function () {
+        $docentes = Cache::remember('catalogo_docentes_activos', 600, function () {
             return \Illuminate\Support\Facades\DB::table('docente')
                 ->whereRaw('activo is true')
                 ->orderBy('nombre', 'asc')
@@ -166,6 +168,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- ESTUDIANTES (Padrón general) ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('estudiantes', [EstudianteController::class, 'index']);
+        Route::get('estudiantes/buscar', [EstudianteController::class, 'buscar']);
         Route::get('estudiantes/{identificador}', [EstudianteController::class, 'show']);
     });
 
@@ -193,6 +196,14 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- HU 10: ESCANEO QR Y CONTROL DE ACCESO ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::post('examenes/{id}/verificar-ingreso', [VerificacionController::class, 'verificarIngreso']);
+    });
+
+    // --- HU 15: REGISTRO DE EXPULSIONES ---
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::post(
+            'examenes/{id}/expulsiones',
+            [ExpulsionController::class, 'store']
+        );
     });
 
     Route::post('/examenes/{id}/registro-manual', [VerificacionController::class, 'registrarIngresoManual']);

@@ -38,15 +38,8 @@ const formatStudentName = (intento: IntentoNoAutorizado) => {
       : 'Estudiante no identificado'
   }
 
-  const name = [
-    estudiante.nombre,
-    estudiante.apellido_paterno,
-    estudiante.apellido_materno,
-  ].filter(Boolean).join(' ')
-
-  return name || 'Estudiante sin datos asociados'
+  return estudiante.nombre_completo || 'Estudiante sin datos asociados'
 }
-
 export default function IntentosNoAutorizadosPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
