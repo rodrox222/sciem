@@ -17,6 +17,11 @@ class ExpulsionController extends Controller
 {
     public function store(Request $request, string $id): JsonResponse
     {
+        $request->merge([
+            'motivo' => is_string($request->input('motivo'))
+                ? trim($request->input('motivo'))
+                : $request->input('motivo'),
+        ]);
         $datos = $request->validate([
             'id_estudiante' => ['required', 'uuid', 'exists:estudiantes,id'],
             'motivo' => ['required', 'string', 'min:3', 'max:2000'],
