@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\Admin;
 use App\Models\Auxiliar;
 use App\Models\Docente;
+use App\Models\Estudiante;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -22,10 +23,11 @@ class CheckRole
 
         // Determinar el rol a partir de la clase del modelo
         $userRole = match (get_class($user)) {
-            Admin::class    => 'admin',
-            Docente::class  => 'docente',
-            Auxiliar::class => 'auxiliar',
-            default         => '',
+            Admin::class      => 'admin',
+            Docente::class    => 'docente',
+            Auxiliar::class   => 'auxiliar',
+            Estudiante::class => 'estudiante',
+            default           => '',
         };
 
         // Normalizar los roles permitidos recibidos en la ruta

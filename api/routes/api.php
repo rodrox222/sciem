@@ -17,6 +17,8 @@ use App\Http\Controllers\PrerrequisitoController;
 use App\Http\Controllers\VerificacionController;
 use App\Http\Controllers\CargaMasivaEstudianteController;
 use App\Http\Controllers\ConfiguracionSistemaController;
+use App\Http\Controllers\IntentoNoAutorizadoController;
+use App\Http\Controllers\EscanerController;
 use App\Http\Controllers\ExpulsionController;
 use App\Models\Admin;
 use App\Models\Docente;
@@ -80,7 +82,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Catálogo directo y compatible con PostgreSQL nativo
     Route::middleware('role:admin,administrador,docente')->get('docentes', function () {
-        $docentes = \Illuminate\Support\Facades\Cache::remember('catalogo_docentes_activos', 600, function () {
+        $docentes = Cache::remember('catalogo_docentes_activos', 600, function () {
             return \Illuminate\Support\Facades\DB::table('docente')
                 ->whereRaw('activo is true')
                 ->orderBy('nombre', 'asc')
@@ -206,4 +208,25 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/examenes/{id}/registro-manual', [VerificacionController::class, 'registrarIngresoManual']);
     Route::get('/examenes/{id}/asistencias', [VerificacionController::class, 'listarAsistencias']);
+
+    // HU 13: REGISTRO Y CONSULTA DE INTENTOS NO CORRESPONDIENTES 
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::get('examenes/{id_examen}/intentos-no-autorizados', [IntentoNoAutorizadoController::class, 'index']);
+        Route::post('examenes/{id_examen}/escanear-ingreso', [EscanerController::class, 'escanear']);    
+    });
+
+    // HU 18: MODULO DE ESTUDIANTES
+    Route::middleware('role:estudiante')->prefix('estudiante')->group(function () {
+        // Completar o cambiar CI
+        Route::match(['post', 'patch'], '/completar-datos', [EstudianteController::class, 'completarDatos']);
+        
+        // Subir foto facial a Cloudinary
+        Route::post('/foto', [EstudianteController::class, 'subirFoto']);
+        
+        // Consultar exámenes inscritos y estado de habilitación
+        Route::get('/mis-examenes', [EstudianteController::class, 'misExamenes']);
+        
+        // Generar token QR dinámico para un examen específico
+        Route::post('/examenes/{idExamen}/qr-token', [EstudianteController::class, 'generarTokenQr']);
+    });
 });

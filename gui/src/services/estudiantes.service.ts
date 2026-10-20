@@ -44,6 +44,71 @@ export interface EstudiantesExamenResponse {
   estudiantes: EstudianteInscritoExamen[]
 }
 
+export interface CompletarDatosEstudiantePayload {
+  ci: string
+  ci_extension?: string | null
+}
+
+export interface PerfilEstudianteResponse {
+  success: boolean
+  message: string
+  data: {
+    id: string
+    codigo_sis: string
+    ci: string | null
+    ci_extension: string | null
+    nombre_completo: string
+    foto_perfil_url: string | null
+    primer_acceso_completado: boolean
+  }
+}
+
+export interface SubirFotoEstudianteResponse {
+  success: boolean
+  message: string
+  data: {
+    id: string
+    codigo_sis: string
+    ci: string | null
+    ci_extension: string | null
+    foto_perfil_url: string | null
+    primer_acceso_completado: boolean
+  }
+}
+
+export interface ExamenEstudiante {
+  id_examen: string
+  nombre: string
+  materia: string | null
+  aula: string | null
+  docente: string | null
+  fecha: string
+  hora_ini: string | null
+  hora_fin: string | null
+  estado: EstadoInscripcion
+  motivo_estado: string | null
+}
+
+export interface MisExamenesResponse {
+  success: boolean
+  total_examenes: number
+  examenes: ExamenEstudiante[]
+}
+
+export interface TokenQrResponse {
+  success: boolean
+  message: string
+  data: {
+    qr_token: string
+    expira_en: string
+    estudiante: {
+      codigo_sis: string
+      nombre_completo: string
+      foto_url: string | null
+    }
+  }
+}
+
 export interface EstudiantePayload {
   codigo_sis: string
   ci: string
@@ -121,4 +186,38 @@ motivo_estado: string | null
   unenroll(examId: string, estudianteId: string) {
     return api.delete<{ message: string }>(`/examenes/${examId}/estudiantes/${estudianteId}`)
   },
+
+  completarDatos(
+    estudianteId: string,
+    payload: CompletarDatosEstudiantePayload,
+  ) {
+    return api.patch<PerfilEstudianteResponse>(
+      `/estudiantes/${estudianteId}/completar-datos`,
+      payload,
+    )
+  },
+
+  subirFoto(estudianteId: string, foto: File) {
+    const formData = new FormData()
+    formData.append('foto', foto)
+
+    return api.post<SubirFotoEstudianteResponse>(
+      `/estudiantes/${estudianteId}/foto`,
+      formData,
+    )
+  },
+
+  misExamenes(estudianteId: string) {
+    return api.get<MisExamenesResponse>(
+      `/estudiantes/${estudianteId}/examenes`,
+    )
+  },
+
+  generarTokenQr(estudianteId: string, examenId: string) {
+    return api.post<TokenQrResponse>(
+      `/estudiantes/${estudianteId}/examenes/${examenId}/qr-token`,
+      {},
+    )
+  },
+
 }

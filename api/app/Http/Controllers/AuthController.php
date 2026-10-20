@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Admin;
 use App\Models\Auxiliar;
 use App\Models\Docente;
+use App\Models\Estudiante;
 use App\Models\LogAuditoria;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
@@ -16,15 +17,8 @@ class AuthController extends Controller
 {
     private const IP_FALLBACK = '127.0.0.1';
 
-    /**
-     * Autenticación unificada sin selector de roles.
-     * - CI numérico -> Administrador
-     * - @fcyt.umss.edu.bo -> Docente
-     * - @est.umss.edu -> Auxiliar
-     */
     public function login(Request $request): JsonResponse
     {
-        // Validación estricta de formato: o es correo institucional válido o es CI numérico
         $request->validate([
             'email' => [
                 'required',
@@ -32,14 +26,16 @@ class AuthController extends Controller
                 'regex:/^([a-zA-Z0-9._%+-]+@(est\.umss\.edu|fcyt\.umss\.edu\.bo|gmail\.com)|\d+)$/i'
             ],
             'password' => 'required|string',
+            'role'     => 'nullable|string',
         ], [
-            'email.regex' => 'Debe ingresar un correo institucional válido.'
+            'email.regex' => 'Debe ingresar un correo institucional válido o identificador numérico.'
         ]);
 
         $rawIdentifier = trim($request->email);
+        $rolSugerido   = $request->filled('role') ? strtolower(trim($request->role)) : null;
 
-        // Resolver tabla y rol según el patrón del identificador
-        [$user, $rolDetectado] = $this->identificarYBuscarUsuario($rawIdentifier);
+        // Resolver tabla y rol según el patrón del identificador y rol sugerido
+        [$user, $rolDetectado] = $this->identificarYBuscarUsuario($rawIdentifier, $rolSugerido);
 
         // Validar existencia y verificación de hash de contraseña
         if (!$user || !Hash::check($request->password, $user->password)) {
@@ -76,11 +72,13 @@ class AuthController extends Controller
             ], 403);
         }
 
-        // Registrar último acceso y expedir token de Sanctum
-        $user->ultimo_acceso = now();
-        $user->save();
+        // Registrar último acceso si el modelo lo tiene
+        if (in_array('ultimo_acceso', $user->getFillable()) || isset($user->ultimo_acceso)) {
+            $user->ultimo_acceso = now();
+            $user->save();
+        }
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        $token = $user->createToken('auth_token', ["role:{$rolDetectado}"])->plainTextToken;
 
         // Registrar auditoría de éxito
         $this->registrarLogAuth(
@@ -95,13 +93,16 @@ class AuthController extends Controller
             'message' => 'Inicio de sesión exitoso',
             'token'   => $token,
             'user'    => [
-                'id'           => $user->id,
-                'ci'           => $user->ci,
-                'nombre'       => $user->nombre,
-                'apellido'     => trim("{$user->apellido_paterno} {$user->apellido_materno}"),
-                'email'        => $user->email ?? null,
-                'rol'          => $rolDetectado,
-                'tipo_usuario' => $rolDetectado,
+                'id'                       => $user->id,
+                'codigo_sis'               => $user->codigo_sis ?? null,
+                'ci'                       => $user->ci,
+                'nombre'                   => $user->nombre,
+                'apellido'                 => trim("{$user->apellido_paterno} {$user->apellido_materno}"),
+                'email'                    => $user->email ?? $user->email_institucional ?? null,
+                'foto_perfil_url'          => $user->foto_perfil_url ?? null,
+                'primer_acceso_completado' => (bool) ($user->primer_acceso_completado ?? false),
+                'rol'                      => $rolDetectado,
+                'tipo_usuario'             => $rolDetectado,
             ],
         ], 200);
     }
@@ -133,33 +134,62 @@ class AuthController extends Controller
 
     /**
      * Discrimina de forma unívoca la entidad a consultar:
-     * - Solo números -> Admin (por columna CI)
-     * - Terminado en @fcyt.umss.edu.bo -> Docente (por columna email)
-     * - Terminado en @est.umss.edu -> Auxiliar (por columna email)
+     * - Si manda explicitamente role="estudiante", busca en Estudiante.
+     * - Solo números -> Puede ser Admin (por CI) o Estudiante (por Código SIS).
+     * - Terminado en @fcyt.umss.edu.bo -> Docente.
+     * - Terminado en @est.umss.edu -> Busca en Estudiante (por email_institucional) o en Auxiliar (por email).
      */
-    private function identificarYBuscarUsuario(string $identificador): array
+    private function identificarYBuscarUsuario(string $identificador, ?string $rolSugerido = null): array
     {
-        // Administrador (CI numérico)
+        // 1. Si el cliente especificó explícitamente el rol en el body
+        if ($rolSugerido === 'estudiante') {
+            $estudiante = Estudiante::where('email_institucional', $identificador)
+                ->orWhere('codigo_sis', $identificador)
+                ->first();
+            if ($estudiante) {
+                return [$estudiante, 'estudiante'];
+            }
+        }
+
+        // Solo números: Evaluar si es Estudiante (Código SIS) o Admin (CI)
         if (ctype_digit($identificador)) {
+            // Verificar primero si corresponde a un Código SIS de Estudiante (usualmente >= 8 dígitos)
+            $estudiante = Estudiante::where('codigo_sis', $identificador)->first();
+            if ($estudiante) {
+                return [$estudiante, 'estudiante'];
+            }
+
+            // Si no es estudiante, verificar Admin por CI
             $admin = Admin::where('ci', $identificador)->first();
-            return [$admin, 'admin'];
+            if ($admin) {
+                return [$admin, 'admin'];
+            }
         }
 
         $emailLower = strtolower($identificador);
 
-        // Docente
+        // 3. Docente
         if (str_ends_with($emailLower, '@fcyt.umss.edu.bo')) {
             $docente = Docente::where('email', $emailLower)->first();
             return [$docente, 'docente'];
         }
 
-        // Auxiliar
+        // Terminado en @est.umss.edu 
         if (str_ends_with($emailLower, '@est.umss.edu')) {
+            // Buscar primero en Estudiante
+            $estudiante = Estudiante::where('email_institucional', $emailLower)->first();
+            if ($estudiante) {
+                return [$estudiante, 'estudiante'];
+            }
+
+            // Si no está en estudiantes, buscar en Auxiliar
             $auxiliar = Auxiliar::where('email', $emailLower)->first();
-            return [$auxiliar, 'auxiliar'];
+            if ($auxiliar) {
+                return [$auxiliar, 'auxiliar'];
+            }
         }
 
-        // Si es cuenta @gmail.com u otro dominio permitido (para el futuro), buscar en Docente y luego en Auxiliar
+        // Otros dominios (por ejemplo @gmail.com)
         $docente = Docente::where('email', $emailLower)->first();
         if ($docente) {
             return [$docente, 'docente'];
@@ -168,6 +198,11 @@ class AuthController extends Controller
         $auxiliar = Auxiliar::where('email', $emailLower)->first();
         if ($auxiliar) {
             return [$auxiliar, 'auxiliar'];
+        }
+
+        $estudiante = Estudiante::where('email_institucional', $emailLower)->first();
+        if ($estudiante) {
+            return [$estudiante, 'estudiante'];
         }
 
         return [null, null];
@@ -193,8 +228,19 @@ class AuthController extends Controller
             $nombreCompleto = !empty($partes) ? implode(' ', $partes) : null;
         }
 
-        $rol = $user ? strtolower(class_basename($user)) : $rolFallback;
-        $emailOIdentificador = $user?->email ?? ($user ? $user->ci : null);
+        $rol = match ($user ? get_class($user) : null) {
+            Admin::class      => 'admin',
+            Docente::class    => 'docente',
+            Auxiliar::class   => 'auxiliar',
+            Estudiante::class => 'estudiante',
+            default           => $rolFallback,
+        };
+
+        $emailOIdentificador = $user?->email 
+            ?? $user?->email_institucional 
+            ?? $user?->codigo_sis 
+            ?? $user?->ci 
+            ?? null;
 
         LogAuditoria::create([
             'user_type'         => $user ? get_class($user) : null,

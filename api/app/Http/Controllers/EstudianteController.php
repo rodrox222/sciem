@@ -13,6 +13,12 @@ use App\Models\LogAuditoria;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+
+use App\Http\Requests\CompletarDatosEstudianteRequest;
+use App\Http\Requests\SubirFotoEstudianteRequest;
+use Illuminate\Support\Facades\Log;
+use Cloudinary\Cloudinary;
 
 class EstudianteController extends Controller
 {
@@ -230,26 +236,258 @@ class EstudianteController extends Controller
     {
         $user = $request->user();
 
-        $rol = match (get_class($user)) {
-            Admin::class    => 'admin',
-            Docente::class  => 'docente',
-            Auxiliar::class => 'auxiliar',
-            default         => 'desconocido',
+        $rol = match ($user ? get_class($user) : null) {
+            Admin::class      => 'admin',
+            Docente::class    => 'docente',
+            Auxiliar::class   => 'auxiliar',
+            Estudiante::class => 'estudiante',
+            default           => 'desconocido',
         };
 
-        $nombreCompleto = trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}");
+        $nombreCompleto = $user 
+            ? trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}")
+            : 'Sistema';
 
         LogAuditoria::create([
-            'user_type'         => get_class($user),
-            'user_id'           => $user->id,
+            'user_type'         => $user ? get_class($user) : null,
+            'user_id'           => $user?->id,
             'rol_en_el_momento' => $rol,
-            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : $user->nombre,
-            'usuario_email'     => $user->email ?? null,
+            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : ($user->nombre ?? 'Sistema'),
+            'usuario_email'     => $user->email_institucional ?? $user->email ?? null,
             'modulo'            => 'ESTUDIANTES',
             'accion'            => $accion,
             'ip_origen'         => $request->ip() ?? '127.0.0.1',
             'user_agent'        => $request->userAgent(),
             'detalles'          => $detalles,
         ]);
+    }
+
+    public function completarDatos(CompletarDatosEstudianteRequest $request): JsonResponse
+    {
+        /** @var Estudiante $estudiante */
+        $estudiante = $request->user();
+
+        if (!$estudiante instanceof Estudiante) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Esta acción solo está permitida para estudiantes.',
+            ], 403);
+        }
+
+        $data = $request->validated();
+
+        if (empty($estudiante->foto_perfil_url)) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'Debe subir su fotografía de perfil antes de completar el registro.',
+                'error_type' => 'FOTO_REQUERIDA'
+            ], 422);
+        }
+
+        $estudiante->ci                       = trim($data['ci']);
+        $estudiante->ci_extension             = !empty($data['ci_extension']) ? strtoupper(trim($data['ci_extension'])) : null;
+        $estudiante->primer_acceso_completado = true;
+        $estudiante->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Perfil completado exitosamente.',
+            'data'    => [
+                'id'                       => $estudiante->id,
+                'codigo_sis'               => $estudiante->codigo_sis,
+                'ci'                       => $estudiante->ci,
+                'ci_extension'             => $estudiante->ci_extension,
+                'primer_acceso_completado' => $estudiante->primer_acceso_completado,
+            ],
+        ], 200);
+    }
+
+    /**
+     * HU18 Subir y almacenar fotografía facial en Cloudinary
+     */
+    public function subirFoto(Request $request): JsonResponse
+    {
+        /** @var Estudiante $estudiante */
+        $estudiante = $request->user();
+
+        if (!$estudiante instanceof Estudiante) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Esta acción solo está permitida para estudiantes.',
+            ], 403);
+        }
+
+        $request->validate([
+            'foto' => 'required|image|mimes:jpeg,png,jpg|max:5120',
+        ]);
+
+        $cloudinary = new Cloudinary(config('cloudinary.cloud_url') ?? env('CLOUDINARY_URL'));
+
+        $uploadResult = $cloudinary->uploadApi()->upload(
+            $request->file('foto')->getRealPath(),
+            [
+                'folder' => 'sciem/estudiantes_facial',
+            ]
+        );
+
+        $estudiante->foto_perfil_url = $uploadResult['secure_url'];
+
+        $estudiante->primer_acceso_completado = !empty($estudiante->foto_perfil_url) && !empty($estudiante->ci);
+        $estudiante->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Fotografía facial validada y guardada exitosamente.',
+            'data'    => [
+                'id'                       => $estudiante->id,
+                'codigo_sis'               => $estudiante->codigo_sis,
+                'ci'                       => $estudiante->ci,
+                'ci_extension'             => $estudiante->ci_extension,
+                'foto_perfil_url'          => $estudiante->foto_perfil_url,
+                'primer_acceso_completado' => (bool) $estudiante->primer_acceso_completado,
+            ],
+        ], 200);
+    }
+
+
+    /**
+     * HU18 Consultar exámenes inscritos y estado de habilitación
+     */
+
+    public function misExamenes(Request $request): JsonResponse
+    {
+        /** @var Estudiante $estudiante */
+        $estudiante = $request->user();
+
+        if (!$estudiante instanceof Estudiante) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Esta acción solo está permitida para estudiantes.',
+            ], 403);
+        }
+
+        $examenes = $estudiante->examenes()
+            ->with([
+                'materia:id,nombre',
+                'aula:id,nombre',
+                'docente:id,nombre,apellido_paterno,apellido_materno'
+            ])
+            ->orderBy('fecha', 'asc')
+            ->get()
+            ->map(function ($examen) {
+                $docenteNombre = $examen->docente 
+                    ? trim("{$examen->docente->nombre} {$examen->docente->apellido_paterno} {$examen->docente->apellido_materno}")
+                    : null;
+
+                return [
+                    'id_examen'     => $examen->id,
+                    'nombre'        => $examen->nombre,
+                    'materia'       => $examen->materia?->nombre,
+                    'aula'          => $examen->aula?->nombre ?? $examen->aula,
+                    'docente'       => $docenteNombre,
+                    'fecha'         => $examen->fecha,
+                    'hora_ini'      => $examen->hora_ini ?? $examen->hora_inicio,
+                    'hora_fin'      => $examen->hora_fin,
+                    'estado'        => $examen->pivot->estado,
+                    'motivo_estado' => $examen->pivot->motivo_estado,
+                ];
+            });
+
+        return response()->json([
+            'success'        => true,
+            'total_examenes' => $examenes->count(),
+            'examenes'       => $examenes,
+        ], 200);
+    }
+
+    /**
+     * HU18 Generar token firmado para el código QR dinámico
+     */
+    public function generarTokenQr(Request $request, string $idExamen): JsonResponse
+    {
+        /** @var Estudiante $estudiante */
+        $estudiante = $request->user();
+
+        if (!$estudiante instanceof Estudiante) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Esta acción solo está permitida para estudiantes.',
+            ], 403);
+        }
+
+        if (!Str::isUuid($idExamen)) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'El identificador del examen no es válido.',
+                'error_type' => 'EXAMEN_INVALIDO',
+            ], 404);
+        }
+
+        $examen = Examen::find($idExamen);
+        if (!$examen) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'El examen especificado no existe.',
+                'error_type' => 'EXAMEN_NO_ENCONTRADO',
+            ], 404);
+        }
+
+        if (!$estudiante->primer_acceso_completado) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'Debe registrar su Carnet de Identidad y foto de perfil antes de generar su QR.',
+                'error_type' => 'REGISTRO_INCOMPLETO',
+            ], 403);
+        }
+
+        $inscripcion = DB::table('estudiante_examen')
+            ->where('id_estudiante', $estudiante->id)
+            ->where('id_examen', $idExamen)
+            ->first();
+
+        if (!$inscripcion) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'No se encuentra registrado en este examen.',
+                'error_type' => 'NO_INSCRITO',
+            ], 404);
+        }
+
+        if ($inscripcion->estado !== 'Habilitado') {
+            return response()->json([
+                'success'       => false,
+                'message'       => 'No se puede generar el código QR: el estudiante no está habilitado.',
+                'error_type'    => 'ESTUDIANTE_INHABILITADO',
+                'motivo_estado' => $inscripcion->motivo_estado,
+            ], 403);
+        }
+
+        $expiraEn = now()->addMinutes(15)->timestamp;
+        $payload = [
+            'id_estudiante' => $estudiante->id,
+            'codigo_sis'    => $estudiante->codigo_sis,
+            'ci'            => $estudiante->ci,
+            'id_examen'     => $idExamen,
+            'exp'           => $expiraEn,
+            'nonce'         => Str::random(10),
+        ];
+
+        $payloadBase64 = base64_encode(json_encode($payload));
+        $firma = hash_hmac('sha256', $payloadBase64, config('app.key'));
+        $qrToken = "{$payloadBase64}.{$firma}";
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Token QR generado exitosamente.',
+            'data'    => [
+                'qr_token'    => $qrToken,
+                'expira_en'   => date('c', $expiraEn),
+                'estudiante'  => [
+                    'codigo_sis'      => $estudiante->codigo_sis,
+                    'nombre_completo' => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
+                    'foto_url'        => $estudiante->foto_perfil_url,
+                ],
+            ],
+        ], 200);
     }
 }
