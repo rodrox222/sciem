@@ -40,7 +40,11 @@ const formatStudentName = (intento: IntentoNoAutorizado) => {
 
   return estudiante.nombre_completo || 'Estudiante sin datos asociados'
 }
-export default function IntentosNoAutorizadosPage() {
+export default function IntentosNoAutorizadosPage({
+  embedded = false,
+}: {
+  embedded?: boolean
+}) {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
 
@@ -89,16 +93,20 @@ export default function IntentosNoAutorizadosPage() {
   return (
     <div className="space-y-6">
       <header className="space-y-3">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate(id ? `/examenes/${id}?tab=info` : '/examenes')}
-          className="h-auto cursor-pointer gap-1 p-0 text-xs font-semibold text-sci-blue"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Volver al examen
-        </Button>
+                {!embedded && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              navigate(id ? `/examenes/${id}?tab=info` : '/examenes')
+            }
+            className="h-auto cursor-pointer gap-1 p-0 text-xs font-semibold text-sci-blue"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Volver al examen
+          </Button>
+        )}
 
         <div>
           <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-sci-cyan">
@@ -166,7 +174,6 @@ export default function IntentosNoAutorizadosPage() {
                     <tr>
                       <th className="px-4 py-3 font-semibold">Estudiante</th>
                       <th className="px-4 py-3 font-semibold">Código SIS</th>
-                      <th className="px-4 py-3 font-semibold">Identificador presentado</th>
                       <th className="px-4 py-3 font-semibold">Tipo de intento</th>
                       <th className="px-4 py-3 font-semibold">Fecha y hora</th>
                     </tr>
@@ -178,11 +185,9 @@ export default function IntentosNoAutorizadosPage() {
                           {formatStudentName(intento)}
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">
-                          {intento.estudiante?.codigo_sis || '—'}
+                        {intento.codigo_sis || intento.estudiante?.codigo_sis || '—'}  
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                         {intento.identificador_presentado || '—'}
-                        </td>
+                      
                         
 
 

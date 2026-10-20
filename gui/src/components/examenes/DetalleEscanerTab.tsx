@@ -39,15 +39,18 @@ interface AsistenciaItem {
   fecha_ingreso: string
   metodo: 'QR' | 'MANUAL'
 }
-
 interface VerificationResponse {
+  success?: boolean
   message: string
   resultado: string
   estudiante?: {
-    id: string
-    nombre_completo: string
-    codigo_sis: string
-    ci: string
+    id?: string
+    nombre?: string
+    nombre_completo?: string
+    sis?: string
+    codigo_sis?: string
+    ci?: string | null
+    foto_url?: string | null
   }
   detalles?: {
     materia?: string
@@ -57,7 +60,6 @@ interface VerificationResponse {
     primer_ingreso?: string
   }
 }
-
 interface VerificationErrorPayload {
   message?: string
   resultado?: string
@@ -213,18 +215,22 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
 
       try {
         const response = await api.post<VerificationResponse>(
-          `/examenes/${exam.id}/verificar-ingreso`,
+         `/examenes/${exam.id}/escanear-ingreso`,
           { qr_data: decodedText }
         )
 
         setValidationResult({
-          estado: 'autorizado',
-          estudiante: {
-            nombreCompleto: response.estudiante?.nombre_completo,
-            codigoSis: response.estudiante?.codigo_sis,
-          },
-          horaIngreso: response.detalles?.hora_ingreso,
-        })
+  estado: 'autorizado',
+  estudiante: {
+    nombreCompleto:
+      response.estudiante?.nombre_completo ??
+      response.estudiante?.nombre,
+    codigoSis:
+      response.estudiante?.codigo_sis ??
+      response.estudiante?.sis,
+  },
+  horaIngreso: response.detalles?.hora_ingreso,
+})
         setShowModal(true)
         void loadAsistencias()
       } catch (error) {
