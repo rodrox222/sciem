@@ -198,8 +198,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('examenes/{id}/verificar-ingreso', [VerificacionController::class, 'verificarIngreso']);
     });
 
-    // --- HU 15: REGISTRO DE EXPULSIONES ---
+    // --- HU 15: REGISTRO Y CONSULTA DE EXPULSIONES ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::get(
+            'examenes/{id}/expulsiones',
+            [ExpulsionController::class, 'index']
+        );
+
         Route::post(
             'examenes/{id}/expulsiones',
             [ExpulsionController::class, 'store']
