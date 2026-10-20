@@ -100,7 +100,7 @@ export interface TokenQrResponse {
   message: string
   data: {
     qr_token: string
-    expira_en: string
+    expira_en?: string | null
     estudiante: {
       codigo_sis: string
       nombre_completo: string
@@ -148,26 +148,25 @@ export const estudiantesService = {
   enroll(examId: string, payload: InscripcionPayload) {
     return api.post<MutationResponse>(`/examenes/${examId}/estudiantes`, payload)
   },
-cargaMasiva(examId: string, archivo: File) {
-  const formData = new FormData()
-  formData.append('archivo', archivo)
 
-  return api.post<{
-    message: string
-    examen_id: string
-    total_insertados: number
-  }>(
-    `/examenes/${examId}/estudiantes/carga-masiva`,
-    formData,
-  )
-},
+  cargaMasiva(examId: string, archivo: File) {
+    const formData = new FormData()
+    formData.append('archivo', archivo)
+
+    return api.post<{
+      message: string
+      examen_id: string
+      total_insertados: number
+    }>(`/examenes/${examId}/estudiantes/carga-masiva`, formData)
+  },
+
   cambiarHabilitacion(
     examId: string,
     estudianteId: string,
-   payload: {
-  estado: EstadoInscripcion
-  motivo_estado?: string | null
-},
+    payload: {
+      estado: EstadoInscripcion
+      motivo_estado?: string | null
+    },
   ) {
     return api.patch<{
       message: string
@@ -175,7 +174,7 @@ cargaMasiva(examId: string, archivo: File) {
         examen_id: string
         estudiante_id: string
         estado: EstadoInscripcion
-motivo_estado: string | null
+        motivo_estado: string | null
       }
     }>(
       `/examenes/${examId}/estudiantes/${estudianteId}/habilitacion`,
@@ -184,40 +183,34 @@ motivo_estado: string | null
   },
 
   unenroll(examId: string, estudianteId: string) {
-    return api.delete<{ message: string }>(`/examenes/${examId}/estudiantes/${estudianteId}`)
+    return api.delete<{ message: string }>(
+      `/examenes/${examId}/estudiantes/${estudianteId}`,
+    )
   },
 
-  completarDatos(
-    estudianteId: string,
-    payload: CompletarDatosEstudiantePayload,
-  ) {
+  // HU-18: Endpoints del estudiante autenticado
+  completarDatos(payload: CompletarDatosEstudiantePayload) {
     return api.patch<PerfilEstudianteResponse>(
-      `/estudiantes/${estudianteId}/completar-datos`,
+      '/estudiante/completar-datos',
       payload,
     )
   },
 
-  subirFoto(estudianteId: string, foto: File) {
+  subirFoto(foto: File) {
     const formData = new FormData()
     formData.append('foto', foto)
 
-    return api.post<SubirFotoEstudianteResponse>(
-      `/estudiantes/${estudianteId}/foto`,
-      formData,
-    )
+    return api.post<SubirFotoEstudianteResponse>('/estudiante/foto', formData)
   },
 
-  misExamenes(estudianteId: string) {
-    return api.get<MisExamenesResponse>(
-      `/estudiantes/${estudianteId}/examenes`,
-    )
+  misExamenes() {
+    return api.get<MisExamenesResponse>('/estudiante/mis-examenes')
   },
 
-  generarTokenQr(estudianteId: string, examenId: string) {
+  generarTokenQr(examenId: string) {
     return api.post<TokenQrResponse>(
-      `/estudiantes/${estudianteId}/examenes/${examenId}/qr-token`,
+      `/estudiante/examenes/${examenId}/qr-token`,
       {},
     )
   },
-
 }

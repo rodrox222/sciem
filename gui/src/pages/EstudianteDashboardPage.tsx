@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react'
 import {
   BookOpen,
@@ -8,6 +7,11 @@ import {
   UserRound,
   Camera,
   Save,
+
+  QrCode,
+  Printer,
+  X,
+
 } from 'lucide-react'
 import { estudiantesService } from '@/services/estudiantes.service'
 import type { ExamenEstudiante } from '@/services/estudiantes.service'
@@ -25,15 +29,22 @@ export default function EstudianteDashboardPage() {
   const [examenes, setExamenes] = useState<ExamenEstudiante[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
-const [ci, setCi] = useState('')
-const [ciExtension, setCiExtension] = useState('')
-const [guardandoPerfil, setGuardandoPerfil] = useState(false)
-const [subiendoFoto, setSubiendoFoto] = useState(false)
-const [mensajePerfil, setMensajePerfil] = useState('')
-const [errorPerfil, setErrorPerfil] = useState('')
-const [fotoSeleccionada, setFotoSeleccionada] = useState<File | null>(null)
-const [perfilCompletado, setPerfilCompletado] = useState(false)  
-const usuario: UsuarioEstudiante | null = (() => {
+  const [ci, setCi] = useState('')
+  const [ciExtension, setCiExtension] = useState('')
+  const [guardandoPerfil, setGuardandoPerfil] = useState(false)
+  const [subiendoFoto, setSubiendoFoto] = useState(false)
+  const [mensajePerfil, setMensajePerfil] = useState('')
+  const [errorPerfil, setErrorPerfil] = useState('')
+  const [fotoSeleccionada, setFotoSeleccionada] = useState<File | null>(null)
+  const [perfilCompletado, setPerfilCompletado] = useState(false)
+
+  const [modalQrAbierto, setModalQrAbierto] = useState(false)
+  const [cargandoQr, setCargandoQr] = useState(false)
+  const [qrToken, setQrToken] = useState<string | null>(null)
+  const [examenSeleccionado, setExamenSeleccionado] = useState<ExamenEstudiante | null>(null)
+  const [errorQr, setErrorQr] = useState('')
+
+  const usuario: UsuarioEstudiante | null = (() => {
     try {
       const guardado = localStorage.getItem('user_data')
       return guardado ? JSON.parse(guardado) : null
@@ -41,13 +52,12 @@ const usuario: UsuarioEstudiante | null = (() => {
       return null
     }
   })()
-useEffect(() => {
-  setPerfilCompletado(
-    usuario?.primer_acceso_completado === true,
-  )
 
-  setCi((usuario as UsuarioEstudiante & { ci?: string | null })?.ci ?? '')
-}, [])
+  useEffect(() => {
+    setPerfilCompletado(usuario?.primer_acceso_completado === true)
+    setCi((usuario as UsuarioEstudiante & { ci?: string | null })?.ci ?? '')
+  }, [])
+
   const cargarExamenes = async () => {
     if (!usuario?.id) {
       setError('No se encontró la información del estudiante autenticado.')
@@ -59,10 +69,7 @@ useEffect(() => {
       setCargando(true)
       setError('')
 
-      const respuesta = await estudiantesService.misExamenes(
-        String(usuario.id),
-      )
-
+      const respuesta = await estudiantesService.misExamenes()
       setExamenes(respuesta.examenes ?? [])
     } catch (err) {
       console.error('Error al cargar los exámenes:', err)
@@ -96,17 +103,12 @@ useEffect(() => {
       setErrorPerfil('')
       setMensajePerfil('')
 
-    const respuesta = await estudiantesService.completarDatos(
-  String(usuario.id),
-  {
-    ci: ci.trim(),
-    ci_extension: ciExtension || null,
-  },
-)
+      const respuesta = await estudiantesService.completarDatos(String(usuario.id), {
+        ci: ci.trim(),
+        ci_extension: ciExtension || null,
+      })
 
-setPerfilCompletado(
-  respuesta.data.primer_acceso_completado === true,
-)
+      setPerfilCompletado(respuesta.data.primer_acceso_completado === true)
       setMensajePerfil('Datos personales guardados correctamente.')
     } catch (err) {
       console.error('Error al guardar el perfil:', err)
@@ -127,10 +129,7 @@ setPerfilCompletado(
       setErrorPerfil('')
       setMensajePerfil('')
 
-      await estudiantesService.subirFoto(
-        String(usuario.id),
-        fotoSeleccionada,
-      )
+      await estudiantesService.subirFoto(String(usuario.id), fotoSeleccionada)
 
       setMensajePerfil('Fotografía subida correctamente.')
       setFotoSeleccionada(null)
@@ -141,14 +140,35 @@ setPerfilCompletado(
       setSubiendoFoto(false)
     }
   }
+
+  //// (*mi codigo: funcion para solicitar QR al backend*) ////
+  const generarQrExamen = async (examen: ExamenEstudiante) => {
+    try {
+      setExamenSeleccionado(examen)
+      setErrorQr('')
+      setCargandoQr(true)
+      setModalQrAbierto(true)
+
+      const respuesta = await estudiantesService.generarTokenQr(examen.id_examen)
+      setQrToken(respuesta.data.qr_token)
+    } catch (err: any) {
+      console.error('Error al generar QR:', err)
+      setErrorQr(
+        err.response?.data?.message ||
+          'No se pudo generar el código QR. Verifica que tu perfil esté completado.',
+      )
+    } finally {
+      setCargandoQr(false)
+    }
+  }
+  //// (*fin mi codigo*) ////
+
   return (
     <div className="space-y-6 p-4 md:p-6">
       <section className="rounded-2xl border bg-card p-6 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm text-muted-foreground">
-              Módulo de estudiante
-            </p>
+            <p className="text-sm text-muted-foreground">Módulo de estudiante</p>
             <h1 className="mt-1 text-2xl font-bold tracking-tight">
               Hola, {nombreCompleto}
             </h1>
@@ -168,16 +188,12 @@ setPerfilCompletado(
             disabled={cargando}
             className="inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <RefreshCw
-              size={16}
-              className={cargando ? 'animate-spin' : ''}
-            />
+            <RefreshCw size={16} className={cargando ? 'animate-spin' : ''} />
             Actualizar
           </button>
         </div>
       </section>
 
-      
       <section className="rounded-2xl border bg-card p-6 shadow-sm">
         <div className="mb-5 flex items-center gap-3">
           <div className="rounded-lg bg-primary/10 p-2 text-primary">
@@ -303,6 +319,7 @@ setPerfilCompletado(
           </p>
         )}
       </section>
+
       <section className="space-y-4">
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-primary/10 p-2 text-primary">
@@ -348,81 +365,157 @@ setPerfilCompletado(
             {examenes.map((examen) => (
               <article
                 key={examen.id_examen}
-                className="rounded-xl border bg-card p-5 shadow-sm"
+                className="flex flex-col justify-between rounded-xl border bg-card p-5 shadow-sm"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <h3 className="font-semibold">{examen.nombre}</h3>
-                  <span
-                    className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
-                      examen.estado === 'Habilitado'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}
-                  >
-                    {examen.estado}
-                  </span>
-                </div>
+                <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="font-semibold">{examen.nombre}</h3>
+                    <span
+                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
+                        examen.estado === 'Habilitado'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}
+                    >
+                      {examen.estado}
+                    </span>
+                  </div>
 
-                {examen.materia && (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {examen.materia}
-                  </p>
-                )}
+                  {examen.materia && (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {examen.materia}
+                    </p>
+                  )}
 
-                <div className="mt-4 space-y-2 text-sm">
-                
-<p className="flex items-center gap-2">
-  <CalendarDays
-    size={16}
-    className="shrink-0 text-muted-foreground"
-  />
-  {(() => {
-    const fecha = examen.fecha.slice(0, 10)
-    const [anio, mes, dia] = fecha.split('-')
-    return anio && mes && dia
-      ? `${dia}/${mes}/${anio}`
-      : examen.fecha
-  })()}
-</p>
-
-
-                  {(examen.hora_ini || examen.hora_fin) && (
+                  <div className="mt-4 space-y-2 text-sm">
                     <p className="flex items-center gap-2">
-                      <Clock
+                      <CalendarDays
                         size={16}
                         className="shrink-0 text-muted-foreground"
                       />
-                      {[examen.hora_ini, examen.hora_fin]
-                        .filter(Boolean)
-                        .join(' - ')}
+                      {(() => {
+                        const fecha = examen.fecha.slice(0, 10)
+                        const [anio, mes, dia] = fecha.split('-')
+                        return anio && mes && dia
+                          ? `${dia}/${mes}/${anio}`
+                          : examen.fecha
+                      })()}
                     </p>
-                  )}
 
-                  {examen.aula && (
-                    <p>
-                      <span className="text-muted-foreground">Aula:</span>{' '}
-                      {examen.aula}
-                    </p>
-                  )}
+                    {(examen.hora_ini || examen.hora_fin) && (
+                      <p className="flex items-center gap-2">
+                        <Clock
+                          size={16}
+                          className="shrink-0 text-muted-foreground"
+                        />
+                        {[examen.hora_ini, examen.hora_fin]
+                          .filter(Boolean)
+                          .join(' - ')}
+                      </p>
+                    )}
 
-                  {examen.docente && (
-                    <p>
-                      <span className="text-muted-foreground">Docente:</span>{' '}
-                      {examen.docente}
+                    {examen.aula && (
+                      <p>
+                        <span className="text-muted-foreground">Aula:</span>{' '}
+                        {examen.aula}
+                      </p>
+                    )}
+
+                    {examen.docente && (
+                      <p>
+                        <span className="text-muted-foreground">Docente:</span>{' '}
+                        {examen.docente}
+                      </p>
+                    )}
+                  </div>
+
+                  {examen.estado === 'Inhabilitado' && examen.motivo_estado && (
+                    <p className="mt-4 rounded-lg bg-muted p-3 text-sm">
+                      <strong>Motivo:</strong> {examen.motivo_estado}
                     </p>
                   )}
                 </div>
 
-                {examen.estado === 'Inhabilitado' && examen.motivo_estado && (
-                  <p className="mt-4 rounded-lg bg-muted p-3 text-sm">
-                    <strong>Motivo:</strong> {examen.motivo_estado}
-                  </p>
+                {examen.estado === 'Habilitado' && (
+                  <div className="mt-5 border-t pt-4">
+                    <button
+                      type="button"
+                      onClick={() => void generarQrExamen(examen)}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary/10 px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/20"
+                    >
+                      <QrCode size={16} />
+                      Generar credencial QR
+                    </button>
+                  </div>
                 )}
               </article>
             ))}
           </div>
         )}
       </section>
+
+      {modalQrAbierto && examenSeleccionado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-sm rounded-2xl border bg-card p-6 shadow-xl">
+            <button
+              type="button"
+              onClick={() => {
+                setModalQrAbierto(false)
+                setQrToken(null)
+              }}
+              className="absolute right-4 top-4 rounded-lg p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="text-center">
+              <h3 className="text-lg font-bold">{examenSeleccionado.nombre}</h3>
+              <p className="text-xs text-muted-foreground">
+                {examenSeleccionado.materia}
+              </p>
+            </div>
+
+            <div className="my-5 flex flex-col items-center justify-center">
+              {cargandoQr ? (
+                <div className="flex h-52 w-52 items-center justify-center">
+                  <RefreshCw size={28} className="animate-spin text-primary" />
+                </div>
+              ) : errorQr ? (
+                <p className="p-4 text-center text-sm text-destructive">{errorQr}</p>
+              ) : qrToken ? (
+                <div className="flex flex-col items-center gap-3">
+                  <div className="rounded-xl border bg-white p-3 shadow-inner">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                        qrToken,
+                      )}`}
+                      alt="Código QR de ingreso al examen"
+                      className="h-48 w-48 object-contain"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    SIS: <strong>{usuario?.codigo_sis}</strong> • CI:{' '}
+                    <strong>{ci}</strong>
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                disabled={!qrToken || cargandoQr}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
+              >
+                <Printer size={16} />
+                Imprimir credencial
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+   
     </div>
   )
 }
