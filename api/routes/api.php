@@ -24,13 +24,13 @@ use App\Models\Admin;
 use App\Models\Docente;
 use App\Models\Auxiliar;
 use Illuminate\Support\Facades\Artisan;
-use App\Http\Controllers\IncidenciaController;
+use App\Http\Controllers\NoticiaController;
 
 // --- RUTAS PÚBLICAS ---
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLink']);
 Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword']);
-Route::get('noticias', [IncidenciaController::class, 'getNoticias']);
+Route::get('noticias', [NoticiaController::class, 'index']);
 
 Route::get('examenes', [ExamenController::class, 'index']);
 Route::get('examenes/{id}', [ExamenController::class, 'show']);
@@ -232,14 +232,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/examenes/{idExamen}/qr-token', [EstudianteController::class, 'generarTokenQr']);
     });
 
-    // --- HU 14: INCIDENCIAS Y NOTICIAS ---
+    // --- HU 14: NOTICIAS OPERATIVAS ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
-        Route::post('incidencias', [IncidenciaController::class, 'storeIncidencia']);
-        // Las noticias también pueden ser consultadas por autenticados (verán públicas y privadas)
-        Route::get('noticias/internas', [IncidenciaController::class, 'getNoticias']); 
+        Route::get('noticias/internas', [NoticiaController::class, 'index']); 
     });
 
     Route::middleware('role:admin,administrador,docente')->group(function () {
-        Route::post('noticias', [IncidenciaController::class, 'storeNoticia']);
+        Route::post('noticias', [NoticiaController::class, 'store']);
     });
 });

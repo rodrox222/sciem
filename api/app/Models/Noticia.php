@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class Noticia extends Model
@@ -16,7 +15,8 @@ class Noticia extends Model
     protected $fillable = [
         'titulo',
         'contenido',
-        'id_examen',
+        'prioridad',
+        'publico_objetivo',
         'es_publica',
         'autor_id',
         'autor_tipo',
@@ -25,11 +25,6 @@ class Noticia extends Model
     protected $casts = [
         'es_publica' => 'boolean',
     ];
-
-    public function examen(): BelongsTo
-    {
-        return $this->belongsTo(Examen::class, 'id_examen');
-    }
 
     public function autor(): MorphTo
     {

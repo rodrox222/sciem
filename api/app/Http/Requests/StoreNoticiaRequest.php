@@ -16,7 +16,8 @@ class StoreNoticiaRequest extends FormRequest
         return [
             'titulo' => 'required|string|max:255',
             'contenido' => 'required|string',
-            'id_examen' => 'nullable|uuid|exists:examenes,id',
+            'prioridad' => 'nullable|string|in:Normal,Alta,Urgente',
+            'publico_objetivo' => 'nullable|string|in:Todos,Docentes,Estudiantes',
             'es_publica' => 'boolean',
         ];
     }
