@@ -311,6 +311,11 @@ class EstudianteController extends Controller
 
         $data = $request->validated();
 
+        /* =========================================================================
+         * RESTRICCIÓN TEMPORAL: Validación de foto deshabilitada.
+         * Descomentar este bloque cuando la docente autorice exigir la fotografía
+         * como requisito obligatorio previo a completar el perfil.
+         * =========================================================================
         if (empty($estudiante->foto_perfil_url)) {
             return response()->json([
                 'success'    => false,
@@ -318,6 +323,7 @@ class EstudianteController extends Controller
                 'error_type' => 'FOTO_REQUERIDA'
             ], 422);
         }
+        ========================================================================= */
 
         $estudiante->ci                       = trim($data['ci']);
         $estudiante->ci_extension             = !empty($data['ci_extension']) ? strtoupper(trim($data['ci_extension'])) : null;

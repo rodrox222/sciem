@@ -26,7 +26,7 @@ class PrerrequisitoSeeder extends Seeder
 
         // Asegurar Materia y Aula de prueba
         $materia = Materia::firstOrCreate(
-            ['nombre' => 'Taller de Ingeniería de Software'],
+            ['nombre' => 'Elementos de programación'],
             ['id' => (string) Str::uuid()]
         );
 
@@ -46,7 +46,7 @@ class PrerrequisitoSeeder extends Seeder
         $examen = Examen::updateOrCreate(
             ['id' => $examenIdFijo],
             [
-                'nombre'     => 'Examen Parcial - Carga Masiva Pruebas',
+                'nombre'     => 'primer parcial',
                 'id_materia' => $materia->id,
                 'id_aula'    => $aula->id,
                 'id_docente' => $docente->id,
@@ -86,74 +86,30 @@ class PrerrequisitoSeeder extends Seeder
             );
         }
 
-        // Obtener los estudiantes creados por EstudianteSeeder
+        // Obtener todos los estudiantes registrados
         $estudiantes = Estudiante::orderBy('codigo_sis')->get();
 
-        // Vincular y evaluar el cumplimiento de los 3 estudiantes de muestra
-        if ($estudiantes->count() > 0) {
-            $req1 = 'aaaaaaaa-1111-1111-1111-111111111111';
-            $req2 = 'bbbbbbbb-2222-2222-2222-222222222222';
-            $req3 = 'cccccccc-3333-3333-3333-333333333333';
+        $req1 = 'aaaaaaaa-1111-1111-1111-111111111111';
+        $req2 = 'bbbbbbbb-2222-2222-2222-222222222222';
+        $req3 = 'cccccccc-3333-3333-3333-333333333333';
 
-            // Estudiante 1 (Carlos): Cumple los 3 -> Habilitado
-            if (isset($estudiantes[0])) {
-                $e1 = $estudiantes[0]->id;
-                $this->asignarCumplimiento($req1, $e1, true, $docente->id);
-                $this->asignarCumplimiento($req2, $e1, true, $docente->id);
-                $this->asignarCumplimiento($req3, $e1, true, $docente->id);
+        // Vincular a todos los estudiantes con cumplimiento pleno (Habilitados y sin motivo)
+        foreach ($estudiantes as $estudiante) {
+            $this->asignarCumplimiento($req1, $estudiante->id, true, $docente->id);
+            $this->asignarCumplimiento($req2, $estudiante->id, true, $docente->id);
+            $this->asignarCumplimiento($req3, $estudiante->id, true, $docente->id);
 
-                DB::table('estudiante_examen')->updateOrInsert(
-                    ['id_examen' => $examen->id, 'id_estudiante' => $e1],
-                    [
-                        'estado'                    => 'Habilitado',
-                        'motivo_estado'             => null,
-                        'ajuste_manual'             => false,
-                        'modificado_por_docente_id' => null,
-                        'fecha_ajuste_manual'       => null,
-                        'updated_at'                => now(),
-                    ]
-                );
-            }
-
-            // Estudiante 2 (Mariana): Falta Sprint 1 -> Inhabilitada
-            if (isset($estudiantes[1])) {
-                $e2 = $estudiantes[1]->id;
-                $this->asignarCumplimiento($req1, $e2, true, $docente->id);
-                $this->asignarCumplimiento($req2, $e2, false, $docente->id);
-                $this->asignarCumplimiento($req3, $e2, true, $docente->id);
-
-                DB::table('estudiante_examen')->updateOrInsert(
-                    ['id_examen' => $examen->id, 'id_estudiante' => $e2],
-                    [
-                        'estado'                    => 'Inhabilitado',
-                        'motivo_estado'             => 'Falta aprobación de Defensa de Sprint 1.',
-                        'ajuste_manual'             => false,
-                        'modificado_por_docente_id' => null,
-                        'fecha_ajuste_manual'       => null,
-                        'updated_at'                => now(),
-                    ]
-                );
-            }
-
-            // Estudiante 3 (Rodrigo): Falta asistencia -> Inhabilitado
-            if (isset($estudiantes[2])) {
-                $e3 = $estudiantes[2]->id;
-                $this->asignarCumplimiento($req1, $e3, false, $docente->id);
-                $this->asignarCumplimiento($req2, $e3, true, $docente->id);
-                $this->asignarCumplimiento($req3, $e3, true, $docente->id);
-
-                DB::table('estudiante_examen')->updateOrInsert(
-                    ['id_examen' => $examen->id, 'id_estudiante' => $e3],
-                    [
-                        'estado'                    => 'Inhabilitado',
-                        'motivo_estado'             => 'No cumple con el 80% de asistencia mínima.',
-                        'ajuste_manual'             => false,
-                        'modificado_por_docente_id' => null,
-                        'fecha_ajuste_manual'       => null,
-                        'updated_at'                => now(),
-                    ]
-                );
-            }
+            DB::table('estudiante_examen')->updateOrInsert(
+                ['id_examen' => $examen->id, 'id_estudiante' => $estudiante->id],
+                [
+                    'estado'                    => 'Habilitado',
+                    'motivo_estado'             => null,
+                    'ajuste_manual'             => false,
+                    'modificado_por_docente_id' => null,
+                    'fecha_ajuste_manual'       => null,
+                    'updated_at'                => now(),
+                ]
+            );
         }
 
         $this->command->info("Examen con UUID {$examenIdFijo} y prerrequisitos asociados exitosamente.");

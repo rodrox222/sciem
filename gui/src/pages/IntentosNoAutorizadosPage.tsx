@@ -40,6 +40,38 @@ const formatStudentName = (intento: IntentoNoAutorizado) => {
 
   return estudiante.nombre_completo || 'Estudiante sin datos asociados'
 }
+
+const renderTipoIntentoBadge = (tipo: string) => {
+  switch (tipo?.toUpperCase()) {
+    case 'INHABILITADO':
+      return (
+        <span className="inline-flex rounded-full border border-sci-red/30 bg-sci-red/10 px-2 py-1 text-[10px] font-bold text-sci-red">
+          Inhabilitado
+        </span>
+      )
+    case 'EXAMEN_DISTINTO':
+      return (
+        <span className="inline-flex rounded-full border border-purple-500/30 bg-purple-500/10 px-2 py-1 text-[10px] font-bold text-purple-600">
+          Examen distinto
+        </span>
+      )
+    case 'NO_REGISTRADO':
+    case 'ERROR_DATOS_INVALIDOS':
+      return (
+        <span className="inline-flex rounded-full border border-slate-500/30 bg-slate-500/10 px-2 py-1 text-[10px] font-bold text-slate-600">
+          No registrado
+        </span>
+      )
+    case 'NO_INSCRITO':
+    default:
+      return (
+        <span className="inline-flex rounded-full border border-sci-amber/30 bg-sci-amber/10 px-2 py-1 text-[10px] font-bold text-sci-amber">
+          No inscrito
+        </span>
+      )
+  }
+}
+
 export default function IntentosNoAutorizadosPage({
   embedded = false,
 }: {
@@ -188,22 +220,9 @@ export default function IntentosNoAutorizadosPage({
                         {intento.codigo_sis || intento.estudiante?.codigo_sis || '—'}  
                         </td>
                       
-                        
-
-
-<td className="px-4 py-3">
-  <span
-    className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold ${
-      intento.tipo_intento === 'INHABILITADO'
-        ? 'border-sci-red/30 bg-sci-red/10 text-sci-red'
-        : 'border-sci-amber/30 bg-sci-amber/10 text-sci-amber'
-    }`}
-  >
-    {intento.tipo_intento === 'INHABILITADO'
-      ? 'Inhabilitado'
-      : 'No inscrito'}
-  </span>
-</td>
+                        <td className="px-4 py-3">
+                          {renderTipoIntentoBadge(intento.tipo_intento)}
+                        </td>
                         <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                           {formatDate(intento.fecha_hora)}
                         </td>

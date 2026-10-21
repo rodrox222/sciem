@@ -88,11 +88,6 @@ export default function EstudianteDashboardPage() {
     'Estudiante'
 
   const guardarPerfil = async () => {
-    if (!usuario?.id) {
-      setErrorPerfil('No se encontró el ID del estudiante.')
-      return
-    }
-
     if (!ci.trim()) {
       setErrorPerfil('El CI es obligatorio.')
       return
@@ -103,16 +98,30 @@ export default function EstudianteDashboardPage() {
       setErrorPerfil('')
       setMensajePerfil('')
 
-      const respuesta = await estudiantesService.completarDatos(String(usuario.id), {
+      // Se envía directamente el payload sin pasar el ID
+      const respuesta = await estudiantesService.completarDatos({
         ci: ci.trim(),
         ci_extension: ciExtension || null,
       })
 
       setPerfilCompletado(respuesta.data.primer_acceso_completado === true)
       setMensajePerfil('Datos personales guardados correctamente.')
-    } catch (err) {
+
+      // Sincronizar en localStorage para mantener actualizada la sesión
+      const guardado = localStorage.getItem('user_data')
+      if (guardado) {
+        const datos = JSON.parse(guardado)
+        datos.ci = ci.trim()
+        datos.ci_extension = ciExtension || null
+        datos.primer_acceso_completado = true
+        localStorage.setItem('user_data', JSON.stringify(datos))
+      }
+    } catch (err: any) {
       console.error('Error al guardar el perfil:', err)
-      setErrorPerfil('No se pudieron guardar los datos. Verifica el CI e inténtalo nuevamente.')
+      const mensaje =
+        err.response?.data?.message ||
+        'No se pudieron guardar los datos. Verifica el CI e inténtalo nuevamente.'
+      setErrorPerfil(mensaje)
     } finally {
       setGuardandoPerfil(false)
     }
@@ -129,7 +138,7 @@ export default function EstudianteDashboardPage() {
       setErrorPerfil('')
       setMensajePerfil('')
 
-      await estudiantesService.subirFoto(String(usuario.id), fotoSeleccionada)
+      await estudiantesService.subirFoto(fotoSeleccionada)
 
       setMensajePerfil('Fotografía subida correctamente.')
       setFotoSeleccionada(null)
