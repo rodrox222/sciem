@@ -19,15 +19,6 @@ class VerificacionController extends Controller
 {
     /**
      * Valida el ingreso de un estudiante mediante escaneo de su código QR (HU-13 / HU-19).
-     *
-     * Valida:
-     * 0. Permiso del auditor si es auxiliar (HU-19: asignación Aceptada obligatoria).
-     * 1. Decodificación dual: JSON crudo o Token Base64 con HMAC.
-     * 2. Correspondencia de materia o examen.
-     * 3. Existencia del estudiante en el sistema universitario.
-     * 4. Inscripción en el examen activo.
-     * 5. Estado de habilitación ('Habilitado').
-     * 6. Prevención de reingreso duplicado.
      */
     public function verificarIngreso(Request $request, string $idExamen): JsonResponse
     {
@@ -44,7 +35,7 @@ class VerificacionController extends Controller
         $materiaQr = null;
         $qrData = [];
 
-        // 1. Detección robusta de formato (JSON directo o Token Base64/HMAC)
+        // 1. Detección de formato (JSON directo o Token Base64)
         if (str_starts_with($trimmedQr, '{') && str_ends_with($trimmedQr, '}')) {
             $qrData = json_decode($trimmedQr, true) ?? [];
             $codigoSis = $qrData['sis'] ?? $qrData['codigo_sis'] ?? null;
@@ -58,8 +49,8 @@ class VerificacionController extends Controller
             $idExamenToken     = $qrData['id_examen'] ?? null;
             $idEstudianteToken = $qrData['id_estudiante'] ?? null;
             $codigoSis         = $qrData['codigo_sis'] ?? $qrData['sis'] ?? null;
+            $materiaQr         = $qrData['materia'] ?? null;
         } else {
-            // Solo se toma como código SIS si es numérico y de longitud válida (UMSS: 7 a 10 dígitos)
             if (ctype_digit($trimmedQr) && strlen($trimmedQr) <= 15) {
                 $codigoSis = $trimmedQr;
             } else {
@@ -77,12 +68,11 @@ class VerificacionController extends Controller
             ], 404);
         }
 
-        // Capturar datos del usuario que opera el escáner (docente o auxiliar)
         $usuario = $request->user();
         $rol = $usuario ? ($usuario->rol ?? class_basename($usuario)) : 'docente';
         $userId = $usuario?->id;
 
-        // HU-19 (Criterio 10): Si quien escanea es un auxiliar, verificar que su asignación esté 'Aceptada'
+        // HU-19: Validar permisos del auxiliar
         if ($usuario instanceof Auxiliar) {
             $asignacion = DB::table('examen_auxiliar')
                 ->where('id_examen', $examen->id)
@@ -99,7 +89,7 @@ class VerificacionController extends Controller
             }
         }
 
-        // Validar formato del QR
+        // PASO 1: Formato inválido o sin identificador (Criterio 2)
         if (empty($codigoSis) && empty($idEstudianteToken)) {
             $this->registrarLog(
                 $examen->id,
@@ -110,13 +100,13 @@ class VerificacionController extends Controller
                 ['raw_content' => substr($rawQr, 0, 500)]
             );
 
-            // Se registra el intento en la tabla de auditoría 
             $this->registrarIntentoNoAutorizado(
                 $examen->id,
                 null,
                 'NO_REGISTRADO',
                 $rol,
-                $userId
+                $userId,
+                'DESCONOCIDO'
             );
 
             return response()->json([
@@ -126,7 +116,7 @@ class VerificacionController extends Controller
             ], 400);
         }
 
-        // Buscar estudiante en el padrón institucional
+        // Buscar estudiante en la base de datos
         $estudiante = null;
         if ($idEstudianteToken && Str::isUuid($idEstudianteToken)) {
             $estudiante = Estudiante::find($idEstudianteToken);
@@ -135,42 +125,13 @@ class VerificacionController extends Controller
             $estudiante = Estudiante::where('codigo_sis', $codigoSis)->first();
         }
 
-        // 2. Validar correspondencia de examen o materia
-        $esExamenDistinto = ($idExamenToken && $idExamenToken !== $examen->id);
-        $esMateriaDistinta = ($materiaQr && $examen->materia && strcasecmp(trim($materiaQr), trim($examen->materia->nombre)) !== 0);
-
-        if ($esExamenDistinto || $esMateriaDistinta) {
-            $this->registrarLog(
-                $examen->id,
-                $estudiante?->id,
-                $codigoSis,
-                'RECHAZADO_NO_INSCRITO',
-                "El QR presentado no corresponde a esta evaluación.",
-                $qrData
-            );
-
-            $this->registrarIntentoNoAutorizado(
-                $examen->id,
-                $estudiante?->id,
-                'EXAMEN_DISTINTO', 
-                $rol,
-                $userId
-            );
-
-            return response()->json([
-                'success'   => false,
-                'resultado' => 'RECHAZADO_EXAMEN_DISTINTO',
-                'message'   => 'El código QR presentado corresponde a otra evaluación o materia.',
-            ], 403);
-        }
-
-        // 3. Estudiante no registrado en el sistema universitario
+        // PASO 2: Estudiante NO existe en el sistema universitario (Criterio 2)
         if (!$estudiante) {
             $this->registrarLog(
                 $examen->id,
                 null,
-                $codigoSis,
-                'RECHAZADO_NO_REGISTRADO',
+                $codigoSis ?? 'DESCONOCIDO',
+                'ERROR_DATOS_INVALIDOS', 
                 "El código SIS {$codigoSis} no pertenece a ningún estudiante registrado en el sistema.",
                 $qrData
             );
@@ -180,7 +141,8 @@ class VerificacionController extends Controller
                 null,
                 'NO_REGISTRADO',
                 $rol,
-                $userId
+                $userId,
+                $codigoSis
             );
 
             return response()->json([
@@ -190,7 +152,7 @@ class VerificacionController extends Controller
             ], 403);
         }
 
-        // 4. Verificar relación e inscripción en el examen
+        // PASO 3: Verificar inscripción en el examen (Criterio 1)
         $inscripcion = $examen->estudiantes()
             ->where('estudiantes.id', $estudiante->id)
             ->first();
@@ -199,9 +161,9 @@ class VerificacionController extends Controller
             $this->registrarLog(
                 $examen->id,
                 $estudiante->id,
-                $codigoSis,
+                $estudiante->codigo_sis,
                 'RECHAZADO_NO_INSCRITO',
-                'El estudiante está registrado pero no forma parte de la nómina de este examen.',
+                'El estudiante está registrado en el sistema pero no forma parte de la nómina de este examen.',
                 $qrData
             );
 
@@ -210,7 +172,8 @@ class VerificacionController extends Controller
                 $estudiante->id,
                 'NO_INSCRITO',
                 $rol,
-                $userId
+                $userId,
+                $estudiante->codigo_sis
             );
 
             return response()->json([
@@ -224,7 +187,37 @@ class VerificacionController extends Controller
             ], 403);
         }
 
-        // 5. Verificar estado de habilitación
+        // PASO 4: Si está inscrito, verificar que el QR pertenezca a ESTE examen y materia
+        $esExamenDistinto = ($idExamenToken && $idExamenToken !== $examen->id);
+        $esMateriaDistinta = ($materiaQr && $examen->materia && strcasecmp(trim($materiaQr), trim($examen->materia->nombre)) !== 0);
+
+        if ($esExamenDistinto || $esMateriaDistinta) {
+            $this->registrarLog(
+                $examen->id,
+                $estudiante->id,
+                $estudiante->codigo_sis,
+                'RECHAZADO_NO_INSCRITO', // <-- Cumple logs_asistencias_resultado_check
+                "El QR presentado corresponde a otra materia o evaluación del estudiante.",
+                $qrData
+            );
+
+            $this->registrarIntentoNoAutorizado(
+                $examen->id,
+                $estudiante->id,
+                'EXAMEN_DISTINTO', // <-- Se mantiene para la auditoría de la HU-13
+                $rol,
+                $userId,
+                $estudiante->codigo_sis
+            );
+
+            return response()->json([
+                'success'   => false,
+                'resultado' => 'RECHAZADO_EXAMEN_DISTINTO',
+                'message'   => 'El código QR presentado corresponde a otra evaluación o materia.',
+            ], 403);
+        }
+
+        // PASO 5: Verificar habilitación (Prerrequisitos)
         $estado = $inscripcion->pivot->estado ?? 'Inhabilitado';
 
         if ($estado !== 'Habilitado') {
@@ -233,7 +226,7 @@ class VerificacionController extends Controller
             $this->registrarLog(
                 $examen->id,
                 $estudiante->id,
-                $codigoSis,
+                $estudiante->codigo_sis,
                 'RECHAZADO_INHABILITADO',
                 "Ingreso denegado por inhabilitación. Motivo: {$motivo}",
                 $qrData
@@ -244,7 +237,8 @@ class VerificacionController extends Controller
                 $estudiante->id,
                 'INHABILITADO',
                 $rol,
-                $userId
+                $userId,
+                $estudiante->codigo_sis
             );
 
             return response()->json([
@@ -263,7 +257,7 @@ class VerificacionController extends Controller
             ], 403);
         }
 
-        // 6. Prevenir reingresos duplicados
+        // PASO 6: Prevenir reingresos duplicados
         $ingresoPrevio = LogAsistencia::where('id_examen', $examen->id)
             ->where('id_estudiante', $estudiante->id)
             ->where('resultado', 'PERMITIDO')
@@ -273,7 +267,7 @@ class VerificacionController extends Controller
             $this->registrarLog(
                 $examen->id,
                 $estudiante->id,
-                $codigoSis,
+                $estudiante->codigo_sis,
                 'RECHAZADO_YA_INGRESO',
                 'El estudiante ya registró un ingreso exitoso previamente.',
                 $qrData
@@ -289,7 +283,7 @@ class VerificacionController extends Controller
             ], 409);
         }
 
-        // 7. Acceso Autorizado (Actualizar pivote y crear log)
+        // PASO 7: Acceso autorizado
         $examen->estudiantes()->updateExistingPivot(
             $estudiante->id,
             [
@@ -301,7 +295,7 @@ class VerificacionController extends Controller
             $this->registrarLog(
                 $examen->id,
                 $estudiante->id,
-                $codigoSis,
+                $estudiante->codigo_sis,
                 'PERMITIDO',
                 'Ingreso validado y autorizado exitosamente.',
                 $qrData
@@ -350,9 +344,6 @@ class VerificacionController extends Controller
         ], 200);
     }
 
-    /**
-     * Registra el ingreso manual de un estudiante al examen sin usar código QR.
-     */
     public function registrarIngresoManual(Request $request, string $idExamen): JsonResponse
     {
         $request->validate([
@@ -434,9 +425,6 @@ class VerificacionController extends Controller
         ], 200);
     }
 
-    /**
-     * Lista los estudiantes que ya ingresaron a la evaluación.
-     */
     public function listarAsistencias(string $idExamen): JsonResponse
     {
         $asistencias = LogAsistencia::with('estudiante:id,nombre,apellido_paterno,apellido_materno,codigo_sis,ci,ci_extension,foto_perfil_url')
@@ -471,9 +459,6 @@ class VerificacionController extends Controller
         ], 200);
     }
 
-    /**
-     * Guarda el registro de intento/éxito en la tabla logs_asistencias.
-     */
     private function registrarLog(
         string $idExamen,
         ?string $idEstudiante,
@@ -495,15 +480,13 @@ class VerificacionController extends Controller
         ]);
     }
 
-    /**
-     * Guarda el intento no autorizado en la tabla intentos_no_autorizados (HU-13)
-     */
     private function registrarIntentoNoAutorizado(
         string $idExamen,
         ?string $idEstudiante,
         string $tipoIntento,
         ?string $rolAuditor = null,
-        ?string $userIdAuditor = null
+        ?string $userIdAuditor = null,
+        ?string $identificador = null // Se mantiene en los parámetros para no romper llamadas
     ): void {
         IntentoNoAutorizado::create([
             'id_examen'                => $idExamen,
