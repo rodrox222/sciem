@@ -28,24 +28,15 @@ import {
   type AsistenciaExpulsion,
   type RegistroExpulsionResponse,
 } from '@/services/expulsiones.service'
-import type { Estudiante } from '@/services/estudiantes.service'
+import type { EstudianteInscritoExamen } from '@/services/estudiantes.service'
 import type { Examen } from '@/services/examenes.service'
 
 interface ExpulsionFormProps {
   exam: Examen
-  estudiante: Estudiante
+  estudiante: Pick<EstudianteInscritoExamen, 'id' | 'codigo_sis' | 'nombre_completo'>
   asistencia: AsistenciaExpulsion
+  onRegistered?: (studentId: string) => void
 }
-
-const nombreCompleto = (estudiante: Estudiante) =>
-  [
-    estudiante.nombre,
-    estudiante.apellido_paterno,
-    estudiante.apellido_materno,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .trim()
 
 const formatServerDateTime = (value: string) => {
   const parsed = new Date(value)
@@ -63,6 +54,7 @@ export function ExpulsionForm({
   exam,
   estudiante,
   asistencia,
+  onRegistered,
 }: ExpulsionFormProps) {
   const [motivo, setMotivo] = useState('')
   const [touched, setTouched] = useState(false)
@@ -107,6 +99,7 @@ export function ExpulsionForm({
       })
 
       setSuccess(response)
+      onRegistered?.(estudiante.id)
     } catch (requestError) {
       if (requestError instanceof ApiError) {
         setError(requestError.message)
@@ -275,7 +268,7 @@ export function ExpulsionForm({
             <AlertDialogTitle>Confirmar expulsión</AlertDialogTitle>
             <AlertDialogDescription>
               Esta acción registrará la expulsión de{' '}
-              <strong>{nombreCompleto(estudiante)}</strong> del examen{' '}
+              <strong>{estudiante.nombre_completo}</strong> del examen{' '}
               <strong>{exam.nombre}</strong>.
             </AlertDialogDescription>
           </AlertDialogHeader>
