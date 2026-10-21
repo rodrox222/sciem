@@ -14,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Models\LogAuditoria;
 
 class VerificacionController extends Controller
 {
@@ -101,6 +102,7 @@ class VerificacionController extends Controller
             );
 
             $this->registrarIntentoNoAutorizado(
+                $request,
                 $examen->id,
                 null,
                 'NO_REGISTRADO',
@@ -137,6 +139,7 @@ class VerificacionController extends Controller
             );
 
             $this->registrarIntentoNoAutorizado(
+                $request,
                 $examen->id,
                 null,
                 'NO_REGISTRADO',
@@ -152,7 +155,7 @@ class VerificacionController extends Controller
             ], 403);
         }
 
-        // PASO 3: Verificar inscripción en el examen (Criterio 1)
+        // PASO 3: Verificar inscripción en el examen 
         $inscripcion = $examen->estudiantes()
             ->where('estudiantes.id', $estudiante->id)
             ->first();
@@ -168,6 +171,7 @@ class VerificacionController extends Controller
             );
 
             $this->registrarIntentoNoAutorizado(
+                $request,
                 $examen->id,
                 $estudiante->id,
                 'NO_INSCRITO',
@@ -196,15 +200,16 @@ class VerificacionController extends Controller
                 $examen->id,
                 $estudiante->id,
                 $estudiante->codigo_sis,
-                'RECHAZADO_NO_INSCRITO', // <-- Cumple logs_asistencias_resultado_check
+                'RECHAZADO_NO_INSCRITO', 
                 "El QR presentado corresponde a otra materia o evaluación del estudiante.",
                 $qrData
             );
 
             $this->registrarIntentoNoAutorizado(
+                $request,
                 $examen->id,
                 $estudiante->id,
-                'EXAMEN_DISTINTO', // <-- Se mantiene para la auditoría de la HU-13
+                'EXAMEN_DISTINTO',
                 $rol,
                 $userId,
                 $estudiante->codigo_sis
@@ -217,7 +222,7 @@ class VerificacionController extends Controller
             ], 403);
         }
 
-        // PASO 5: Verificar habilitación (Prerrequisitos)
+        // PASO 5: Verificar habilitación 
         $estado = $inscripcion->pivot->estado ?? 'Inhabilitado';
 
         if ($estado !== 'Habilitado') {
@@ -233,6 +238,7 @@ class VerificacionController extends Controller
             );
 
             $this->registrarIntentoNoAutorizado(
+                $request,
                 $examen->id,
                 $estudiante->id,
                 'INHABILITADO',
@@ -481,20 +487,45 @@ class VerificacionController extends Controller
     }
 
     private function registrarIntentoNoAutorizado(
+        Request $request,
         string $idExamen,
         ?string $idEstudiante,
         string $tipoIntento,
         ?string $rolAuditor = null,
         ?string $userIdAuditor = null,
-        ?string $identificador = null // Se mantiene en los parámetros para no romper llamadas
+        ?string $identificador = null
     ): void {
-        IntentoNoAutorizado::create([
+        $intento = IntentoNoAutorizado::create([
             'id_examen'                => $idExamen,
             'id_estudiante'            => $idEstudiante,
             'tipo_intento'             => $tipoIntento,
             'registrado_por_user_type' => $rolAuditor ? strtolower($rolAuditor) : null,
             'registrado_por_user_id'   => $userIdAuditor,
             'fecha_hora'               => Carbon::now('America/La_Paz'),
+        ]);
+
+        $user = $request->user();
+        $nombreCompleto = $user 
+            ? trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}")
+            : 'Sistema / Auditor';
+
+        LogAuditoria::create([
+            'user_type'         => $user ? get_class($user) : 'Sistema',
+            'user_id'           => $userIdAuditor ?? $user?->id,
+            'rol_en_el_momento' => $rolAuditor ? strtolower($rolAuditor) : 'desconocido',
+            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : ($user->nombre ?? 'Usuario'),
+            'usuario_email'     => $user?->email,
+            'modulo'            => 'INTENTOS_NO_AUTORIZADOS',
+            'accion'            => 'INTENTO_NO_AUTORIZADO_REGISTRADO',
+            'ip_origen'         => $request->ip() ?? '127.0.0.1',
+            'user_agent'        => $request->userAgent(),
+            'detalles'          => [
+                'intento_id'    => $intento->id,
+                'id_examen'     => $idExamen,
+                'id_estudiante' => $idEstudiante,
+                'tipo_intento'  => $tipoIntento,
+                'identificador' => $identificador,
+            ],
         ]);
     }
 }
