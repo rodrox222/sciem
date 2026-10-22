@@ -239,7 +239,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/cambiar-password', [EstudianteController::class, 'cambiarPassword']);
     });
 
-    //HU 19: GESTIÓN DE AUXILIARES (VISTA DOCENTE) 
+    //HU 19: GESTIÓN DE AUXILIARES
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::post('examenes/{id_examen}/invitar-auxiliar', [AuxiliarModuloController::class, 'invitarAuxiliar']);
         Route::get('examenes/{id_examen}/auxiliares', [AuxiliarModuloController::class, 'listarAuxiliaresExamen']);
@@ -251,4 +251,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/mis-examenes', [AuxiliarModuloController::class, 'misExamenesAsignados']);
     });
 
+    // todos tienen acceso a ver la foto del estudiante, pero solo el propio estudiante puede subirla
+    Route::middleware('role:admin,administrador,docente,auxiliar,estudiante')->group(function () {
+        Route::get('estudiante/foto/{idEstudiante}', [EstudianteController::class, 'verFoto']);
+    });
 });

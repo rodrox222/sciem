@@ -20,7 +20,7 @@ return new class extends Migration
             $table->unique(['id_examen', 'id_auxiliar'], 'unique_examen_auxiliar');
 
             $table->foreign('id_examen')->references('id')->on('examenes')->onDelete('cascade');
-            $table->foreign('id_auxiliar')->references('id')->on('auxiliar')->onDelete('cascade');
+            $table->foreign('id_auxiliar')->references('id')->on('estudiantes')->onDelete('cascade');
         });
     }
 

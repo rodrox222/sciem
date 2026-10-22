@@ -26,7 +26,7 @@ class AuthController extends Controller
                 'regex:/^([a-zA-Z0-9._%+-]+@(est\.umss\.edu|fcyt\.umss\.edu\.bo|gmail\.com)|\d+)$/i'
             ],
             'password' => 'required|string',
-            'role'     => 'nullable|string',
+            'role'     => 'nullable|string|in:estudiante,auxiliar,docente,admin',
         ], [
             'email.regex' => 'Debe ingresar un correo institucional válido o identificador numérico.'
         ]);
@@ -34,60 +34,52 @@ class AuthController extends Controller
         $rawIdentifier = trim($request->email);
         $rolSugerido   = $request->filled('role') ? strtolower(trim($request->role)) : null;
 
-        // Resolver tabla y rol según el patrón del identificador y rol sugerido
+        // Resolver tabla y rol base
         [$user, $rolDetectado] = $this->identificarYBuscarUsuario($rawIdentifier, $rolSugerido);
 
-        // Validar existencia y verificación de hash de contraseña
+        // Validar credenciales
         if (!$user || !Hash::check($request->password, $user->password)) {
-            $this->registrarLogAuth(
-                request: $request,
-                accion: 'LOGIN_FALLIDO',
-                user: $user,
-                rolFallback: $rolDetectado ?? 'desconocido',
-                detalles: [
-                    'identificador_intentado' => $rawIdentifier,
-                    'motivo'                  => 'Credenciales inválidas',
-                ]
-            );
+            $this->registrarLogAuth($request, 'LOGIN_FALLIDO', $user, $rolDetectado ?? 'desconocido', [
+                'identificador_intentado' => $rawIdentifier,
+                'motivo'                  => 'Credenciales inválidas',
+            ]);
 
             throw ValidationException::withMessages([
                 'email' => ['Las credenciales proporcionadas son incorrectas.'],
             ]);
         }
 
-        // Validar estado activo de la cuenta
         if (!$user->activo) {
-            $this->registrarLogAuth(
-                request: $request,
-                accion: 'LOGIN_BLOQUEADO',
-                user: $user,
-                rolFallback: $rolDetectado,
-                detalles: [
-                    'motivo' => 'Intento de acceso con cuenta inactiva',
-                ]
-            );
-
-            return response()->json([
-                'message' => 'Su cuenta se encuentra desactivada. Comuníquese con la administración.',
-            ], 403);
+            return response()->json(['message' => 'Su cuenta se encuentra desactivada. Comuníquese con la administración.'], 403);
         }
 
-        // Registrar último acceso si el modelo lo tiene
+        // LÓGICA DE MULTI-ROL (ESTUDIANTE / AUXILIAR)
+        $rolesDisponibles = [$rolDetectado]; // Por defecto ['estudiante']
+
+        // Si la bandera es_auxiliar está en true, le habilitamos el segundo rol
+        if ($user instanceof Estudiante && $user->es_auxiliar) {
+            $rolesDisponibles = ['estudiante', 'auxiliar'];
+        }
+
+        // Validar que el rol sugerido realmente le pertenezca
+        $rolFinal = $rolDetectado;
+        if (!empty($rolSugerido)) {
+            if (!in_array($rolSugerido, $rolesDisponibles)) {
+                return response()->json(['message' => 'No tiene permisos para iniciar sesión con este rol.'], 403);
+            }
+            $rolFinal = $rolSugerido;
+        }
+
+        // Actualizar último acceso
         if (in_array('ultimo_acceso', $user->getFillable()) || isset($user->ultimo_acceso)) {
             $user->ultimo_acceso = now();
             $user->save();
         }
 
-        $token = $user->createToken('auth_token', ["role:{$rolDetectado}"])->plainTextToken;
+        $abilities = array_map(fn($r) => "role:{$r}", $rolesDisponibles);
+        $token = $user->createToken('auth_token', $abilities)->plainTextToken;
 
-        // Registrar auditoría de éxito
-        $this->registrarLogAuth(
-            request: $request,
-            accion: 'LOGIN_EXITOSO',
-            user: $user,
-            rolFallback: $rolDetectado,
-            detalles: ['rol' => $rolDetectado]
-        );
+        $this->registrarLogAuth($request, 'LOGIN_EXITOSO', $user, $rolFinal, ['rol_seleccionado' => $rolFinal]);
 
         return response()->json([
             'message' => 'Inicio de sesión exitoso',
@@ -101,8 +93,8 @@ class AuthController extends Controller
                 'email'                    => $user->email ?? $user->email_institucional ?? null,
                 'foto_perfil_url'          => $user->foto_perfil_url ?? null,
                 'primer_acceso_completado' => (bool) ($user->primer_acceso_completado ?? false),
-                'rol'                      => $rolDetectado,
-                'tipo_usuario'             => $rolDetectado,
+                'rol'                      => $rolFinal,
+                'roles_disponibles'        => $rolesDisponibles,
             ],
         ], 200);
     }
@@ -141,25 +133,25 @@ class AuthController extends Controller
      */
     private function identificarYBuscarUsuario(string $identificador, ?string $rolSugerido = null): array
     {
-        // 1. Si el cliente especificó explícitamente el rol en el body
-        if ($rolSugerido === 'estudiante') {
+        // Si el cliente especificó explícitamente el rol "estudiante" o "auxiliar"
+        if (in_array($rolSugerido, ['estudiante', 'auxiliar'])) {
             $estudiante = Estudiante::where('email_institucional', $identificador)
                 ->orWhere('codigo_sis', $identificador)
                 ->first();
             if ($estudiante) {
-                return [$estudiante, 'estudiante'];
+                // Si sugirió auxiliar, validamos si realmente tiene la bandera activa
+                $rolDetectado = ($rolSugerido === 'auxiliar' && $estudiante->es_auxiliar) ? 'auxiliar' : 'estudiante';
+                return [$estudiante, $rolDetectado];
             }
         }
 
         // Solo números: Evaluar si es Estudiante (Código SIS) o Admin (CI)
         if (ctype_digit($identificador)) {
-            // Verificar primero si corresponde a un Código SIS de Estudiante (usualmente >= 8 dígitos)
             $estudiante = Estudiante::where('codigo_sis', $identificador)->first();
             if ($estudiante) {
                 return [$estudiante, 'estudiante'];
             }
 
-            // Si no es estudiante, verificar Admin por CI
             $admin = Admin::where('ci', $identificador)->first();
             if ($admin) {
                 return [$admin, 'admin'];
@@ -168,24 +160,19 @@ class AuthController extends Controller
 
         $emailLower = strtolower($identificador);
 
-        // 3. Docente
+        // Docente
         if (str_ends_with($emailLower, '@fcyt.umss.edu.bo')) {
             $docente = Docente::where('email', $emailLower)->first();
-            return [$docente, 'docente'];
+            if ($docente) {
+                return [$docente, 'docente'];
+            }
         }
 
-        // Terminado en @est.umss.edu 
+        // Terminado en @est.umss.edu (para los estudiantes pe)
         if (str_ends_with($emailLower, '@est.umss.edu')) {
-            // Buscar primero en Estudiante
             $estudiante = Estudiante::where('email_institucional', $emailLower)->first();
             if ($estudiante) {
                 return [$estudiante, 'estudiante'];
-            }
-
-            // Si no está en estudiantes, buscar en Auxiliar
-            $auxiliar = Auxiliar::where('email', $emailLower)->first();
-            if ($auxiliar) {
-                return [$auxiliar, 'auxiliar'];
             }
         }
 
@@ -193,11 +180,6 @@ class AuthController extends Controller
         $docente = Docente::where('email', $emailLower)->first();
         if ($docente) {
             return [$docente, 'docente'];
-        }
-
-        $auxiliar = Auxiliar::where('email', $emailLower)->first();
-        if ($auxiliar) {
-            return [$auxiliar, 'auxiliar'];
         }
 
         $estudiante = Estudiante::where('email_institucional', $emailLower)->first();
@@ -231,7 +213,6 @@ class AuthController extends Controller
         $rol = match ($user ? get_class($user) : null) {
             Admin::class      => 'admin',
             Docente::class    => 'docente',
-            Auxiliar::class   => 'auxiliar',
             Estudiante::class => 'estudiante',
             default           => $rolFallback,
         };

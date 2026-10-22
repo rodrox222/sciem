@@ -79,7 +79,6 @@ class UsersSeeder extends Seeder
             ]
         );
 
-
         DB::table('docente')->updateOrInsert(
             ['email' => 'kleverulloa69@gmail.com'],
             [
@@ -131,7 +130,6 @@ class UsersSeeder extends Seeder
             ]
         );
 
-
         DB::table('docente')->updateOrInsert(
             ['email' => 'revollofernando001@gmail.com'],
             [
@@ -149,19 +147,23 @@ class UsersSeeder extends Seeder
             ]
         );
         
-        // Auxiliar
-        DB::table('auxiliar')->updateOrInsert(
-            ['email' => '202301640@est.umss.edu'],
+        // ==========================================
+        // Estudiante con rol de Auxiliar habilitado
+        // ==========================================
+        DB::table('estudiantes')->updateOrInsert(
+            ['email_institucional' => '202301640@est.umss.edu'],
             [
                 'id' => (string) Str::uuid(),
+                'codigo_sis' => '202301640', 
                 'ci' => '11111111',
                 'ci_extension' => null,
-                'nombre' => 'auxiliar',
-                'apellido_paterno' => 'ejemplo',
+                'nombre' => 'Estudiante',
+                'apellido_paterno' => 'Auxiliar',
                 'apellido_materno' => null,
-                'email_verified_at' => now(),
                 'password' => Hash::make('SMG43210'),
+                'primer_acceso_completado' => true,
                 'activo' => true,
+                'es_auxiliar' => true, 
                 'created_at' => now(),
                 'updated_at' => now(),
             ]

@@ -18,7 +18,8 @@ use Illuminate\Support\Str;
 use App\Http\Requests\CompletarDatosEstudianteRequest;
 use App\Http\Requests\SubirFotoEstudianteRequest;
 use Illuminate\Support\Facades\Log;
-use Cloudinary\Cloudinary;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 
@@ -164,6 +165,20 @@ class EstudianteController extends Controller
      */
     public function inscribirAExamen(InscribirEstudianteExamenRequest $request, string $idExamen): JsonResponse
     {
+
+        $esAuxiliar = DB::table('examen_auxiliar')
+            ->where('id_examen', $examen->id)
+            ->where('id_auxiliar', $data['estudiante_id'] ?? $estudiante->id) 
+            ->exists();
+
+        if ($esAuxiliar) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'Conflicto de roles: este estudiante ya está designado como auxiliar para este examen.',
+                'error_type' => 'ROL_DUPLICADO_AUXILIAR',
+            ], 422);
+        }
+
         $examen = Examen::withCount('prerrequisitos')->find($idExamen);
 
         if (!$examen) {
@@ -309,25 +324,20 @@ class EstudianteController extends Controller
             ], 403);
         }
 
-        $data = $request->validated();
-
-        /* =========================================================================
-         * RESTRICCIÓN TEMPORAL: Validación de foto deshabilitada.
-         * Descomentar este bloque cuando la docente autorice exigir la fotografía
-         * como requisito obligatorio previo a completar el perfil.
-         * =========================================================================
+        // Rechazar si intenta confirmar sin haber guardado su fotografía previamente
         if (empty($estudiante->foto_perfil_url)) {
             return response()->json([
                 'success'    => false,
-                'message'    => 'Debe subir su fotografía de perfil antes de completar el registro.',
+                'message'    => 'Debe capturar y registrar su fotografía de perfil antes de completar el registro inicial.',
                 'error_type' => 'FOTO_REQUERIDA'
             ], 422);
         }
-        ========================================================================= */
 
-        $estudiante->ci                       = trim($data['ci']);
-        $estudiante->ci_extension             = !empty($data['ci_extension']) ? strtoupper(trim($data['ci_extension'])) : null;
-        $estudiante->primer_acceso_completado = true;
+        $data = $request->validated();
+
+        $estudiante->ci                     = trim($data['ci']);
+        $estudiante->ci_extension           = !empty($data['ci_extension']) ? strtoupper(trim($data['ci_extension'])) : null;
+        $estudiante->primer_acceso_completado = true; // Criterio 2 y 3
         $estudiante->save();
 
         return response()->json([
@@ -338,7 +348,8 @@ class EstudianteController extends Controller
                 'codigo_sis'               => $estudiante->codigo_sis,
                 'ci'                       => $estudiante->ci,
                 'ci_extension'             => $estudiante->ci_extension,
-                'primer_acceso_completado' => $estudiante->primer_acceso_completado,
+                'foto_url'                 => $estudiante->foto_perfil_url ? url('/api/estudiante/foto/' . $estudiante->id) : null,
+                'primer_acceso_completado' => (bool) $estudiante->primer_acceso_completado,
             ],
         ], 200);
     }
@@ -358,40 +369,105 @@ class EstudianteController extends Controller
             ], 403);
         }
 
+        //Límite de formato (JPG, PNG) y tamaño (máximo 3 MB)
         $request->validate([
-            'foto' => 'required|image|mimes:jpeg,png,jpg|max:5120',
+            'foto' => [
+                'required',
+                'file',
+                'image',
+                'mimes:jpeg,png,jpg',
+                'max:3072', // 3 MB máximo
+            ],
+        ], [
+            'foto.required' => 'Es obligatorio subir una fotografía facial.',
+            'foto.image'    => 'El archivo debe ser una imagen válida.',
+            'foto.mimes'    => 'Solo se permiten formatos JPG, JPEG o PNG.',
+            'foto.max'      => 'La fotografía no debe superar los 3 MB de tamaño.',
         ]);
 
-        $cloudinary = new Cloudinary(config('cloudinary.cloud_url') ?? env('CLOUDINARY_URL'));
+        // Si el estudiante ya tenía una foto anterior guardada, la eliminamos para no saturar el disco
+        if ($estudiante->foto_perfil_url && Storage::disk('local')->exists($estudiante->foto_perfil_url)) {
+            Storage::disk('local')->delete($estudiante->foto_perfil_url);
+        }
 
-        $uploadResult = $cloudinary->uploadApi()->upload(
-            $request->file('foto')->getRealPath(),
-            [
-                'folder' => 'sciem/estudiantes_facial',
-            ]
-        );
+        // Guardar en storage/app/fotos_estudiantes (Ruta NO pública)
+        $archivo = $request->file('foto');
+        $nombreArchivo = 'estudiante_' . $estudiante->id . '_' . time() . '.' . $archivo->getClientOriginalExtension();
+        $rutaAlmacenada = $archivo->storeAs('fotos_estudiantes', $nombreArchivo, 'local');
 
-        $estudiante->foto_perfil_url = $uploadResult['secure_url'];
-        // ACTIVAR DESPUÉS (cuando se vuelva a exigir foto obligatoria):
-        //$estudiante->primer_acceso_completado = !empty($estudiante->foto_perfil_url) && !empty($estudiante->ci);
+        $estudiante->foto_perfil_url = $rutaAlmacenada;
 
-        // TEMPORAL: Solo se valida que tenga CI
-        $estudiante->primer_acceso_completado = !empty($estudiante->ci);
-
+        $estudiante->primer_acceso_completado = !empty($estudiante->ci) && !empty($estudiante->foto_perfil_url);
         $estudiante->save();
+
+        $this->registrarAuditoria($request, 'ESTUDIANTE_FOTO_ACTUALIZADA', [
+            'estudiante_id' => $estudiante->id,
+            'codigo_sis'    => $estudiante->codigo_sis,
+        ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Fotografía facial validada y guardada exitosamente.',
+            'message' => 'Fotografía facial validada y guardada localmente.',
             'data'    => [
                 'id'                       => $estudiante->id,
                 'codigo_sis'               => $estudiante->codigo_sis,
                 'ci'                       => $estudiante->ci,
                 'ci_extension'             => $estudiante->ci_extension,
-                'foto_perfil_url'          => $estudiante->foto_perfil_url,
+                'foto_perfil_url'          => url('/api/estudiante/foto/' . $estudiante->id),
                 'primer_acceso_completado' => (bool) $estudiante->primer_acceso_completado,
             ],
         ], 200);
+    }
+
+    public function verFoto(Request $request, string $idEstudiante): BinaryFileResponse|JsonResponse
+    {
+        $usuario = $request->user();
+
+        if (!$usuario) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No autenticado.',
+            ], 401);
+        }
+
+        // Determinar el rol de manera infalible
+        $esEstudiante = ($usuario instanceof Estudiante) 
+            || strtolower($usuario->rol ?? '') === 'estudiante'
+            || class_basename($usuario) === 'Estudiante';
+
+        // si es estudiante, SOLO puede ver SU propia foto
+        if ($esEstudiante) {
+            $idAutenticado = strtolower(trim((string) $usuario->id));
+            $idSolicitado  = strtolower(trim($idEstudiante));
+
+            if ($idAutenticado !== $idSolicitado) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Acceso denegado: no puedes acceder a la fotografía de otro estudiante.',
+                ], 403);
+            }
+        }
+
+        // Si es Docente, Auxiliar o Admin, o el estudiante dueño: buscar y entregar
+        $estudiante = Estudiante::find($idEstudiante);
+
+        if (!$estudiante || !$estudiante->foto_perfil_url) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Fotografía no encontrada.',
+            ], 404);
+        }
+
+        if (!Storage::disk('local')->exists($estudiante->foto_perfil_url)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'El archivo físico no existe en el servidor local.',
+            ], 404);
+        }
+
+        $rutaFisica = Storage::disk('local')->path($estudiante->foto_perfil_url);
+
+        return response()->file($rutaFisica);
     }
 
 
@@ -460,6 +536,23 @@ class EstudianteController extends Controller
             ], 403);
         }
 
+        // enviar la fotografía tomada en ese instante
+        // Límite de formato y tamaño (JPG, PNG, máx 3 MB)
+        $request->validate([
+            'foto_verificacion' => [
+                'required',
+                'file',
+                'image',
+                'mimes:jpeg,png,jpg',
+                'max:3072',
+            ],
+        ], [
+            'foto_verificacion.required' => 'Debe capturar su fotografía facial para generar el código QR.',
+            'foto_verificacion.image'    => 'El archivo enviado debe ser una imagen válida.',
+            'foto_verificacion.mimes'    => 'Solo se permiten formatos JPG, JPEG o PNG.',
+            'foto_verificacion.max'      => 'La fotografía no debe superar los 3 MB de tamaño.',
+        ]);
+
         if (!Str::isUuid($idExamen)) {
             return response()->json([
                 'success'    => false,
@@ -477,14 +570,16 @@ class EstudianteController extends Controller
             ], 404);
         }
 
+        // Verificar que haya completado su registro previo
         if (!$estudiante->primer_acceso_completado) {
             return response()->json([
                 'success'    => false,
-                'message'    => 'Debe registrar su Carnet de Identidad y foto de perfil antes de generar su QR.',
+                'message'    => 'Debe registrar su Carnet de Identidad y foto de perfil inicial antes de generar su QR.',
                 'error_type' => 'REGISTRO_INCOMPLETO',
             ], 403);
         }
 
+        // Verificar que esté inscrito en el examen
         $inscripcion = DB::table('estudiante_examen')
             ->where('id_estudiante', $estudiante->id)
             ->where('id_examen', $idExamen)
@@ -498,6 +593,7 @@ class EstudianteController extends Controller
             ], 404);
         }
 
+        // Verificar si está inhabilitado
         if ($inscripcion->estado !== 'Habilitado') {
             return response()->json([
                 'success'       => false,
@@ -507,11 +603,18 @@ class EstudianteController extends Controller
             ], 403);
         }
 
+        // Guardar la foto de verificación en storage local seguro
+        $archivo = $request->file('foto_verificacion');
+        $nombreFotoQr = 'qr_token_' . $estudiante->id . '_' . $idExamen . '_' . time() . '.' . $archivo->getClientOriginalExtension();
+        $rutaGuardada = $archivo->storeAs('fotos_verificacion_qr', $nombreFotoQr, 'local');
+
+        // Generar Payload y Token firmado con HMAC 
         $payload = [
             'id_estudiante' => $estudiante->id,
             'codigo_sis'    => $estudiante->codigo_sis,
             'ci'            => $estudiante->ci,
             'id_examen'     => $idExamen,
+            'timestamp'     => now()->timestamp,
         ];
 
         $payloadBase64 = base64_encode(json_encode($payload));
@@ -520,13 +623,13 @@ class EstudianteController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Token QR generado exitosamente.',
+            'message' => 'Token QR generado exitosamente tras confirmar la fotografía.',
             'data'    => [
                 'qr_token'   => $qrToken,
                 'estudiante' => [
                     'codigo_sis'      => $estudiante->codigo_sis,
                     'nombre_completo' => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
-                    'foto_url'        => $estudiante->foto_perfil_url,
+                    'foto_url'        => $estudiante->foto_perfil_url ? url('/api/estudiante/foto/' . $estudiante->id) : null,
                 ],
             ],
         ], 200);

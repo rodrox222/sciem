@@ -18,7 +18,6 @@ class AuxiliarModuloController extends Controller
 {
     /**
      * HU19 - T5: Docente invita a un auxiliar por correo institucional (#159)
-     * POST /api/examenes/{id_examen}/invitar-auxiliar
      */
     public function invitarAuxiliar(Request $request, string $idExamen): JsonResponse
     {
@@ -40,7 +39,7 @@ class AuxiliarModuloController extends Controller
             ], 404);
         }
 
-        // Criterio 8: Docente intenta invitar a un examen que no es suyo
+        // Docente intenta invitar a un examen que no es suyo
         if ($docente instanceof Docente && $examen->id_docente !== $docente->id) {
             return response()->json([
                 'success' => false,
@@ -51,37 +50,32 @@ class AuxiliarModuloController extends Controller
 
         $email = trim(strtolower($request->input('email')));
 
-        // Criterio 7: Correo que no corresponde a un auxiliar válido
-        $auxiliar = Auxiliar::where(DB::raw('LOWER(email)'), $email)->first();
-        if (!$auxiliar) {
+        // Correo que no corresponde a un estudiante/auxiliar válido
+        $estudianteAuxiliar = Estudiante::where(DB::raw('LOWER(email_institucional)'), $email)->first();
+        if (!$estudianteAuxiliar) {
             return response()->json([
                 'success' => false,
-                'message' => 'El correo no corresponde a ningún auxiliar registrado en el sistema.',
+                'message' => 'El correo no corresponde a ningún estudiante registrado en el sistema.',
                 'error_type' => 'AUXILIAR_NO_ENCONTRADO',
             ], 404);
         }
 
-        // Criterio 12: La persona invitada ya es estudiante del mismo examen
-        $esEstudiante = DB::table('estudiante_examen')
-            ->join('estudiantes', 'estudiante_examen.id_estudiante', '=', 'estudiantes.id')
-            ->where('estudiante_examen.id_examen', $examen->id)
-            ->where(function ($q) use ($auxiliar, $email) {
-                $q->where(DB::raw('LOWER(estudiantes.email_institucional)'), $email)
-                  ->orWhere('estudiantes.ci', $auxiliar->ci ?? '__none__');
-            })
+        $inscritoComoAlumno = DB::table('estudiante_examen')
+            ->where('id_examen', $examen->id)
+            ->where('id_estudiante', $estudianteAuxiliar->id)
             ->exists();
 
-        if ($esEstudiante) {
+        if ($inscritoComoAlumno) {
             return response()->json([
-                'success' => false,
-                'message' => 'Conflicto de roles: la persona ya figura como estudiante inscrito en este examen.',
+                'success'    => false,
+                'message'    => 'Conflicto de roles: la persona ya figura como estudiante inscrito en este examen.',
                 'error_type' => 'ROL_DUPLICADO_ESTUDIANTE',
             ], 422);
         }
 
-        // Criterio 6: Auxiliar ya invitado al mismo examen
+        // Auxiliar ya invitado al mismo examen
         $invitacionExistente = ExamenAuxiliar::where('id_examen', $examen->id)
-            ->where('id_auxiliar', $auxiliar->id)
+            ->where('id_auxiliar', $estudianteAuxiliar->id)
             ->first();
 
         if ($invitacionExistente) {
@@ -93,28 +87,32 @@ class AuxiliarModuloController extends Controller
             ], 422);
         }
 
-        // Criterio 1: Crear invitación en estado Pendiente
+        if (!$estudianteAuxiliar->es_auxiliar) {
+            $estudianteAuxiliar->es_auxiliar = true;
+            $estudianteAuxiliar->save();
+        }
+    
+        // Crear invitación en estado Pendiente
         $invitacion = ExamenAuxiliar::create([
             'id_examen'        => $examen->id,
-            'id_auxiliar'      => $auxiliar->id,
+            'id_auxiliar'      => $estudianteAuxiliar->id,
             'estado'           => 'Pendiente',
             'fecha_invitacion' => Carbon::now('America/La_Paz'),
         ]);
 
-        // Criterio 14: Registro en auditoría
+        // Registro en auditoría
         $this->registrarAuditoria($request, 'INVITACION_AUXILIAR_CREADA', [
             'examen_id'   => $examen->id,
-            'auxiliar_id' => $auxiliar->id,
+            'auxiliar_id' => $estudianteAuxiliar->id,
             'email'       => $email,
         ]);
 
         return response()->json([
             'success'    => true,
             'message'    => 'Invitación enviada exitosamente al auxiliar.',
-            'invitacion' => $invitacion->load('auxiliar:id,nombre,apellido_paterno,apellido_materno,email'),
+            'invitacion' => $invitacion->load('auxiliar:id,nombre,apellido_paterno,apellido_materno,email_institucional'),
         ], 201);
     }
-
     /**
      * Listar auxiliares asignados a un examen (Vista docente)
      * GET /api/examenes/{id_examen}/auxiliares
@@ -129,7 +127,7 @@ class AuxiliarModuloController extends Controller
         }
 
         $asignaciones = ExamenAuxiliar::where('id_examen', $examen->id)
-            ->with('auxiliar:id,nombre,apellido_paterno,apellido_materno,email,ci')
+            ->with('auxiliar:id,nombre,apellido_paterno,apellido_materno,email_institucional,ci')
             ->get();
 
         return response()->json([
@@ -139,14 +137,14 @@ class AuxiliarModuloController extends Controller
     }
 
     /**
-     * HU19 - T6: Auxiliar ve sus invitaciones pendientes (#160)
-     * GET /api/auxiliar/invitaciones
+     * HU19 - T6: Auxiliar ve sus invitaciones pendientes
+     * 
      */
     public function misInvitaciones(Request $request): JsonResponse
     {
         $auxiliar = $request->user();
 
-        // Criterio 2: Examen, docente que lo invita y fecha
+        // Examen, docente que lo invita y fecha
         $invitaciones = ExamenAuxiliar::where('id_auxiliar', $auxiliar->id)
             ->where('estado', 'Pendiente')
             ->with([
@@ -188,8 +186,8 @@ class AuxiliarModuloController extends Controller
     }
 
     /**
-     * HU19 - T6: Auxiliar acepta o rechaza una invitación (#160)
-     * PATCH /api/auxiliar/invitaciones/{id_invitacion}/responder
+     * HU19 - T6: Auxiliar acepta o rechaza una invitación 
+     *
      */
     public function responderInvitacion(Request $request, string $idInvitacion): JsonResponse
     {
@@ -208,7 +206,7 @@ class AuxiliarModuloController extends Controller
             ], 404);
         }
 
-        // Criterio 9: Auxiliar intenta responder una invitación ajena
+        // Auxiliar intenta responder una invitación ajena
         if ($invitacion->id_auxiliar !== $auxiliar->id) {
             return response()->json([
                 'success'    => false,
@@ -217,7 +215,7 @@ class AuxiliarModuloController extends Controller
             ], 403);
         }
 
-        // Criterio 11: La invitación ya fue respondida previamente
+        // La invitación ya fue respondida previamente
         if ($invitacion->estado !== 'Pendiente') {
             return response()->json([
                 'success'    => false,
@@ -232,7 +230,7 @@ class AuxiliarModuloController extends Controller
         $invitacion->fecha_respuesta = Carbon::now('America/La_Paz');
         $invitacion->save();
 
-        // Criterio 14: Auditoría de respuesta
+        // Auditoría de respuesta
         $this->registrarAuditoria($request, 'INVITACION_AUXILIAR_RESPONDIDA', [
             'invitacion_id' => $invitacion->id,
             'examen_id'     => $invitacion->id_examen,
@@ -257,7 +255,7 @@ class AuxiliarModuloController extends Controller
     {
         $auxiliar = $request->user();
 
-        // Criterio 5: Solo exámenes con asignación Aceptada
+        // Solo exámenes con asignación Aceptada
         $examenes = ExamenAuxiliar::where('id_auxiliar', $auxiliar->id)
             ->where('estado', 'Aceptada')
             ->with([

@@ -21,6 +21,7 @@ return new class extends Migration
             $table->string('foto_perfil_url')->nullable();
             $table->boolean('primer_acceso_completado')->default(false);
             $table->boolean('activo')->default(true);
+            $table->boolean('es_auxiliar')->default(false);
             $table->rememberToken();
             $table->timestamps();
         });

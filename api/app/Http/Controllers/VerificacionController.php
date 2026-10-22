@@ -74,7 +74,7 @@ class VerificacionController extends Controller
         $userId = $usuario?->id;
 
         // HU-19: Validar permisos del auxiliar
-        if ($usuario instanceof Auxiliar) {
+        if ($usuario->tokenCan('role:auxiliar')) {
             $asignacion = DB::table('examen_auxiliar')
                 ->where('id_examen', $examen->id)
                 ->where('id_auxiliar', $usuario->id)
@@ -86,6 +86,15 @@ class VerificacionController extends Controller
                     'resultado'  => 'AUXILIAR_NO_ASIGNADO',
                     'message'    => 'Acceso denegado: no cuenta con una asignación aceptada para controlar este examen.',
                     'error_type' => 'AUXILIAR_NO_ASIGNADO',
+                ], 403);
+            }
+        } elseif ($usuario->tokenCan('role:docente')) {
+            if ($examen->id_docente !== $usuario->id) {
+                return response()->json([
+                    'success'    => false,
+                    'resultado'  => 'DOCENTE_NO_AUTORIZADO',
+                    'message'    => 'Acceso denegado: no puede gestionar el escáner en un examen ajeno.',
+                    'error_type' => 'ACCESO_DENEGADO',
                 ], 403);
             }
         }
@@ -363,6 +372,22 @@ class VerificacionController extends Controller
         $examen = Examen::with(['aula:id,nombre', 'materia:id,nombre'])->find($idExamen);
         if (!$examen) {
             return response()->json(['message' => 'La evaluación no existe.'], 404);
+        }
+        
+        $usuario = $request->user();
+        if ($usuario->tokenCan('role:auxiliar')) {
+            $asignacion = DB::table('examen_auxiliar')
+                ->where('id_examen', $examen->id)
+                ->where('id_auxiliar', $usuario->id)
+                ->value('estado');
+
+            if ($asignacion !== 'Aceptada') {
+                return response()->json(['message' => 'Acceso denegado: no cuenta con asignación aceptada.'], 403);
+            }
+        } elseif ($usuario->tokenCan('role:docente')) {
+            if ($examen->id_docente !== $usuario->id) {
+                return response()->json(['message' => 'Acceso denegado: no puede gestionar un examen ajeno.'], 403);
+            }
         }
 
         $estudiante = Estudiante::find($idEstudiante);

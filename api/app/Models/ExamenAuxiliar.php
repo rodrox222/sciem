@@ -34,8 +34,8 @@ class ExamenAuxiliar extends Model
         return $this->belongsTo(Examen::class, 'id_examen');
     }
 
-    public function auxiliar(): BelongsTo
+    public function auxiliar()
     {
-        return $this->belongsTo(Auxiliar::class, 'id_auxiliar');
+        return $this->belongsTo(Estudiante::class, 'id_auxiliar');
     }
 }

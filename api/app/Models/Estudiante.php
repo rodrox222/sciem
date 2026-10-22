@@ -30,6 +30,7 @@ class Estudiante extends Authenticatable
         'foto_perfil_url',
         'primer_acceso_completado',
         'activo',
+        'es_auxiliar',
     ];
 
     protected $hidden = [
@@ -42,6 +43,7 @@ class Estudiante extends Authenticatable
         return [
             'activo'                   => 'boolean',
             'primer_acceso_completado' => 'boolean',
+            'es_auxiliar'              => 'boolean', 
             'password'                 => 'hashed',
         ];
     }
