@@ -31,7 +31,7 @@ class UsersSeeder extends Seeder
         DB::table('docente')->updateOrInsert(
             ['email' => 'docente@fcyt.umss.edu.bo'],
             [
-                'id' => (string) Str::uuid(),
+                'id' => 'e2510d30-530c-449f-992c-423fb9ef5e93',
                 'ci' => '11111111',
                 'ci_extension' => null,
                 'nombre' => 'jackson',
@@ -168,5 +168,10 @@ class UsersSeeder extends Seeder
                 'updated_at' => now(),
             ]
         );
+
+        $idEstudianteAuxiliar = DB::table('estudiantes')
+            ->where('email_institucional', '202301640@est.umss.edu')
+            ->value('id');
+
     }
 }

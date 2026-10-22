@@ -57,6 +57,28 @@ class PrerrequisitoSeeder extends Seeder
             ]
         );
 
+        // Asignar el estudiante auxiliar al examen ya creado
+        $idEstudianteAuxiliar = DB::table('estudiantes')
+            ->where('email_institucional', '202301640@est.umss.edu')
+            ->value('id');
+
+        if ($idEstudianteAuxiliar) {
+            DB::table('examen_auxiliar')->updateOrInsert(
+                [
+                    'id_examen'   => $examen->id,
+                    'id_auxiliar' => $idEstudianteAuxiliar,
+                ],
+                [
+                    'id'               => (string) Str::uuid(),
+                    'estado'           => 'Aceptada',
+                    'fecha_invitacion' => now(),
+                    'fecha_respuesta'  => now(),
+                    'updated_at'       => now(),
+                    'created_at'       => now(),
+                ]
+            );
+        }
+
         // Crear los 3 Prerrequisitos para este examen
         $prerrequisitosData = [
             [

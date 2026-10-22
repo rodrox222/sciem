@@ -54,7 +54,7 @@ class AuthController extends Controller
         }
 
         // LÓGICA DE MULTI-ROL (ESTUDIANTE / AUXILIAR)
-        $rolesDisponibles = [$rolDetectado]; // Por defecto ['estudiante']
+        $rolesDisponibles = [$rolDetectado]; 
 
         // Si la bandera es_auxiliar está en true, le habilitamos el segundo rol
         if ($user instanceof Estudiante && $user->es_auxiliar) {
