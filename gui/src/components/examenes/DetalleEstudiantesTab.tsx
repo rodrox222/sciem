@@ -452,7 +452,6 @@ const openEditStudent = async (student: EstudianteInscritoExamen) => {
   </Dialog>
 )}
 
-
       {/* Buscador */}
       <form onSubmit={handleSearch} className="flex gap-2">
         <div className="relative flex-1">
