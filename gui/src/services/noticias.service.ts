@@ -31,19 +31,17 @@ export interface StoreNoticiaPayload {
 }
 
 export const noticiasService = {
-  /**
-   * Obtiene el feed de noticias públicas o internas
-   * @param isPublic Si es true, usa la ruta pública sin auth
-   */
   getNoticias: async (page = 1, isPublic = false) => {
     const endpoint = isPublic ? `/noticias?page=${page}` : `/noticias/internas?page=${page}`;
     return api.get<PaginatedResponse<Noticia>>(endpoint);
   },
 
-  /**
-   * Publica una nueva noticia operativa
-   */
   store: async (payload: StoreNoticiaPayload) => {
     return api.post<{ message: string; noticia: Noticia }>('/noticias', payload);
+  },
+
+  // Nuevo método para editar (Punto 4)
+  update: async (id: string, payload: StoreNoticiaPayload) => {
+    return api.put<{ message: string; noticia: Noticia }>(`/noticias/${id}`, payload);
   },
 };

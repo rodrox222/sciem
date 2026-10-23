@@ -1,4 +1,4 @@
-import React, { useState, type FormEvent } from 'react';
+import React, { useState, useEffect, type FormEvent } from 'react';
 import { Megaphone, AlertCircle, LoaderCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,18 +9,20 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { noticiasService, type StoreNoticiaPayload } from '@/services/noticias.service';
+import { noticiasService, type StoreNoticiaPayload, type Noticia } from '@/services/noticias.service';
 
 interface NuevaNoticiaModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  noticiaEditando?: Noticia | null;
 }
 
 export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  noticiaEditando,
 }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -33,17 +35,48 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
     es_publica: true,
   });
 
+  useEffect(() => {
+    if (isOpen) {
+      // CORRECCIÓN: Se utiliza setTimeout para diferir la asignación de estado y evitar la advertencia de cascading renders
+      setTimeout(() => {
+        if (noticiaEditando) {
+          setFormData({
+            titulo: noticiaEditando.titulo,
+            contenido: noticiaEditando.contenido,
+            prioridad: noticiaEditando.prioridad,
+            publico_objetivo: noticiaEditando.publico_objetivo,
+            es_publica: noticiaEditando.es_publica,
+          });
+        } else {
+          setFormData({
+            titulo: '',
+            contenido: '',
+            prioridad: 'Normal',
+            publico_objetivo: 'Todos',
+            es_publica: true,
+          });
+        }
+        setError('');
+      }, 0);
+    }
+  }, [isOpen, noticiaEditando]);
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      await noticiasService.store(formData);
+      if (noticiaEditando) {
+        await noticiasService.update(noticiaEditando.id, formData);
+      } else {
+        await noticiasService.store(formData);
+      }
       onSuccess();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al publicar la noticia.');
+      // CORRECCIÓN: Se elimina 'any' y se comprueba la instancia de Error
+      setError(err instanceof Error ? err.message : 'Error al guardar la noticia.');
     } finally {
       setLoading(false);
     }
@@ -55,10 +88,12 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl font-bold text-sci-navy">
             <Megaphone className="h-5 w-5 text-sci-cyan" />
-            Publicar Aviso
+            {noticiaEditando ? 'Editar Aviso Operativo' : 'Publicar Aviso Operativo'}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Crea un comunicado general. Si marcas "Pública", se verá en la pantalla de inicio.
+            {noticiaEditando 
+              ? 'Modifica los datos del comunicado existente.' 
+              : 'Crea un comunicado general. Si marcas "Es Pública", se verá en la pantalla de inicio.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -74,7 +109,7 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
             <Input
               required
               maxLength={255}
-              placeholder="Ej: Cambio o cierre de aula,..."
+              placeholder="Ej: Cambio de aula, Asueto, Inundación..."
               value={formData.titulo}
               onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
               className="text-sm"
@@ -103,7 +138,7 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
               >
                 <option value="Normal">Normal</option>
                 <option value="Alta">Alta</option>
-                <option value="Urgente">Urgente</option>
+                <option value="Urgente">Urgente (Rojo)</option>
               </select>
             </div>
 
@@ -140,7 +175,7 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
             </Button>
             <Button type="submit" disabled={loading} className="bg-sci-blue text-white hover:opacity-90">
               {loading && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
-              Publicar Aviso
+              {noticiaEditando ? 'Guardar Cambios' : 'Publicar Aviso'}
             </Button>
           </div>
         </form>

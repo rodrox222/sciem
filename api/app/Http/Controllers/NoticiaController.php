@@ -54,15 +54,16 @@ class NoticiaController extends Controller
                 $query->where('es_publica', true);
             })
             ->when($esAutenticado, function ($query) use ($user) {
-                // Filtro por público objetivo según el rol (si es necesario).
-                // "Todos" siempre se muestra.
-                $query->where(function ($q) use ($user) {
-                    $q->where('publico_objetivo', 'Todos');
-                    if ($user instanceof Docente) {
-                        $q->orWhere('publico_objetivo', 'Docentes');
-                    }
-                    // Si el usuario fuera Estudiante, agregaríamos su orWhere aquí.
-                });
+                // Bypass para Administradores: visibilidad total sin filtros de audiencia
+                if (!($user instanceof Admin)) {
+                    $query->where(function ($q) use ($user) {
+                        $q->where('publico_objetivo', 'Todos');
+                        
+                        if ($user instanceof Docente) {
+                            $q->orWhere('publico_objetivo', 'Docentes');
+                        }
+                    });
+                }
             })
             ->with('autor:id,nombre,apellido_paterno')
             ->orderByRaw("
@@ -77,5 +78,34 @@ class NoticiaController extends Controller
             ->paginate(10);
 
         return response()->json($noticias);
+    }
+
+    /**
+     * [HU14] Editar aviso operativo existente
+     */
+    public function update(StoreNoticiaRequest $request, $id): JsonResponse
+    {
+        $user = $request->user();
+        $noticia = Noticia::findOrFail($id);
+
+        // Reglas de negocio (Punto 4):
+        $esAdmin = $user instanceof Admin;
+        $esDocente = $user instanceof Docente;
+        $esAutor = $noticia->autor_id === $user->id;
+
+        // Si NO es admin, y tampoco es el Docente autor de la noticia, bloqueamos.
+        if (!$esAdmin && !($esDocente && $esAutor)) {
+            return response()->json([
+                'message' => 'No tienes permisos para editar este aviso operativo.'
+            ], 403);
+        }
+
+        // Actualizamos usando los datos validados del request
+        $noticia->update($request->validated());
+
+        return response()->json([
+            'message' => 'Noticia operativa actualizada exitosamente.',
+            'noticia' => $noticia
+        ]);
     }
 }
