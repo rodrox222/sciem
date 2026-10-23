@@ -20,6 +20,7 @@ use App\Http\Controllers\ConfiguracionSistemaController;
 use App\Http\Controllers\IntentoNoAutorizadoController;
 use App\Http\Controllers\EscanerController;
 use App\Http\Controllers\ExpulsionController;
+use App\Http\Controllers\MonitoreoController;
 use App\Models\Admin;
 use App\Models\Docente;
 use App\Models\Auxiliar;
@@ -219,6 +220,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('examenes/{id_examen}/intentos-no-autorizados', [IntentoNoAutorizadoController::class, 'index']);
         Route::post('examenes/{id_examen}/escanear-ingreso', [EscanerController::class, 'escanear']);    
     });
+    // MONITOREO EN TIEMPO REAL (HU16) 
+    Route::middleware('role:admin,administrador,docente,auxiliar')
+        ->get('examenes/{idExamen}/monitoreo', [MonitoreoController::class, 'resumen']);
 
     // HU 18: MODULO DE ESTUDIANTES
     Route::middleware('role:estudiante')->prefix('estudiante')->group(function () {
