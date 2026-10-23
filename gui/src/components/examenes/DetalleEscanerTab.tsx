@@ -27,6 +27,9 @@ import {
 } from '@/services/estudiantes.service'
 import type { Examen } from '@/services/examenes.service'
 
+import { ControlesOffline } from '@/components/ControlesOffline'
+import { procesarIngresoEscaneado } from '@/services/verificacionScannerService'
+
 const READER_ID = 'qr-camera-stream-unique'
 
 interface AsistenciaItem {
@@ -39,6 +42,7 @@ interface AsistenciaItem {
   fecha_ingreso: string
   metodo: 'QR' | 'MANUAL'
 }
+
 interface VerificationResponse {
   success?: boolean
   message: string
@@ -60,6 +64,7 @@ interface VerificationResponse {
     primer_ingreso?: string
   }
 }
+
 interface VerificationErrorPayload {
   message?: string
   resultado?: string
@@ -74,14 +79,14 @@ const mapVerificationError = (error: unknown): ResultadoValidacionAcceso => {
     return {
       estado: 'rechazado',
       codigo: 'ERROR_VALIDACION',
-      motivo: 'Ocurrió un error inesperado al validar el ingreso.',
+      motivo: error instanceof Error ? error.message : 'Ocurrió un error inesperado al validar el ingreso.',
     }
   }
 
- const payload =
-  error.data && typeof error.data === 'object'
-    ? (error.data as VerificationErrorPayload)
-    : undefined
+  const payload =
+    error.data && typeof error.data === 'object'
+      ? (error.data as VerificationErrorPayload)
+      : undefined
 
   switch (payload?.resultado) {
     case 'RECHAZADO_YA_INGRESO':
@@ -103,11 +108,19 @@ const mapVerificationError = (error: unknown): ResultadoValidacionAcceso => {
         codigo: 'NO_INSCRITO',
         motivo: payload.message ?? error.message,
       }
+    case 'RECHAZADO_EXAMEN_DISTINTO':
     case 'RECHAZADO_MATERIA_INCORRECTA':
       return {
         estado: 'rechazado',
         codigo: 'MATERIA_INCORRECTA',
         motivo: payload.message ?? error.message,
+      }
+    case 'RECHAZADO_QR_EXPIRADO':
+    case 'HORARIO_EXPIRADO':
+      return {
+        estado: 'rechazado',
+        codigo: 'QR_INVALIDO',
+        motivo: payload.message ?? 'El código QR ha expirado. El horario concluyó.',
       }
     case 'EXAMEN_NO_ENCONTRADO':
       return {
@@ -116,6 +129,7 @@ const mapVerificationError = (error: unknown): ResultadoValidacionAcceso => {
         motivo: payload.message ?? error.message,
       }
     case 'ERROR_DATOS_INVALIDOS':
+    case 'FIRMA_INVALIDA':
       return {
         estado: 'rechazado',
         codigo: 'QR_INVALIDO',
@@ -159,6 +173,8 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
   const isPausedRef = useRef(false)
   const scannerInstanceRef = useRef<Html5Qrcode | null>(null)
 
+  const token = localStorage.getItem('auth_token') ?? localStorage.getItem('token') ?? ''
+
   // Cargar estudiantes que ya ingresaron
   const loadAsistencias = useCallback(async () => {
     setLoadingAsistencias(true)
@@ -168,7 +184,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
       )
       setAsistencias(res.asistencias || [])
     } catch {
-      // Ignorar fallo silencioso
+      // Ignorar fallo silencioso si está offline
     } finally {
       setLoadingAsistencias(false)
     }
@@ -180,7 +196,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
       const res = await estudiantesService.listByExam(exam.id)
       setRoster(res.estudiantes || [])
     } catch {
-      // Ignorar fallo silencioso
+      // Ignorar fallo silencioso si está offline
     }
   }, [exam.id])
 
@@ -205,6 +221,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
     setCameraActive(false)
   }, [])
 
+  // Proceso de escaneo con soporte híbrido Online/Offline
   const handleScan = useCallback(
     async (decodedText: string) => {
       if (isPausedRef.current) return
@@ -214,25 +231,41 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
       setIsValidating(true)
 
       try {
-        const response = await api.post<VerificationResponse>(
-         `/examenes/${exam.id}/escanear-ingreso`,
-          { qr_data: decodedText }
-        )
+        const res = await procesarIngresoEscaneado(decodedText, exam.id, token)
 
-        setValidationResult({
-  estado: 'autorizado',
-  estudiante: {
-    nombreCompleto:
-      response.estudiante?.nombre_completo ??
-      response.estudiante?.nombre,
-    codigoSis:
-      response.estudiante?.codigo_sis ??
-      response.estudiante?.sis,
-  },
-  horaIngreso: response.detalles?.hora_ingreso,
-})
+        if (res.success) {
+          setValidationResult({
+            estado: 'autorizado',
+            estudiante: {
+              nombreCompleto: res.estudiante?.nombre_completo,
+              codigoSis: res.estudiante?.codigo_sis,
+            },
+            horaIngreso: res.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
+          })
+          void loadAsistencias()
+        } else {
+          // Detectar si fue un reingreso duplicado
+          const esDuplicado =
+            res.mensaje?.toLowerCase().includes('ya ingresó') ||
+            res.mensaje?.toLowerCase().includes('duplicado') ||
+            res.detalles?.resultado === 'RECHAZADO_YA_INGRESO'
+
+          const esInhabilitado =
+            res.mensaje?.toLowerCase().includes('inhabilitado') ||
+            res.detalles?.resultado === 'RECHAZADO_INHABILITADO'
+
+          setValidationResult({
+            estado: 'rechazado',
+            codigo: esDuplicado
+              ? 'YA_INGRESO'
+              : esInhabilitado
+                ? 'INHABILITADO'
+                : 'ERROR_VALIDACION',
+            motivo: res.mensaje,
+            primerIngreso: res.detalles?.primer_ingreso,
+          })
+        }
         setShowModal(true)
-        void loadAsistencias()
       } catch (error) {
         setValidationResult(mapVerificationError(error))
         setShowModal(true)
@@ -240,7 +273,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
         setIsValidating(false)
       }
     },
-    [exam.id, loadAsistencias]
+    [exam.id, token, loadAsistencias]
   )
 
   // Ingreso Manual Asistido sin QR
@@ -390,7 +423,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
                     </div>
                     <p className="mt-4 text-sm font-extrabold">Validando ingreso...</p>
                     <p className="mt-1 text-xs font-medium text-white/75">
-                      Esperando respuesta del sistema
+                      Verificando credencial de acceso
                     </p>
                   </div>
                 )}
@@ -507,8 +540,11 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
           </Card>
         </div>
 
-        {/* Columna Derecha: Control de Sesión y Estudiantes en Sala (5 cols) */}
+        {/* Columna Derecha: Controles Offline, Control de Sesión y Estudiantes en Sala (5 cols) */}
         <div className="space-y-4 lg:col-span-5">
+          {/* Bloque de Gestión Offline (HU-21) */}
+          <ControlesOffline idExamen={exam.id} token={token} />
+
           {/* Tarjeta de Control de Sesión */}
           <Card className="rounded-2xl border-border bg-card shadow-xs">
             <CardContent className="space-y-3 p-5 text-xs">
