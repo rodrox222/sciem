@@ -223,6 +223,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // MONITOREO EN TIEMPO REAL (HU16) 
     Route::middleware('role:admin,administrador,docente,auxiliar')
         ->get('examenes/{idExamen}/monitoreo', [MonitoreoController::class, 'resumen']);
+    Route::middleware('role:admin,administrador,docente,auxiliar')
+    ->get('examenes/{idExamen}/monitoreo/estudiantes', [MonitoreoController::class, 'estudiantes']);
 
     // HU 18: MODULO DE ESTUDIANTES
     Route::middleware('role:estudiante')->prefix('estudiante')->group(function () {
