@@ -30,7 +30,7 @@ class VerificacionController extends Controller
         $rawQr = $request->input('qr_data');
         $trimmedQr = trim($rawQr);
 
-        // 1. Cargar evaluación con aula y materia
+        // Cargar evaluación con aula y materia
         $examen = Examen::with(['aula:id,nombre', 'materia:id,nombre'])->find($idExamen);
 
         if (!$examen) {
@@ -71,9 +71,8 @@ class VerificacionController extends Controller
             }
         }
 
-        // =========================================================================
-        // PASO 1: EXTRACCIÓN Y PARSEO DEL QR
-        // =========================================================================
+        // EXTRACCIÓN Y PARSEO DEL QR
+
         $idExamenToken = null;
         $idEstudianteToken = null;
         $codigoSis = null;
@@ -111,9 +110,8 @@ class VerificacionController extends Controller
             $esFormatoValido = true;
         }
 
-        // =========================================================================
-        // CASO 3: QR DE OTRO TIPO (Bancario, URL, Cadena arbitraria)
-        // =========================================================================
+        // QR DE OTRO TIPO (Bancario, URL, Cadena arbitraria)
+
         if (!$esFormatoValido) {
             $identificadorSeguro = substr(preg_replace('/[^a-zA-Z0-9_-]/', '', $trimmedQr), 0, 20);
             if (empty($identificadorSeguro)) {
@@ -147,9 +145,8 @@ class VerificacionController extends Controller
             ], 400);
         }
 
-        // =========================================================================
-        // PASO 2: BUSCAR AL ESTUDIANTE EN LA BASE DE DATOS
-        // =========================================================================
+        // BUSCAR AL ESTUDIANTE EN LA BASE DE DATOS
+
         $estudiante = null;
         if ($idEstudianteToken && Str::isUuid($idEstudianteToken)) {
             $estudiante = Estudiante::find($idEstudianteToken);
@@ -158,9 +155,8 @@ class VerificacionController extends Controller
             $estudiante = Estudiante::where('codigo_sis', trim($codigoSis))->first();
         }
 
-        // =========================================================================
-        // CASO 4: EXAMEN QUE YA ACABÓ
-        // =========================================================================
+        // EXAMEN QUE YA ACABÓ
+
         $ahora = Carbon::now('America/La_Paz');
         $estadoExamen = strtolower(trim($examen->estado ?? ''));
         $esEstadoConcluido = in_array($estadoExamen, ['terminado', 'finalizado', 'concluido']);
@@ -205,9 +201,8 @@ class VerificacionController extends Controller
             ], 403);
         }
 
-        // =========================================================================
-        // CASO 5: NO ESTÁ EN EL SISTEMA EN LA BASE DE DATOS
-        // =========================================================================
+        // NO ESTÁ EN EL SISTEMA EN LA BASE DE DATOS
+
         if (!$estudiante) {
             $this->registrarIntentoYAuditoria(
                 $request,
@@ -236,9 +231,8 @@ class VerificacionController extends Controller
             ], 403);
         }
 
-        // =========================================================================
-        // CASO 1: ESTUDIANTE QUE YA INGRESÓ (REINGRESO DUPLICADO)
-        // =========================================================================
+        // ESTUDIANTE QUE YA INGRESÓ (REINGRESO DUPLICADO)
+
         $ingresoPrevio = LogAsistencia::where('id_examen', $examen->id)
             ->where('id_estudiante', $estudiante->id)
             ->where('resultado', 'PERMITIDO')
@@ -287,9 +281,8 @@ class VerificacionController extends Controller
             ], 409);
         }
 
-        // =========================================================================
-        // CASO 7: ESTÁ EN EL SISTEMA, PERO NO ESTÁ EN LA MATERIA/EXAMEN (NO INSCRITO)
-        // =========================================================================
+        // ESTÁ EN EL SISTEMA, PERO NO ESTÁ EN LA MATERIA/EXAMEN (NO INSCRITO)
+
         $inscripcion = DB::table('estudiante_examen')
             ->where('id_examen', $examen->id)
             ->where('id_estudiante', $estudiante->id)
@@ -327,9 +320,8 @@ class VerificacionController extends Controller
             ], 403);
         }
 
-        // =========================================================================
-        // CASO 2: ESTÁ EN LA NÓMINA, PERO SU QR TRAE OTRO EXAMEN O MATERIA
-        // =========================================================================
+        // ESTÁ EN LA NÓMINA, PERO SU QR TRAE OTRO EXAMEN O MATERIA
+
         $esExamenDistinto = ($idExamenToken && $idExamenToken !== $examen->id);
         $esMateriaDistinta = ($materiaQr && $examen->materia && strcasecmp(trim($materiaQr), trim($examen->materia->nombre)) !== 0);
 
@@ -361,9 +353,8 @@ class VerificacionController extends Controller
             ], 403);
         }
 
-        // =========================================================================
-        // CASO 6: ESTÁ EN EL EXAMEN, PERO NO ESTÁ HABILITADO
-        // =========================================================================
+        // ESTÁ EN EL EXAMEN, PERO NO ESTÁ HABILITADO
+
         $estadoHabilitacion = trim($inscripcion->estado ?? 'Inhabilitado');
 
         if (strcasecmp($estadoHabilitacion, 'Habilitado') !== 0) {
@@ -405,9 +396,8 @@ class VerificacionController extends Controller
             ], 403);
         }
 
-        // =========================================================================
         // INGRESO AUTORIZADO (PERMITIDO)
-        // =========================================================================
+
         $ahoraIngreso = Carbon::now('America/La_Paz');
 
         DB::table('estudiante_examen')
@@ -687,7 +677,7 @@ class VerificacionController extends Controller
         $userIdFinal = $userIdAuditor ?? $usuarioActual?->id;
         $rolFinal = $rolAuditor ? strtolower($rolAuditor) : ($usuarioActual?->rol ? strtolower($usuarioActual->rol) : 'docente');
 
-        // 1. Inserción directa en intentos_no_autorizados
+        // Inserción directa en intentos_no_autorizados
         DB::table('intentos_no_autorizados')->insert([
             'id'                       => $idIntento,
             'id_examen'                => $idExamen,
@@ -700,7 +690,7 @@ class VerificacionController extends Controller
             'updated_at'               => $horaBolivia,
         ]);
 
-        // 2. Registro en log_auditorias (sin updated_at)
+        // Registro en log_auditorias (sin updated_at)
         try {
             $nombreCompleto = $usuarioActual
                 ? trim("{$usuarioActual->nombre} {$usuarioActual->apellido_paterno} {$usuarioActual->apellido_materno}")

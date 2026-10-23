@@ -1,15 +1,12 @@
 import axios from 'axios';
 import { validarQrOffline } from '../db/offlineStorage';
 
-//const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
-//const API_URL = import.meta.env.VITE_API_URL || 'http://192.168.1.17:8200/api';
 const rawUrl = (import.meta.env.VITE_API_URL?.trim() || 'http://192.168.1.17:8200')
   .replace(/\/api\/?$/, '')
   .replace(/\/$/, '');
 
 const API_URL = `${rawUrl}/api`;
 
-// Respaldo de token seguro
 function obtenerTokenValido(paramToken?: string): string {
   if (paramToken && paramToken.trim() !== '' && paramToken !== 'undefined' && paramToken !== 'null') {
     return paramToken;
@@ -39,7 +36,12 @@ interface QrPayload {
   timestamp?: number;
 }
 
-function extraerDatosQr(qrRaw: string): { codigoSis: string; idExamenToken?: string; expiraAt?: number } {
+function extraerDatosQr(qrRaw: string): {
+  codigoSis: string;
+  idExamenToken?: string;
+  expiraAt?: number;
+  idEstudianteToken?: string;
+} {
   const trimmed = qrRaw.trim();
 
   // Caso 1: Token HMAC Base64 (HU-18)
@@ -51,6 +53,7 @@ function extraerDatosQr(qrRaw: string): { codigoSis: string; idExamenToken?: str
       return {
         codigoSis: parsed.codigo_sis || parsed.sis || '',
         idExamenToken: parsed.id_examen,
+        idEstudianteToken: parsed.id_estudiante,
         expiraAt: parsed.expira_at,
       };
     } catch {
@@ -65,6 +68,7 @@ function extraerDatosQr(qrRaw: string): { codigoSis: string; idExamenToken?: str
       return {
         codigoSis: parsed.codigo_sis || parsed.sis || '',
         idExamenToken: parsed.id_examen,
+        idEstudianteToken: parsed.id_estudiante,
         expiraAt: parsed.expira_at,
       };
     } catch {
@@ -81,19 +85,11 @@ export async function procesarIngresoEscaneado(
   idExamen: string,
   token: string
 ): Promise<ResultadoEscaneo> {
-  const { codigoSis, idExamenToken, expiraAt } = extraerDatosQr(qrData);
-
-  // Si ya detecta fallo de examen o expiración localmente, procesa offline de inmediato
-  if (idExamenToken && idExamenToken !== idExamen) {
-    return resolverOffline(idExamen, codigoSis, idExamenToken, expiraAt);
-  }
-
-  if (expiraAt && Math.floor(Date.now() / 1000) > expiraAt) {
-    return resolverOffline(idExamen, codigoSis, idExamenToken, expiraAt);
-  }
+  const { codigoSis, idExamenToken, expiraAt, idEstudianteToken } = extraerDatosQr(qrData);
 
   const hayConexion = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
+  // Si hay conexión a la red, intentamos validar directamente en Laravel
   if (hayConexion) {
     try {
       const authToken = obtenerTokenValido(token);
@@ -106,7 +102,7 @@ export async function procesarIngresoEscaneado(
             Authorization: `Bearer ${authToken}`,
             Accept: 'application/json' 
           },
-          timeout: 4000
+          timeout: 4500
         }
       );
 
@@ -118,29 +114,33 @@ export async function procesarIngresoEscaneado(
         detalles: res.data.detalles,
       };
     } catch (error: any) {
-      if (!error.response) {
-        return resolverOffline(idExamen, codigoSis, idExamenToken, expiraAt);
+      // Si el servidor respondió un error 400/403/409, Laravel YA registró el intento no autorizado
+      if (error.response) {
+        return {
+          success: false,
+          metodo: 'ONLINE',
+          mensaje: error.response?.data?.message || 'Ingreso no autorizado.',
+          detalles: error.response?.data,
+        };
       }
 
-      return {
-        success: false,
-        metodo: 'ONLINE',
-        mensaje: error.response?.data?.message || 'Ingreso no autorizado.',
-        detalles: error.response?.data,
-      };
+      // Si no hubo respuesta del servidor (timeout o red caída), recurrimos a offline
+      return resolverOffline(idExamen, codigoSis, idExamenToken, expiraAt, idEstudianteToken);
     }
   }
 
-  return resolverOffline(idExamen, codigoSis, idExamenToken, expiraAt);
+  // Modo offline sin internet
+  return resolverOffline(idExamen, codigoSis, idExamenToken, expiraAt, idEstudianteToken);
 }
 
 async function resolverOffline(
   idExamen: string,
   codigoSis: string,
   idExamenToken?: string,
-  expiraAt?: number
+  expiraAt?: number,
+  idEstudianteToken?: string
 ): Promise<ResultadoEscaneo> {
-  const resOffline = await validarQrOffline(idExamen, codigoSis, idExamenToken, expiraAt);
+  const resOffline = await validarQrOffline(idExamen, codigoSis, idExamenToken, expiraAt, idEstudianteToken);
 
   return {
     success: resOffline.acceso,
@@ -149,5 +149,8 @@ async function resolverOffline(
     estudiante: resOffline.estudiante
       ? { nombre_completo: resOffline.estudiante, codigo_sis: codigoSis }
       : undefined,
+    detalles: {
+      codigo: resOffline.codigo,
+    },
   };
 }

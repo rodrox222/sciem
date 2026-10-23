@@ -14,9 +14,11 @@ export const ControlesOffline: React.FC<Props> = ({ idExamen, token }) => {
 
   const actualizarContador = useCallback(async () => {
     try {
+      // Contar solo las que no estén sincronizadas
       const total = await db.asistencias_pendientes
         .where('id_examen')
         .equals(idExamen)
+        .filter((item) => !item.sincronizado)
         .count();
 
       setPendientes(total);
@@ -78,14 +80,16 @@ export const ControlesOffline: React.FC<Props> = ({ idExamen, token }) => {
       <h3 className="font-semibold text-gray-700 mb-2">Modo Offline</h3>
       <div className="flex flex-wrap gap-2">
         <button
+          type="button"
           onClick={handleDescargar}
           disabled={cargando}
-          className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+          className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
         >
           {cargando ? 'Descargando...' : 'Descargar Padrón Local'}
         </button>
 
         <button
+          type="button"
           onClick={handleSincronizar}
           disabled={cargando || pendientes === 0}
           className={`px-3 py-1.5 rounded text-sm text-white ${

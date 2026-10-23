@@ -7,7 +7,6 @@ const rawUrl = (import.meta.env.VITE_API_URL?.trim() || 'http://192.168.1.17:820
 
 const API_URL = `${rawUrl}/api`;
 
-// Función auxiliar para obtener siempre un token válido
 function obtenerTokenValido(paramToken?: string): string {
   if (paramToken && paramToken.trim() !== '' && paramToken !== 'undefined' && paramToken !== 'null') {
     return paramToken;
@@ -16,7 +15,7 @@ function obtenerTokenValido(paramToken?: string): string {
 }
 
 /**
- * 1. Descarga la nómina del examen desde Laravel y la guarda en Dexie
+ * Descarga la nómina y metadatos del examen para guardarlos en Dexie
  */
 export async function sincronizarDescargaExamen(idExamen: string, token: string) {
   const authToken = obtenerTokenValido(token);
@@ -28,22 +27,24 @@ export async function sincronizarDescargaExamen(idExamen: string, token: string)
     },
   });
 
-  const { estudiantes } = response.data;
-  await guardarPadronLocal(idExamen, estudiantes);
+  const { estudiantes, examen } = response.data;
+  
+  // Se pasa la información temporal del examen para permitir validar la hora_fin sin internet
+  await guardarPadronLocal(idExamen, estudiantes || [], examen);
 
   return response.data;
 }
 
 /**
- * 2. Toma las asistencias pendientes en Dexie y las envía en lote al backend
+ * Envía las asistencias e intentos offline pendientes al backend
  */
 export async function sincronizarSubidaAsistencias(idExamen: string, token: string) {
   const authToken = obtenerTokenValido(token);
 
-  // Consulta todos los registros acumulados para este examen
   const pendientes: AsistenciaOffline[] = await db.asistencias_pendientes
     .where('id_examen')
     .equals(idExamen)
+    .filter((item) => !item.sincronizado)
     .toArray();
 
   if (pendientes.length === 0) {
@@ -52,6 +53,7 @@ export async function sincronizarSubidaAsistencias(idExamen: string, token: stri
 
   const payload = {
     asistencias: pendientes.map((item: AsistenciaOffline) => ({
+      id_estudiante: item.id_estudiante || null,
       codigo_sis: item.codigo_sis,
       fecha_ingreso: item.fecha_ingreso,
       resultado: item.resultado,
@@ -67,21 +69,18 @@ export async function sincronizarSubidaAsistencias(idExamen: string, token: stri
         Authorization: `Bearer ${authToken}`,
         Accept: 'application/json',
       },
-      timeout: 8000,
+      timeout: 10000,
     }
   );
 
-  // Obtener las claves primarias de los registros sincronizados
   const idsAEliminar = pendientes
     .map((p) => p.id)
     .filter((id): id is number => typeof id === 'number');
 
-  // Eliminar de IndexedDB para vaciar la cola
   if (idsAEliminar.length > 0) {
     await db.asistencias_pendientes.bulkDelete(idsAEliminar);
   }
 
-  // Notificar al componente para actualizar el botón inmediatamente
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('asistencia-offline-guardada'));
   }
