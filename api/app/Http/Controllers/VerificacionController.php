@@ -73,11 +73,12 @@ class VerificacionController extends Controller
         $rol = $usuario ? ($usuario->rol ?? class_basename($usuario)) : 'docente';
         $userId = $usuario?->id;
 
-        // HU-19: Validar permisos del auxiliar
+        // Validar permisos del auxiliar o docente
         if ($usuario->tokenCan('role:auxiliar')) {
             $asignacion = DB::table('examen_auxiliar')
                 ->where('id_examen', $examen->id)
                 ->where('id_auxiliar', $usuario->id)
+                ->where('estado', 'Aceptada')
                 ->value('estado');
 
             if ($asignacion !== 'Aceptada') {
@@ -99,7 +100,48 @@ class VerificacionController extends Controller
             }
         }
 
-        // PASO 1: Formato inválido o sin identificador (Criterio 2)
+        // Examen finalizado no admite más ingresos
+        if (in_array(strtolower($examen->estado ?? ''), ['terminado', 'finalizado', 'concluido'])) {
+            $this->registrarIntentoNoAutorizado(
+                $request,
+                $examen->id,
+                $idEstudianteToken,
+                'EXAMEN_FINALIZADO',
+                $rol,
+                $userId,
+                $codigoSis ?? 'DESCONOCIDO'
+            );
+
+            return response()->json([
+                'success'    => false,
+                'resultado'  => 'RECHAZADO_EXAMEN_CONCLUIDO',
+                'message'    => 'La evaluación ha finalizado. No se permiten más ingresos.',
+                'error_type' => 'EXAMEN_FINALIZADO',
+            ], 403);
+        }
+
+        // Expiración horaria del QR
+        $expiraAt = $qrData['expira_at'] ?? null;
+        if ($expiraAt && Carbon::now()->timestamp > $expiraAt) {
+            $this->registrarIntentoNoAutorizado(
+                $request,
+                $examen->id,
+                $idEstudianteToken,
+                'HORARIO_EXPIRADO',
+                $rol,
+                $userId,
+                $codigoSis ?? 'DESCONOCIDO'
+            );
+
+            return response()->json([
+                'success'    => false,
+                'resultado'  => 'RECHAZADO_QR_EXPIRADO',
+                'message'    => 'El código QR ha expirado. El horario de ingreso concluyó.',
+                'error_type' => 'HORARIO_EXPIRADO',
+            ], 403);
+        }
+
+        // PASO 1: Formato inválido o sin identificador
         if (empty($codigoSis) && empty($idEstudianteToken)) {
             $this->registrarLog(
                 $examen->id,
@@ -164,9 +206,60 @@ class VerificacionController extends Controller
             ], 403);
         }
 
+        // PASO CRÍTICO: PREVENIR REINGRESOS DUPLICADOS (DEBE IR ANTES DEL PASO 3)
+        $ingresoPrevio = LogAsistencia::where('id_examen', $examen->id)
+            ->where('id_estudiante', $estudiante->id)
+            ->where('resultado', 'PERMITIDO')
+            ->first();
+
+        // Respaldo adicional: verificar si la tabla pivote ya tiene registrada fecha_ingreso
+        if (!$ingresoPrevio) {
+            $ingresoEnPivote = DB::table('estudiante_examen')
+                ->where('id_examen', $examen->id)
+                ->where('id_estudiante', $estudiante->id)
+                ->whereNotNull('fecha_ingreso')
+                ->first();
+        }
+
+        if ($ingresoPrevio || !empty($ingresoEnPivote)) {
+            $fechaTexto = $ingresoPrevio 
+                ? Carbon::parse($ingresoPrevio->fecha_escaneo)->format('d/m/Y H:i:s')
+                : Carbon::parse($ingresoEnPivote->fecha_ingreso)->format('d/m/Y H:i:s');
+
+            $this->registrarLog(
+                $examen->id,
+                $estudiante->id,
+                $estudiante->codigo_sis,
+                'RECHAZADO_YA_INGRESO',
+                'El estudiante ya registró un ingreso exitoso previamente.',
+                $qrData
+            );
+
+            // Registro explícito como REINGRESO_DUPLICADO
+            $this->registrarIntentoNoAutorizado(
+                $request,
+                $examen->id,
+                $estudiante->id,
+                'REINGRESO_DUPLICADO',
+                $rol,
+                $userId,
+                $estudiante->codigo_sis
+            );
+
+            return response()->json([
+                'success'   => false,
+                'resultado' => 'RECHAZADO_YA_INGRESO',
+                'message'   => 'El estudiante ya registró su ingreso a esta evaluación.',
+                'detalles'  => [
+                    'primer_ingreso' => $fechaTexto,
+                ],
+            ], 409);
+        }
+
         // PASO 3: Verificar inscripción en el examen 
-        $inscripcion = $examen->estudiantes()
-            ->where('estudiantes.id', $estudiante->id)
+        $inscripcion = DB::table('estudiante_examen')
+            ->where('id_examen', $examen->id)
+            ->where('id_estudiante', $estudiante->id)
             ->first();
 
         if (!$inscripcion) {
@@ -200,7 +293,7 @@ class VerificacionController extends Controller
             ], 403);
         }
 
-        // PASO 4: Si está inscrito, verificar que el QR pertenezca a ESTE examen y materia
+        // PASO 4: Si está inscrito, verificar que el QR pertenezca a ESTE examen
         $esExamenDistinto = ($idExamenToken && $idExamenToken !== $examen->id);
         $esMateriaDistinta = ($materiaQr && $examen->materia && strcasecmp(trim($materiaQr), trim($examen->materia->nombre)) !== 0);
 
@@ -231,11 +324,11 @@ class VerificacionController extends Controller
             ], 403);
         }
 
-        // PASO 5: Verificar habilitación 
-        $estado = $inscripcion->pivot->estado ?? 'Inhabilitado';
+        // PASO 5: Verificar habilitación
+        $estado = $inscripcion->estado ?? 'Inhabilitado';
 
         if ($estado !== 'Habilitado') {
-            $motivo = $inscripcion->pivot->motivo_estado ?? 'No cumple con los prerrequisitos asignados.';
+            $motivo = $inscripcion->motivo_estado ?? 'No cumple con los prerrequisitos asignados.';
 
             $this->registrarLog(
                 $examen->id,
@@ -272,39 +365,14 @@ class VerificacionController extends Controller
             ], 403);
         }
 
-        // PASO 6: Prevenir reingresos duplicados
-        $ingresoPrevio = LogAsistencia::where('id_examen', $examen->id)
+        // PASO 6: Acceso autorizado
+        DB::table('estudiante_examen')
+            ->where('id_examen', $examen->id)
             ->where('id_estudiante', $estudiante->id)
-            ->where('resultado', 'PERMITIDO')
-            ->first();
-
-        if ($ingresoPrevio) {
-            $this->registrarLog(
-                $examen->id,
-                $estudiante->id,
-                $estudiante->codigo_sis,
-                'RECHAZADO_YA_INGRESO',
-                'El estudiante ya registró un ingreso exitoso previamente.',
-                $qrData
-            );
-
-            return response()->json([
-                'success'   => false,
-                'resultado' => 'RECHAZADO_YA_INGRESO',
-                'message'   => 'El estudiante ya registró su ingreso a esta evaluación.',
-                'detalles'  => [
-                    'primer_ingreso' => Carbon::parse($ingresoPrevio->fecha_escaneo)->format('d/m/Y H:i:s'),
-                ],
-            ], 409);
-        }
-
-        // PASO 7: Acceso autorizado
-        $examen->estudiantes()->updateExistingPivot(
-            $estudiante->id,
-            [
+            ->update([
                 'fecha_ingreso' => Carbon::now('America/La_Paz'),
-            ]
-        );
+                'updated_at'    => now(),
+            ]);
 
         try {
             $this->registrarLog(
@@ -321,6 +389,16 @@ class VerificacionController extends Controller
                     ->where('id_estudiante', $estudiante->id)
                     ->where('resultado', 'PERMITIDO')
                     ->first();
+
+                $this->registrarIntentoNoAutorizado(
+                    $request,
+                    $examen->id,
+                    $estudiante->id,
+                    'REINGRESO_DUPLICADO',
+                    $rol,
+                    $userId,
+                    $estudiante->codigo_sis
+                );
 
                 return response()->json([
                     'success'   => false,
@@ -413,6 +491,17 @@ class VerificacionController extends Controller
             ->first();
 
         if ($ingresoPrevio) {
+            // Auditoría de intento duplicado en ingreso manual
+            $this->registrarIntentoNoAutorizado(
+                $request,
+                $examen->id,
+                $estudiante->id,
+                'REINGRESO_DUPLICADO_MANUAL',
+                $usuario ? ($usuario->rol ?? class_basename($usuario)) : 'docente',
+                $usuario?->id,
+                $estudiante->codigo_sis
+            );
+
             return response()->json([
                 'message'  => 'El estudiante ya registró su entrada previamente.',
                 'detalles' => [
