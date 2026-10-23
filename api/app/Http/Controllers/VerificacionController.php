@@ -9,6 +9,7 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 
 class VerificacionController extends Controller
 {
@@ -288,15 +289,24 @@ class VerificacionController extends Controller
             ], 409);
         }
 
-        // Registrar asistencia manual
-        $this->registrarLog(
-            $examen->id,
-            $estudiante->id,
-            $estudiante->codigo_sis,
-            'PERMITIDO',
-            "Ingreso manual autorizado. Motivo: {$motivo}",
-            ['tipo_ingreso' => 'MANUAL', 'motivo' => $motivo]
-        );
+        // Registrar ingreso manual y su log en una sola transacción
+        DB::transaction(function () use ($examen, $estudiante, $motivo) {
+            $examen->estudiantes()->updateExistingPivot(
+                $estudiante->id,
+                [
+                    'fecha_ingreso' => now('America/La_Paz'),
+                ]
+            );
+
+            $this->registrarLog(
+                $examen->id,
+                $estudiante->id,
+                $estudiante->codigo_sis,
+                'PERMITIDO',
+                "Ingreso manual autorizado. Motivo: {$motivo}",
+                ['tipo_ingreso' => 'MANUAL', 'motivo' => $motivo]
+            );
+        });
 
         $nombreCompleto = trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}");
 
