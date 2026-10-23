@@ -60,7 +60,7 @@ class ExamenSeeder2 extends Seeder
             'estado'     => 'Programado',
             'fecha'      => $ahora->format('Y-m-d'),
             'hora_ini'   => $ahora->copy()->subMinutes(15)->format('H:i:s'),
-            'hora_fin'   => $ahora->copy()->addMinutes(17)->format('H:i:s'),
+            'hora_fin'   => $ahora->copy()->addMinutes(10)->format('H:i:s'),
         ]);
         $examenActivo->save();
 

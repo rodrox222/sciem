@@ -231,43 +231,72 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
       setIsValidating(true)
 
       try {
-        const res = await procesarIngresoEscaneado(decodedText, exam.id, token)
+        // 1. Intentar validar directamente contra la API de Laravel
+        const res = await api.post<VerificationResponse>(
+          `/examenes/${exam.id}/verificar-ingreso`,
+          { qr_data: decodedText }
+        )
 
-        if (res.success) {
-          setValidationResult({
-            estado: 'autorizado',
-            estudiante: {
-              nombreCompleto: res.estudiante?.nombre_completo,
-              codigoSis: res.estudiante?.codigo_sis,
-            },
-            horaIngreso: res.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
-          })
-          void loadAsistencias()
-        } else {
-          // Detectar si fue un reingreso duplicado
-          const esDuplicado =
-            res.mensaje?.toLowerCase().includes('ya ingresó') ||
-            res.mensaje?.toLowerCase().includes('duplicado') ||
-            res.detalles?.resultado === 'RECHAZADO_YA_INGRESO'
-
-          const esInhabilitado =
-            res.mensaje?.toLowerCase().includes('inhabilitado') ||
-            res.detalles?.resultado === 'RECHAZADO_INHABILITADO'
-
-          setValidationResult({
-            estado: 'rechazado',
-            codigo: esDuplicado
-              ? 'YA_INGRESO'
-              : esInhabilitado
-                ? 'INHABILITADO'
-                : 'ERROR_VALIDACION',
-            motivo: res.mensaje,
-            primerIngreso: res.detalles?.primer_ingreso,
-          })
-        }
+        // Si fue exitoso (200 OK)
+        setValidationResult({
+          estado: 'autorizado',
+          estudiante: {
+            nombreCompleto: res.estudiante?.nombre_completo || res.estudiante?.nombre,
+            codigoSis: res.estudiante?.codigo_sis || res.estudiante?.sis,
+          },
+          horaIngreso: res.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
+        })
+        void loadAsistencias()
         setShowModal(true)
       } catch (error) {
-        setValidationResult(mapVerificationError(error))
+        // 2. Si Laravel rechaza (403, 409, 400), Laravel YA insertó la fila en intentos_no_autorizados
+        // Solo mapeamos el error para mostrar el modal adecuado
+        if (error instanceof ApiError) {
+          setValidationResult(mapVerificationError(error))
+          setShowModal(true)
+          return
+        }
+
+        // 3. Respaldo Offline si no hay conexión a internet/red
+        try {
+          const resOffline = await procesarIngresoEscaneado(decodedText, exam.id, token)
+
+          if (resOffline.success) {
+            setValidationResult({
+              estado: 'autorizado',
+              estudiante: {
+                nombreCompleto: resOffline.estudiante?.nombre_completo,
+                codigoSis: resOffline.estudiante?.codigo_sis,
+              },
+              horaIngreso: resOffline.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
+            })
+            void loadAsistencias()
+          } else {
+            const esDuplicado =
+              resOffline.mensaje?.toLowerCase().includes('ya ingresó') ||
+              resOffline.mensaje?.toLowerCase().includes('duplicado') ||
+              resOffline.detalles?.resultado === 'RECHAZADO_YA_INGRESO'
+
+            const esInhabilitado =
+              resOffline.mensaje?.toLowerCase().includes('inhabilitado') ||
+              resOffline.mensaje?.toLowerCase().includes('sin cumplir') ||
+              resOffline.detalles?.resultado === 'RECHAZADO_INHABILITADO'
+
+            setValidationResult({
+              estado: 'rechazado',
+              codigo: esDuplicado
+                ? 'YA_INGRESO'
+                : esInhabilitado
+                  ? 'INHABILITADO'
+                  : 'ERROR_VALIDACION',
+              motivo: resOffline.mensaje,
+              primerIngreso: resOffline.detalles?.primer_ingreso,
+            })
+          }
+        } catch (offlineErr) {
+          setValidationResult(mapVerificationError(offlineErr))
+        }
+
         setShowModal(true)
       } finally {
         setIsValidating(false)

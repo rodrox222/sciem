@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Examen;
 use App\Models\IntentoNoAutorizado;
+use App\Models\LogAuditoria;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -45,7 +46,20 @@ class IntentoNoAutorizadoController extends Controller
             ->through(function ($intento) {
                 $estudiante = $intento->estudiante;
 
-                // Formatear explícitamente en la zona horaria de Bolivia
+                // Si el estudiante no existe en BD, rescatar el identificador guardado en auditoría
+                $identificador = $estudiante?->codigo_sis;
+                if (!$identificador) {
+                    $auditoria = LogAuditoria::where('modulo', 'INTENTOS_NO_AUTORIZADOS')
+                        ->where('detalles->intento_id', $intento->id)
+                        ->first();
+                    
+                    $detalles = $auditoria?->detalles;
+                    $identificador = is_array($detalles) ? ($detalles['identificador'] ?? null) : null;
+                    if ($identificador === 'DESCONOCIDO' || $identificador === 'QR_INVALIDO') {
+                        $identificador = null;
+                    }
+                }
+
                 $fechaBolivia = Carbon::parse($intento->fecha_hora)
                     ->setTimezone('America/La_Paz')
                     ->toIso8601String();
@@ -54,8 +68,8 @@ class IntentoNoAutorizadoController extends Controller
                     'id'                       => $intento->id,
                     'tipo_intento'             => $intento->tipo_intento,
                     'fecha_hora'               => $fechaBolivia,
-                    'codigo_sis'               => $estudiante?->codigo_sis ?? null,
-                    'identificador_presentado' => $estudiante?->codigo_sis ?? null,
+                    'codigo_sis'               => $identificador,
+                    'identificador_presentado' => $identificador,
 
                     'estudiante' => $estudiante ? [
                         'id'              => $estudiante->id,
