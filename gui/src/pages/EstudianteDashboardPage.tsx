@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
 import {
   BookOpen,
   CalendarDays,
@@ -7,15 +8,10 @@ import {
   UserRound,
   Camera,
   Save,
-
-  QrCode,
-  Printer,
   X,
-
 } from 'lucide-react'
 import { estudiantesService } from '@/services/estudiantes.service'
 import type { ExamenEstudiante } from '@/services/estudiantes.service'
-
 interface UsuarioEstudiante {
   id: string | number
   nombre?: string
@@ -35,15 +31,20 @@ export default function EstudianteDashboardPage() {
   const [subiendoFoto, setSubiendoFoto] = useState(false)
   const [mensajePerfil, setMensajePerfil] = useState('')
   const [errorPerfil, setErrorPerfil] = useState('')
-  const [fotoSeleccionada, setFotoSeleccionada] = useState<File | null>(null)
+  const [fotoCapturada, setFotoCapturada] = useState<File | null>(null)
+  const [camaraAbierta, setCamaraAbierta] = useState(false)
+  const [errorCamara, setErrorCamara] = useState('')
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const videoQrRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
   const [perfilCompletado, setPerfilCompletado] = useState(false)
-
-  const [modalQrAbierto, setModalQrAbierto] = useState(false)
-  const [cargandoQr, setCargandoQr] = useState(false)
-  const [qrToken, setQrToken] = useState<string | null>(null)
-  const [examenSeleccionado, setExamenSeleccionado] = useState<ExamenEstudiante | null>(null)
+  const [examenQrId, setExamenQrId] = useState<string | null>(null)
+  const [solicitandoQr, setSolicitandoQr] = useState(false)
   const [errorQr, setErrorQr] = useState('')
-
+  const [mensajeQr, setMensajeQr] = useState('')
+  const [qrToken, setQrToken] = useState<string | null>(null)
+  const [fotoVerificacion, setFotoVerificacion] = useState<File | null>(null)
   const usuario: UsuarioEstudiante | null = (() => {
     try {
       const guardado = localStorage.getItem('user_data')
@@ -52,12 +53,13 @@ export default function EstudianteDashboardPage() {
       return null
     }
   })()
-
   useEffect(() => {
-    setPerfilCompletado(usuario?.primer_acceso_completado === true)
+    setPerfilCompletado(
+      usuario?.primer_acceso_completado === true,
+    )
+
     setCi((usuario as UsuarioEstudiante & { ci?: string | null })?.ci ?? '')
   }, [])
-
   const cargarExamenes = async () => {
     if (!usuario?.id) {
       setError('No se encontró la información del estudiante autenticado.')
@@ -88,48 +90,188 @@ export default function EstudianteDashboardPage() {
     'Estudiante'
 
   const guardarPerfil = async () => {
+    if (!usuario?.id) {
+      setErrorPerfil('No se encontró el ID del estudiante.')
+      return
+    }
+
     if (!ci.trim()) {
       setErrorPerfil('El CI es obligatorio.')
       return
     }
-
+    if (!/^[0-9]+$/.test(ci.trim())) {
+      setErrorPerfil('El CI debe contener solamente números.')
+      return
+    }
     try {
       setGuardandoPerfil(true)
       setErrorPerfil('')
       setMensajePerfil('')
-
-      // Se envía directamente el payload sin pasar el ID
       const respuesta = await estudiantesService.completarDatos({
         ci: ci.trim(),
         ci_extension: ciExtension || null,
       })
+      const completado =
+        respuesta.data.primer_acceso_completado === true
 
-      setPerfilCompletado(respuesta.data.primer_acceso_completado === true)
-      setMensajePerfil('Datos personales guardados correctamente.')
+      setPerfilCompletado(completado)
 
-      // Sincronizar en localStorage para mantener actualizada la sesión
-      const guardado = localStorage.getItem('user_data')
-      if (guardado) {
-        const datos = JSON.parse(guardado)
-        datos.ci = ci.trim()
-        datos.ci_extension = ciExtension || null
-        datos.primer_acceso_completado = true
-        localStorage.setItem('user_data', JSON.stringify(datos))
+      const usuarioActualizado = {
+        ...usuario,
+        ci: respuesta.data.ci,
+        primer_acceso_completado: completado,
       }
-    } catch (err: any) {
+
+      localStorage.setItem('user_data', JSON.stringify(usuarioActualizado))
+
+      setMensajePerfil(
+        completado
+          ? 'Perfil completado correctamente.'
+          : 'CI guardado. Ahora debes subir tu fotografía.',
+      )
+    } catch (err) {
       console.error('Error al guardar el perfil:', err)
-      const mensaje =
-        err.response?.data?.message ||
-        'No se pudieron guardar los datos. Verifica el CI e inténtalo nuevamente.'
-      setErrorPerfil(mensaje)
+      setErrorPerfil('No se pudieron guardar los datos. Verifica el CI e inténtalo nuevamente.')
     } finally {
       setGuardandoPerfil(false)
     }
   }
+  const abrirCamara = async () => {
+    setErrorCamara('')
+    setMensajePerfil('')
+    setFotoCapturada(null)
 
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setErrorCamara(
+        'Tu navegador no permite acceder a la cámara. Utiliza HTTPS o localhost.',
+      )
+      return
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: { ideal: 'user' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      })
+
+      streamRef.current = stream
+      setCamaraAbierta(true)
+    } catch (error) {
+      console.error('Error al abrir la cámara:', error)
+      setErrorCamara(
+        'No se pudo abrir la cámara. Comprueba los permisos del navegador.',
+      )
+    }
+  }
+
+  useEffect(() => {
+    if (!camaraAbierta) return
+
+    const video = examenQrId !== null
+      ? videoQrRef.current
+      : videoRef.current
+
+    const stream = streamRef.current
+
+    if (!video || !stream) {
+      console.error('Cámara sin elemento de vídeo o sin flujo', {
+        videoDisponible: Boolean(video),
+        streamDisponible: Boolean(stream),
+        examenQrId,
+      })
+      return
+    }
+
+    video.srcObject = stream
+
+    const iniciarVideo = async () => {
+      try {
+        await video.play()
+      } catch (error) {
+        console.error('No se pudo reproducir el vídeo:', error)
+
+        if (examenQrId !== null) {
+          setErrorQr('No se pudo reproducir la cámara. Comprueba los permisos.')
+        } else {
+          setErrorCamara('No se pudo reproducir la cámara. Comprueba los permisos.')
+        }
+      }
+    }
+
+    void iniciarVideo()
+
+    return () => {
+      video.srcObject = null
+    }
+  }, [camaraAbierta, examenQrId])
+  const cerrarCamara = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+    streamRef.current = null
+    setCamaraAbierta(false)
+  }
+
+  const capturarFotografia = () => {
+    const video = videoRef.current
+    const canvas = canvasRef.current
+
+    if (!video || !canvas || video.videoWidth === 0) {
+      setErrorCamara('La cámara todavía no está lista. Inténtalo nuevamente.')
+      return
+    }
+
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+
+    const contexto = canvas.getContext('2d')
+
+    if (!contexto) {
+      setErrorCamara('No se pudo procesar la fotografía.')
+      return
+    }
+
+    contexto.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          setErrorCamara('No se pudo generar la fotografía.')
+          return
+        }
+
+        const archivo = new File(
+          [blob],
+          `verificacion-${Date.now()}.jpg`,
+          { type: 'image/jpeg' },
+        )
+
+        if (archivo.size > 3 * 1024 * 1024) {
+          setErrorCamara(
+            'La fotografía supera los 3 MB permitidos. Intenta nuevamente.',
+          )
+          return
+        }
+
+        setFotoCapturada(archivo)
+        setErrorCamara('')
+        cerrarCamara()
+      },
+      'image/jpeg',
+      0.85,
+    )
+  }
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((track) => track.stop())
+    }
+  }, [])
   const subirFotografia = async () => {
-    if (!usuario?.id || !fotoSeleccionada) {
-      setErrorPerfil('Selecciona una fotografía antes de continuar.')
+    if (!usuario?.id || !fotoCapturada) {
+      setErrorPerfil('Primero debes tomar una fotografía con la cámara.')
       return
     }
 
@@ -137,79 +279,251 @@ export default function EstudianteDashboardPage() {
       setSubiendoFoto(true)
       setErrorPerfil('')
       setMensajePerfil('')
+      const respuesta = await estudiantesService.subirFoto(fotoCapturada)
+      const completado =
+        respuesta.data.primer_acceso_completado === true
 
-      await estudiantesService.subirFoto(fotoSeleccionada)
+      const usuarioActualizado = {
+        ...usuario,
+        foto_perfil_url: respuesta.data.foto_perfil_url,
+        ci: respuesta.data.ci,
+        ci_extension: respuesta.data.ci_extension,
+        primer_acceso_completado: completado,
+      }
 
-      setMensajePerfil('Fotografía subida correctamente.')
-      setFotoSeleccionada(null)
-    } catch (err) {
-      console.error('Error al subir la fotografía:', err)
-      setErrorPerfil('No se pudo subir la fotografía. Comprueba el formato y el tamaño.')
+      localStorage.setItem('user_data', JSON.stringify(usuarioActualizado))
+      setPerfilCompletado(completado)
+      setFotoCapturada(null)
+
+      setMensajePerfil(
+        completado
+          ? 'Fotografía registrada y perfil completado.'
+          : 'Fotografía registrada. Guarda tu CI para completar el perfil.',
+      )
+    } catch (error) {
+      console.error('Error al subir la fotografía:', error)
+      setErrorPerfil(
+        'No se pudo registrar la fotografía. Comprueba la conexión e inténtalo nuevamente.',
+      )
     } finally {
       setSubiendoFoto(false)
     }
   }
+  const abrirCamaraQr = async (idExamen: string) => {
+    setErrorQr('')
+    setMensajeQr('')
+    setFotoVerificacion(null)
+    setExamenQrId(idExamen)
 
-  //// (*mi codigo: funcion para solicitar QR al backend*) ////
-  const generarQrExamen = async (examen: ExamenEstudiante) => {
-    try {
-      setExamenSeleccionado(examen)
-      setErrorQr('')
-      setCargandoQr(true)
-      setModalQrAbierto(true)
+    // Detener cualquier cámara anterior.
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+    streamRef.current = null
 
-      const respuesta = await estudiantesService.generarTokenQr(examen.id_examen)
-      setQrToken(respuesta.data.qr_token)
-    } catch (err: any) {
-      console.error('Error al generar QR:', err)
+    if (!navigator.mediaDevices?.getUserMedia) {
       setErrorQr(
-        err.response?.data?.message ||
-          'No se pudo generar el código QR. Verifica que tu perfil esté completado.',
+        'El navegador no permite acceder a la cámara. Comprueba que estés usando localhost o HTTPS.',
+      )
+      return
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      })
+
+      streamRef.current = stream
+
+      console.log('Cámara QR abierta:', {
+        tracks: stream.getVideoTracks().map((track) => ({
+          estado: track.readyState,
+          activa: track.enabled,
+          configuracion: track.getSettings(),
+        })),
+      })
+
+      setCamaraAbierta(true)
+    } catch (error) {
+  console.error('Error al abrir la cámara QR:', error)
+
+  if (error instanceof Error) {
+    switch (error.name) {
+      case 'NotAllowedError':
+      case 'PermissionDeniedError':
+        setErrorQr(
+          'No tienes permiso para usar la cámara. Habilita el permiso en tu navegador e inténtalo nuevamente.',
+        )
+        break
+
+      case 'NotFoundError':
+      case 'DevicesNotFoundError':
+        setErrorQr(
+          'No se encontró una cámara disponible en este dispositivo.',
+        )
+        break
+
+      case 'NotReadableError':
+      case 'TrackStartError':
+        setErrorQr(
+          'No se pudo iniciar la cámara. Puede estar siendo utilizada por otra aplicación. Ciérrala e inténtalo nuevamente.',
+        )
+        break
+
+      case 'OverconstrainedError':
+        setErrorQr(
+          'La cámara no admite la configuración solicitada. Comprueba tu dispositivo e inténtalo nuevamente.',
+        )
+        break
+
+      case 'SecurityError':
+        setErrorQr(
+          'El navegador bloqueó el acceso a la cámara. Abre la aplicación mediante HTTPS o localhost.',
+        )
+        break
+
+      default:
+        setErrorQr(
+          'No se pudo abrir la cámara. Comprueba los permisos del navegador e inténtalo nuevamente.',
+        )
+    }
+  } else {
+    setErrorQr(
+      'Ocurrió un error al acceder a la cámara. Comprueba los permisos e inténtalo nuevamente.',
+    )
+  }
+}
+  }
+
+  const capturarFotoQr = () => {
+    const video = videoQrRef.current
+    const canvas = canvasRef.current
+
+    if (!video || !canvas) {
+      setErrorQr('No se encontró el vídeo o el área de captura.')
+      return
+    }
+
+    if (
+      video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+      video.videoWidth === 0 ||
+      video.videoHeight === 0
+    ) {
+      setErrorQr('Espera un momento hasta que la cámara esté lista e inténtalo nuevamente.')
+      return
+    }
+
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+
+    const contexto = canvas.getContext('2d')
+
+    if (!contexto) {
+      setErrorQr('No se pudo procesar la fotografía.')
+      return
+    }
+
+    contexto.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          setErrorQr('No se pudo capturar la fotografía.')
+          return
+        }
+
+        const archivo = new File(
+          [blob],
+          `verificacion-examen-${Date.now()}.jpg`,
+          { type: 'image/jpeg' },
+        )
+
+        if (archivo.size > 3 * 1024 * 1024) {
+          setErrorQr('La fotografía supera los 3 MB permitidos.')
+          return
+        }
+
+        setFotoVerificacion(archivo)
+        setErrorQr('')
+        cerrarCamara()
+      },
+      'image/jpeg',
+      0.85,
+    )
+  }
+
+
+  const solicitarQr = async () => {
+    if (examenQrId === null || !fotoVerificacion) {
+      setErrorQr('Primero debes tomar la fotografía de verificación.')
+      return
+    }
+
+    try {
+      setSolicitandoQr(true)
+      setErrorQr('')
+      setMensajeQr('')
+
+      const respuesta = await estudiantesService.generarTokenQr(
+        examenQrId,
+        fotoVerificacion,
+      )
+
+      console.log('Respuesta de generación QR:', respuesta)
+
+      // Admite la respuesta directa del servicio o la respuesta de Axios.
+      const datos = respuesta as unknown as {
+        qr_token?: string
+        data?: {
+          qr_token?: string
+          data?: {
+            qr_token?: string
+          }
+        }
+      }
+
+      const token =
+        datos.data?.data?.qr_token ??
+        datos.data?.qr_token ??
+        datos.qr_token
+
+      if (!token) {
+        console.error('No se encontró qr_token en la respuesta:', respuesta)
+        setErrorQr('El servidor no devolvió un token QR válido. Revisa la consola.')
+        return
+      }
+
+      setQrToken(token)
+      setMensajeQr('QR generado correctamente.')
+      setFotoVerificacion(null)
+      cerrarCamara()
+    } catch (error) {
+      console.error('Error al solicitar el QR:', error)
+      setErrorQr(
+        'No se pudo generar el QR. Verifica que estés habilitado para el examen e inténtalo nuevamente.',
       )
     } finally {
-      setCargandoQr(false)
+      setSolicitandoQr(false)
     }
   }
-  //// (*fin mi codigo*) ////
-
   return (
     <div className="space-y-6 p-4 md:p-6">
-      <section className="rounded-2xl border bg-card p-6 shadow-sm">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground">Módulo de estudiante</p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight">
-              Hola, {nombreCompleto}
-            </h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Consulta tus exámenes y el estado de tus inscripciones.
-            </p>
-            {usuario?.codigo_sis && (
-              <p className="mt-2 text-sm">
-                Código SIS: <strong>{usuario.codigo_sis}</strong>
-              </p>
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => void cargarExamenes()}
-            disabled={cargando}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <RefreshCw size={16} className={cargando ? 'animate-spin' : ''} />
-            Actualizar
-          </button>
-        </div>
-      </section>
-
       <section className="rounded-2xl border bg-card p-6 shadow-sm">
         <div className="mb-5 flex items-center gap-3">
           <div className="rounded-lg bg-primary/10 p-2 text-primary">
             <UserRound size={22} />
           </div>
           <div>
+            <p className="text-sm font-medium text-primary">
+              Módulo de estudiante
+            </p>
             <h2 className="text-lg font-semibold">Mi perfil</h2>
+            <p className="text-sm text-muted-foreground">
+              {nombreCompleto}
+            </p>
             <p className="text-sm text-muted-foreground">
               {perfilCompletado
                 ? 'Tus datos personales están registrados.'
@@ -227,7 +541,10 @@ export default function EstudianteDashboardPage() {
               <img
                 src={usuario.foto_perfil_url}
                 alt="Fotografía del estudiante"
-                className="h-20 w-20 rounded-full border object-cover"
+                className="h-24 w-24 rounded-xl border object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none'
+                }}
               />
             )}
           </div>
@@ -292,27 +609,87 @@ export default function EstudianteDashboardPage() {
             </form>
 
             <div className="mt-6 space-y-3 border-t pt-5">
-              <label htmlFor="fotoEstudiante" className="text-sm font-medium">
-                Fotografía (JPG, PNG o WEBP; máximo 5 MB)
-              </label>
-              <input
-                id="fotoEstudiante"
-                type="file"
-                accept=".jpg,.jpeg,.png,.webp"
-                onChange={(e) =>
-                  setFotoSeleccionada(e.target.files?.[0] ?? null)
-                }
-                className="block w-full text-sm"
-              />
-              <button
-                type="button"
-                onClick={() => void subirFotografia()}
-                disabled={!fotoSeleccionada || subiendoFoto}
-                className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm disabled:opacity-50"
-              >
-                <Camera size={16} />
-                {subiendoFoto ? 'Subiendo...' : 'Subir fotografía'}
-              </button>
+              <div>
+                <p className="text-sm font-medium">Fotografía de perfil</p>
+                <p className="text-sm text-muted-foreground">
+                  Debes tomar la fotografía en vivo. No puedes seleccionar imágenes de tu galería.
+                </p>
+              </div>
+
+              {!camaraAbierta && (
+                <button
+                  type="button"
+                  onClick={() => void abrirCamara()}
+                  className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm hover:bg-muted"
+                >
+                  <Camera size={16} />
+                  Abrir cámara
+                </button>
+              )}
+
+              {camaraAbierta && (
+                <div className="max-w-md space-y-3">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full rounded-xl border bg-black"
+                  />
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={capturarFotografia}
+                      className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground"
+                    >
+                      <Camera size={16} />
+                      Tomar fotografía
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={cerrarCamara}
+                      className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm"
+                    >
+                      <X size={16} />
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+              {fotoCapturada && (
+                <div className="space-y-3">
+                  <p className="text-sm text-green-700">
+                    Fotografía capturada correctamente.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => void subirFotografia()}
+                    disabled={subiendoFoto}
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
+                  >
+                    <Save size={16} />
+                    {subiendoFoto ? 'Registrando...' : 'Registrar fotografía'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFotoCapturada(null)}
+                    disabled={subiendoFoto}
+                    className="ml-2 rounded-lg border px-4 py-2 text-sm"
+                  >
+                    Volver a tomar
+                  </button>
+                </div>
+              )}
+
+              {errorCamara && (
+                <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                  {errorCamara}
+                </p>
+              )}
             </div>
           </>
         )}
@@ -328,7 +705,6 @@ export default function EstudianteDashboardPage() {
           </p>
         )}
       </section>
-
       <section className="space-y-4">
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-primary/10 p-2 text-primary">
@@ -374,87 +750,225 @@ export default function EstudianteDashboardPage() {
             {examenes.map((examen) => (
               <article
                 key={examen.id_examen}
-                className="flex flex-col justify-between rounded-xl border bg-card p-5 shadow-sm"
+                className="rounded-xl border bg-card p-5 shadow-sm"
               >
-                <div>
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="font-semibold">{examen.nombre}</h3>
-                    <span
-                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
-                        examen.estado === 'Habilitado'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="font-semibold">{examen.nombre}</h3>
+                  <span
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${examen.estado === 'Habilitado'
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-red-100 text-red-800'
                       }`}
-                    >
-                      {examen.estado}
-                    </span>
-                  </div>
+                  >
+                    {examen.estado}
+                  </span>
+                </div>
 
-                  {examen.materia && (
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      {examen.materia}
-                    </p>
-                  )}
+                {examen.materia && (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {examen.materia}
+                  </p>
+                )}
 
-                  <div className="mt-4 space-y-2 text-sm">
+                <div className="mt-4 space-y-2 text-sm">
+
+                  <p className="flex items-center gap-2">
+                    <CalendarDays
+                      size={16}
+                      className="shrink-0 text-muted-foreground"
+                    />
+                    {(() => {
+                      const fecha = examen.fecha.slice(0, 10)
+                      const [anio, mes, dia] = fecha.split('-')
+                      return anio && mes && dia
+                        ? `${dia}/${mes}/${anio}`
+                        : examen.fecha
+                    })()}
+                  </p>
+
+
+                  {(examen.hora_ini || examen.hora_fin) && (
                     <p className="flex items-center gap-2">
-                      <CalendarDays
+                      <Clock
                         size={16}
                         className="shrink-0 text-muted-foreground"
                       />
-                      {(() => {
-                        const fecha = examen.fecha.slice(0, 10)
-                        const [anio, mes, dia] = fecha.split('-')
-                        return anio && mes && dia
-                          ? `${dia}/${mes}/${anio}`
-                          : examen.fecha
-                      })()}
+                      {[examen.hora_ini, examen.hora_fin]
+                        .filter(Boolean)
+                        .join(' - ')}
                     </p>
+                  )}
 
-                    {(examen.hora_ini || examen.hora_fin) && (
-                      <p className="flex items-center gap-2">
-                        <Clock
-                          size={16}
-                          className="shrink-0 text-muted-foreground"
-                        />
-                        {[examen.hora_ini, examen.hora_fin]
-                          .filter(Boolean)
-                          .join(' - ')}
-                      </p>
-                    )}
+                  {examen.aula && (
+                    <p>
+                      <span className="text-muted-foreground">Aula:</span>{' '}
+                      {examen.aula}
+                    </p>
+                  )}
 
-                    {examen.aula && (
-                      <p>
-                        <span className="text-muted-foreground">Aula:</span>{' '}
-                        {examen.aula}
-                      </p>
-                    )}
-
-                    {examen.docente && (
-                      <p>
-                        <span className="text-muted-foreground">Docente:</span>{' '}
-                        {examen.docente}
-                      </p>
-                    )}
-                  </div>
-
-                  {examen.estado === 'Inhabilitado' && examen.motivo_estado && (
-                    <p className="mt-4 rounded-lg bg-muted p-3 text-sm">
-                      <strong>Motivo:</strong> {examen.motivo_estado}
+                  {examen.docente && (
+                    <p>
+                      <span className="text-muted-foreground">Docente:</span>{' '}
+                      {examen.docente}
                     </p>
                   )}
                 </div>
 
-                {examen.estado === 'Habilitado' && (
+                {examen.estado === 'Inhabilitado' && examen.motivo_estado && (
+                  <p className="mt-4 rounded-lg bg-muted p-3 text-sm">
+                    <strong>Motivo:</strong> {examen.motivo_estado}
+                  </p>
+                )}
+                {examen.estado === 'Habilitado' && perfilCompletado && (
                   <div className="mt-5 border-t pt-4">
-                    <button
-                      type="button"
-                      onClick={() => void generarQrExamen(examen)}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary/10 px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/20"
-                    >
-                      <QrCode size={16} />
-                      Generar credencial QR
-                    </button>
+                    {examenQrId !== examen.id_examen && (
+                      <button
+                        type="button"
+                        onClick={() => void abrirCamaraQr(examen.id_examen)}
+                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+                      >
+                        <Camera size={16} />
+                        Solicitar QR
+                      </button>
+                    )}
+                    {examenQrId === examen.id_examen && (
+                      <div className="mt-4 space-y-3">
+                        {camaraAbierta && (
+                          <div className="space-y-3">
+                            <p className="text-sm text-muted-foreground">
+                              Toma una fotografía en vivo para verificar tu identidad.
+                            </p>
+
+                            <div className="space-y-3">
+                              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                                <p className="font-semibold">
+                                  Recomendaciones para la fotografía
+                                </p>
+                                <p className="mt-1">
+                                  Utiliza un fondo claro, busca buena iluminación y asegúrate
+                                  de que tu rostro se vea completo y claramente.
+                                </p>
+                              </div>
+
+                              
+<div className="relative w-full max-w-md overflow-hidden rounded-xl border bg-black">
+  <video
+  ref={videoQrRef}
+  autoPlay
+  playsInline
+  muted
+  className="w-full h-auto min-h-[240px] max-h-[65dvh] object-cover rounded-xl border bg-black sm:max-w-md"
+/>
+  <svg
+    viewBox="0 0 320 300"
+    preserveAspectRatio="xMidYMid meet"
+    className="pointer-events-none absolute inset-0 h-full w-full"
+    aria-hidden="true"
+  >
+    <path
+      d="M160 35
+         C118 35 100 69 100 111
+         C100 140 111 159 128 173
+         L128 188
+         C113 199 89 204 66 216
+         C45 228 34 250 29 280
+         L291 280
+         C286 250 275 228 254 216
+         C231 204 207 199 192 188
+         L192 173
+         C209 159 220 140 220 111
+         C220 69 202 35 160 35 Z"
+      fill="none"
+      stroke="white"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+
+  <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/70 px-3 py-2 text-xs font-medium text-white">
+    Centra tu rostro y hombros
+  </div>
+</div>
+
+                            </div>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-2">
+                              <button
+                                type="button"
+                                onClick={capturarFotoQr}
+                                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm text-primary-foreground sm:w-auto"
+                              >
+                                <Camera size={16} />
+                                Capturar verificación
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  cerrarCamara()
+                                  setFotoVerificacion(null)
+                                  setExamenQrId(null)
+                                  setErrorQr('')
+                                }}
+                                className="inline-flex min-h-12 w-full items-center justify-center rounded-lg border px-4 py-3 text-sm sm:w-auto"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {fotoVerificacion && (
+                          <div className="space-y-3">
+                            <p className="text-sm text-green-700">
+                              Fotografía de verificación capturada.
+                            </p>
+
+                            <button
+                              type="button"
+                              onClick={() => void solicitarQr()}
+                              disabled={solicitandoQr}
+                              className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
+                            >
+                              {solicitandoQr ? 'Generando QR...' : 'Confirmar y generar QR'}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => void abrirCamaraQr(examen.id_examen)}
+                              disabled={solicitandoQr}
+                              className="ml-2 rounded-lg border px-4 py-2 text-sm"
+                            >
+                              Volver a tomar
+                            </button>
+                          </div>
+                        )}
+
+                        {mensajeQr && (
+                          <p className="text-sm text-green-700">{mensajeQr}</p>
+                        )}
+
+                        {errorQr && (
+                          <p role="alert" className="text-sm text-red-700">{errorQr}</p>
+                        )}
+                        {qrToken && examenQrId === examen.id_examen && (
+                          <div className="mt-4 flex flex-col items-center gap-3 rounded-xl border p-4">
+                            <h3 className="font-semibold">Tu código QR de ingreso</h3>
+
+                            <QRCodeSVG
+                              value={qrToken}
+                              size={220}
+                              level="M"
+                              includeMargin
+                            />
+
+                            <p className="text-center text-sm text-muted-foreground">
+                              Presenta este código QR para verificar tu ingreso al examen.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </article>
@@ -462,69 +976,7 @@ export default function EstudianteDashboardPage() {
           </div>
         )}
       </section>
-
-      {modalQrAbierto && examenSeleccionado && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="relative w-full max-w-sm rounded-2xl border bg-card p-6 shadow-xl">
-            <button
-              type="button"
-              onClick={() => {
-                setModalQrAbierto(false)
-                setQrToken(null)
-              }}
-              className="absolute right-4 top-4 rounded-lg p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-            >
-              <X size={18} />
-            </button>
-
-            <div className="text-center">
-              <h3 className="text-lg font-bold">{examenSeleccionado.nombre}</h3>
-              <p className="text-xs text-muted-foreground">
-                {examenSeleccionado.materia}
-              </p>
-            </div>
-
-            <div className="my-5 flex flex-col items-center justify-center">
-              {cargandoQr ? (
-                <div className="flex h-52 w-52 items-center justify-center">
-                  <RefreshCw size={28} className="animate-spin text-primary" />
-                </div>
-              ) : errorQr ? (
-                <p className="p-4 text-center text-sm text-destructive">{errorQr}</p>
-              ) : qrToken ? (
-                <div className="flex flex-col items-center gap-3">
-                  <div className="rounded-xl border bg-white p-3 shadow-inner">
-                    <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-                        qrToken,
-                      )}`}
-                      alt="Código QR de ingreso al examen"
-                      className="h-48 w-48 object-contain"
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    SIS: <strong>{usuario?.codigo_sis}</strong> • CI:{' '}
-                    <strong>{ci}</strong>
-                  </p>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => window.print()}
-                disabled={!qrToken || cargandoQr}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
-              >
-                <Printer size={16} />
-                Imprimir credencial
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-   
+      <canvas ref={canvasRef} className="hidden" />
     </div>
   )
 }
