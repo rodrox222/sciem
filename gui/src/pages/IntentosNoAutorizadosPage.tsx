@@ -21,6 +21,7 @@ import {
 const PER_PAGE = 15
 
 const formatDate = (value: string) => {
+  if (!value) return '—'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleString('es-BO', {
@@ -33,7 +34,7 @@ const formatStudentName = (intento: IntentoNoAutorizado) => {
   const estudiante = intento.estudiante
 
   if (!estudiante) {
-    return intento.identificador_presentado
+    return intento.identificador_presentado || intento.codigo_sis
       ? 'Estudiante sin datos asociados'
       : 'Estudiante no identificado'
   }
@@ -42,27 +43,55 @@ const formatStudentName = (intento: IntentoNoAutorizado) => {
 }
 
 const renderTipoIntentoBadge = (tipo: string) => {
-  switch (tipo?.toUpperCase()) {
+  const normalizado = String(tipo || '').trim().toUpperCase()
+
+  switch (normalizado) {
+    case 'REINGRESO_DUPLICADO':
+    case 'REINGRESO_DUPLICADO_MANUAL':
+    case 'RECHAZADO_YA_INGRESO':
+      return (
+        <span className="inline-flex rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-bold text-red-600">
+          Reingreso duplicado
+        </span>
+      )
     case 'INHABILITADO':
+    case 'RECHAZADO_INHABILITADO':
       return (
         <span className="inline-flex rounded-full border border-sci-red/30 bg-sci-red/10 px-2 py-1 text-[10px] font-bold text-sci-red">
           Inhabilitado
         </span>
       )
     case 'EXAMEN_DISTINTO':
+    case 'RECHAZADO_EXAMEN_DISTINTO':
       return (
         <span className="inline-flex rounded-full border border-purple-500/30 bg-purple-500/10 px-2 py-1 text-[10px] font-bold text-purple-600">
           Examen distinto
         </span>
       )
     case 'NO_REGISTRADO':
-    case 'ERROR_DATOS_INVALIDOS':
+    case 'RECHAZADO_NO_REGISTRADO':
       return (
         <span className="inline-flex rounded-full border border-slate-500/30 bg-slate-500/10 px-2 py-1 text-[10px] font-bold text-slate-600">
           No registrado
         </span>
       )
+    case 'QR_INVALIDO':
+    case 'ERROR_DATOS_INVALIDOS':
+      return (
+        <span className="inline-flex rounded-full border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] font-bold text-rose-600">
+          QR inválido
+        </span>
+      )
+    case 'EXAMEN_FINALIZADO':
+    case 'HORARIO_EXPIRADO':
+    case 'RECHAZADO_EXAMEN_CONCLUIDO':
+      return (
+        <span className="inline-flex rounded-full border border-gray-500/30 bg-gray-500/10 px-2 py-1 text-[10px] font-bold text-gray-700">
+          Examen concluido
+        </span>
+      )
     case 'NO_INSCRITO':
+    case 'RECHAZADO_NO_INSCRITO':
     default:
       return (
         <span className="inline-flex rounded-full border border-sci-amber/30 bg-sci-amber/10 px-2 py-1 text-[10px] font-bold text-sci-amber">
@@ -125,7 +154,7 @@ export default function IntentosNoAutorizadosPage({
   return (
     <div className="space-y-6">
       <header className="space-y-3">
-                {!embedded && (
+        {!embedded && (
           <Button
             type="button"
             variant="ghost"
@@ -148,7 +177,7 @@ export default function IntentosNoAutorizadosPage({
             Intentos no autorizados
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Registro de estudiantes que intentaron ingresar sin estar inscritos o estando inhabilitados.
+            Registro de auditoría de credenciales denegadas por el sistema.
           </p>
         </div>
       </header>
@@ -216,10 +245,9 @@ export default function IntentosNoAutorizadosPage({
                         <td className="px-4 py-3 font-medium text-foreground">
                           {formatStudentName(intento)}
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                        {intento.codigo_sis || intento.estudiante?.codigo_sis || '—'}  
+                        <td className="px-4 py-3 font-mono text-muted-foreground">
+                          {intento.codigo_sis || intento.estudiante?.codigo_sis || intento.identificador_presentado || '—'}
                         </td>
-                      
                         <td className="px-4 py-3">
                           {renderTipoIntentoBadge(intento.tipo_intento)}
                         </td>

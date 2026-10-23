@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Examen;
 use App\Models\IntentoNoAutorizado;
+use App\Models\LogAuditoria;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -44,14 +46,32 @@ class IntentoNoAutorizadoController extends Controller
             ->through(function ($intento) {
                 $estudiante = $intento->estudiante;
 
-                return [
-                    'id'           => $intento->id,
-                    'tipo_intento' => $intento->tipo_intento,
-                    'fecha_hora'   => $intento->fecha_hora,
-                    'codigo_sis'   => $estudiante?->codigo_sis ?? null,
+                // Si el estudiante no existe en BD, rescatar el identificador guardado en auditoría
+                $identificador = $estudiante?->codigo_sis;
+                if (!$identificador) {
+                    $auditoria = LogAuditoria::where('modulo', 'INTENTOS_NO_AUTORIZADOS')
+                        ->where('detalles->intento_id', $intento->id)
+                        ->first();
+                    
+                    $detalles = $auditoria?->detalles;
+                    $identificador = is_array($detalles) ? ($detalles['identificador'] ?? null) : null;
+                    if ($identificador === 'DESCONOCIDO' || $identificador === 'QR_INVALIDO') {
+                        $identificador = null;
+                    }
+                }
 
-                    // Datos del estudiante si existe en el sistema
-                    'estudiante'   => $estudiante ? [
+                $fechaBolivia = Carbon::parse($intento->fecha_hora)
+                    ->setTimezone('America/La_Paz')
+                    ->toIso8601String();
+
+                return [
+                    'id'                       => $intento->id,
+                    'tipo_intento'             => $intento->tipo_intento,
+                    'fecha_hora'               => $fechaBolivia,
+                    'codigo_sis'               => $identificador,
+                    'identificador_presentado' => $identificador,
+
+                    'estudiante' => $estudiante ? [
                         'id'              => $estudiante->id,
                         'codigo_sis'      => $estudiante->codigo_sis,
                         'ci'              => $estudiante->ci,

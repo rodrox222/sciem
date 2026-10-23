@@ -20,6 +20,7 @@ use App\Http\Controllers\ConfiguracionSistemaController;
 use App\Http\Controllers\IntentoNoAutorizadoController;
 use App\Http\Controllers\AuxiliarModuloController;
 use App\Http\Controllers\ExpulsionController;
+use App\Http\Controllers\AuxiliarOfflineController;
 use App\Models\Admin;
 use App\Models\Docente;
 use App\Models\Auxiliar;
@@ -254,5 +255,14 @@ Route::middleware('auth:sanctum')->group(function () {
     // todos tienen acceso a ver la foto del estudiante, pero solo el propio estudiante puede subirla
     Route::middleware('role:admin,administrador,docente,auxiliar,estudiante')->group(function () {
         Route::get('estudiante/foto/{idEstudiante}', [EstudianteController::class, 'verFoto']);
+    });
+
+    // modod offline
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        // Descargar padrón para la base de datos local del móvil
+        Route::get('/examenes/{id}/descargar-padron', [AuxiliarOfflineController::class, 'descargarPadron']);
+
+        // Subir lote de escaneos acumulados offline
+        Route::post('/examenes/{id}/sincronizar-asistencias', [AuxiliarOfflineController::class, 'sincronizarAsistencias']);
     });
 });

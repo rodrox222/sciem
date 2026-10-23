@@ -223,36 +223,67 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
 
   // Proceso de escaneo con soporte híbrido Online/Offline
   const handleScan = useCallback(
-    async (decodedText: string) => {
-      if (isPausedRef.current) return
+  async (decodedText: string) => {
+    if (isPausedRef.current) return
 
-      isPausedRef.current = true
-      setValidationResult(null)
-      setIsValidating(true)
+    isPausedRef.current = true
+    setValidationResult(null)
+    setIsValidating(true)
+
+    try {
+      // 1. Intentar validar directamente contra la API de Laravel
+      const res = await api.post<VerificationResponse>(
+        `/examenes/${exam.id}/verificar-ingreso`,
+        { qr_data: decodedText }
+      )
+
+      // Si fue exitoso (200 OK)
+      setValidationResult({
+        estado: 'autorizado',
+        estudiante: {
+          nombreCompleto: res.estudiante?.nombre_completo || res.estudiante?.nombre,
+          codigoSis: res.estudiante?.codigo_sis || res.estudiante?.sis,
+        },
+        horaIngreso: res.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
+      })
+      void loadAsistencias()
+      setShowModal(true)
+    } catch (error: any) {
+      // 2. Solo cortamos si el servidor SÍ respondió con un código HTTP real (400, 403, 409)
+      const tieneRespuestaDelServidor = Boolean(error?.status && error.status >= 400)
+
+      if (tieneRespuestaDelServidor && error instanceof ApiError) {
+        setValidationResult(mapVerificationError(error))
+        setShowModal(true)
+        return
+      }
+
+      // 3. Respaldo Offline: Si no hubo respuesta del servidor (sin Wi-Fi / red caída)
+      console.warn('Sin conexión al servidor. Procesando escaneo en modo offline...')
 
       try {
-        const res = await procesarIngresoEscaneado(decodedText, exam.id, token)
+        const resOffline = await procesarIngresoEscaneado(decodedText, exam.id, token)
 
-        if (res.success) {
+        if (resOffline.success) {
           setValidationResult({
             estado: 'autorizado',
             estudiante: {
-              nombreCompleto: res.estudiante?.nombre_completo,
-              codigoSis: res.estudiante?.codigo_sis,
+              nombreCompleto: resOffline.estudiante?.nombre_completo,
+              codigoSis: resOffline.estudiante?.codigo_sis,
             },
-            horaIngreso: res.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
+            horaIngreso: resOffline.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
           })
           void loadAsistencias()
         } else {
-          // Detectar si fue un reingreso duplicado
           const esDuplicado =
-            res.mensaje?.toLowerCase().includes('ya ingresó') ||
-            res.mensaje?.toLowerCase().includes('duplicado') ||
-            res.detalles?.resultado === 'RECHAZADO_YA_INGRESO'
+            resOffline.mensaje?.toLowerCase().includes('ya ingresó') ||
+            resOffline.mensaje?.toLowerCase().includes('duplicado') ||
+            resOffline.detalles?.resultado === 'RECHAZADO_YA_INGRESO'
 
           const esInhabilitado =
-            res.mensaje?.toLowerCase().includes('inhabilitado') ||
-            res.detalles?.resultado === 'RECHAZADO_INHABILITADO'
+            resOffline.mensaje?.toLowerCase().includes('inhabilitado') ||
+            resOffline.mensaje?.toLowerCase().includes('sin cumplir') ||
+            resOffline.detalles?.resultado === 'RECHAZADO_INHABILITADO'
 
           setValidationResult({
             estado: 'rechazado',
@@ -261,20 +292,21 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
               : esInhabilitado
                 ? 'INHABILITADO'
                 : 'ERROR_VALIDACION',
-            motivo: res.mensaje,
-            primerIngreso: res.detalles?.primer_ingreso,
+            motivo: resOffline.mensaje,
+            primerIngreso: resOffline.detalles?.primer_ingreso,
           })
         }
-        setShowModal(true)
-      } catch (error) {
-        setValidationResult(mapVerificationError(error))
-        setShowModal(true)
-      } finally {
-        setIsValidating(false)
+      } catch (offlineErr) {
+        setValidationResult(mapVerificationError(offlineErr))
       }
-    },
-    [exam.id, token, loadAsistencias]
-  )
+
+      setShowModal(true)
+    } finally {
+      setIsValidating(false)
+    }
+  },
+  [exam.id, token, loadAsistencias]
+)
 
   // Ingreso Manual Asistido sin QR
   const handleIngresoManual = async (student: EstudianteInscritoExamen) => {
