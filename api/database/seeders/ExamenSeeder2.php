@@ -60,11 +60,11 @@ class ExamenSeeder2 extends Seeder
             'estado'     => 'Programado',
             'fecha'      => $ahora->format('Y-m-d'),
             'hora_ini'   => $ahora->copy()->subMinutes(15)->format('H:i:s'),
-            'hora_fin'   => $ahora->copy()->addMinutes(15)->format('H:i:s'),
+            'hora_fin'   => $ahora->copy()->addMinutes(17)->format('H:i:s'),
         ]);
         $examenActivo->save();
 
-        // 2. Examen por concluir
+        // 2. Examen por concluir (Programado para permitir emitir QR, por vencer en 7m)
         $examenExpirado = Examen::firstOrNew(['nombre' => 'Primer Parcial - por concluir']);
         if (!$examenExpirado->exists) {
             $examenExpirado->id = (string) Str::uuid();
@@ -73,20 +73,20 @@ class ExamenSeeder2 extends Seeder
             'id_materia' => $materia->id,
             'id_aula'    => $aula->id,
             'id_docente' => $docente->id,
-            'estado'     => 'Terminado',
+            'estado'     => 'Programado',
             'fecha'      => $ahora->format('Y-m-d'),
             'hora_ini'   => $ahora->copy()->subMinutes(90)->format('H:i:s'),
-            'hora_fin'   => $ahora->copy()->addMinutes(7)->format('H:i:s'),
+            'hora_fin'   => $ahora->copy()->addMinutes(12)->format('H:i:s'),
         ]);
         $examenExpirado->save();
 
-        // 3. Inscribir estudiantes
-        $estudiantes = Estudiante::all();
+        // 3. Inscripciones
 
-        if ($estudiantes->isNotEmpty()) {
-            // A. Todos los estudiantes al examen activo
+        // A. Todos los estudiantes al examen activo (Habilitados)
+        $todosEstudiantes = Estudiante::all();
+        if ($todosEstudiantes->isNotEmpty()) {
             $syncTodos = [];
-            foreach ($estudiantes as $estudiante) {
+            foreach ($todosEstudiantes as $estudiante) {
                 $syncTodos[$estudiante->id] = [
                     'estado'        => 'Habilitado',
                     'motivo_estado' => null,
@@ -95,18 +95,49 @@ class ExamenSeeder2 extends Seeder
                 ];
             }
             $examenActivo->estudiantes()->sync($syncTodos);
-
-            // B. Solo 2 estudiantes al examen por concluir
-            $syncDos = [];
-            foreach ($estudiantes->take(2) as $estudiante) {
-                $syncDos[$estudiante->id] = [
-                    'estado'        => 'Habilitado',
-                    'motivo_estado' => null,
-                    'created_at'    => now(),
-                    'updated_at'    => now(),
-                ];
-            }
-            $examenExpirado->estudiantes()->sync($syncDos);
         }
+
+        // B. Examen "por concluir": solo los 3 estudiantes específicos
+        $syncEspecificos = [];
+
+        // 1. Estudiante 1 (Habilitado)
+        $est1 = Estudiante::where('codigo_sis', '202104512CTR')
+            ->orWhere('codigo_sis', '202104512')
+            ->first();
+        if ($est1) {
+            $syncEspecificos[$est1->id] = [
+                'estado'        => 'Habilitado',
+                'motivo_estado' => null,
+                'created_at'    => now(),
+                'updated_at'    => now(),
+            ];
+        }
+
+        // 2. Estudiante 2 (Habilitado)
+        $est2 = Estudiante::where('codigo_sis', '202209123MVF')
+            ->orWhere('codigo_sis', '202209123')
+            ->first();
+        if ($est2) {
+            $syncEspecificos[$est2->id] = [
+                'estado'        => 'Habilitado',
+                'motivo_estado' => null,
+                'created_at'    => now(),
+                'updated_at'    => now(),
+            ];
+        }
+
+        // 3. Estudiante 3 (Inhabilitado)
+        $est3 = Estudiante::where('codigo_sis', '20202020GMC')
+            ->orWhere('codigo_sis', '20202020')
+            ->first();
+        if ($est3) {
+            $syncEspecificos[$est3->id] = [
+                'estado'        => 'Inhabilitado',
+                'created_at'    => now(),
+                'updated_at'    => now(),
+            ];
+        }
+
+        $examenExpirado->estudiantes()->sync($syncEspecificos);
     }
 }

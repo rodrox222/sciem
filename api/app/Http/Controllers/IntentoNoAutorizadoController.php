@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Examen;
 use App\Models\IntentoNoAutorizado;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -44,14 +45,19 @@ class IntentoNoAutorizadoController extends Controller
             ->through(function ($intento) {
                 $estudiante = $intento->estudiante;
 
-                return [
-                    'id'           => $intento->id,
-                    'tipo_intento' => $intento->tipo_intento,
-                    'fecha_hora'   => $intento->fecha_hora,
-                    'codigo_sis'   => $estudiante?->codigo_sis ?? null,
+                // Formatear explícitamente en la zona horaria de Bolivia
+                $fechaBolivia = Carbon::parse($intento->fecha_hora)
+                    ->setTimezone('America/La_Paz')
+                    ->toIso8601String();
 
-                    // Datos del estudiante si existe en el sistema
-                    'estudiante'   => $estudiante ? [
+                return [
+                    'id'                       => $intento->id,
+                    'tipo_intento'             => $intento->tipo_intento,
+                    'fecha_hora'               => $fechaBolivia,
+                    'codigo_sis'               => $estudiante?->codigo_sis ?? null,
+                    'identificador_presentado' => $estudiante?->codigo_sis ?? null,
+
+                    'estudiante' => $estudiante ? [
                         'id'              => $estudiante->id,
                         'codigo_sis'      => $estudiante->codigo_sis,
                         'ci'              => $estudiante->ci,

@@ -46,7 +46,7 @@ class PrerrequisitoSeeder extends Seeder
         $examen = Examen::updateOrCreate(
             ['id' => $examenIdFijo],
             [
-                'nombre'     => 'primer parcial',
+                'nombre'     => 'examen final',
                 'id_materia' => $materia->id,
                 'id_aula'    => $aula->id,
                 'id_docente' => $docente->id,
