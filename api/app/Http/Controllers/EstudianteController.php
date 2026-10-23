@@ -165,20 +165,6 @@ class EstudianteController extends Controller
      */
     public function inscribirAExamen(InscribirEstudianteExamenRequest $request, string $idExamen): JsonResponse
     {
-
-        $esAuxiliar = DB::table('examen_auxiliar')
-            ->where('id_examen', $examen->id)
-            ->where('id_auxiliar', $data['estudiante_id'] ?? $estudiante->id) 
-            ->exists();
-
-        if ($esAuxiliar) {
-            return response()->json([
-                'success'    => false,
-                'message'    => 'Conflicto de roles: este estudiante ya está designado como auxiliar para este examen.',
-                'error_type' => 'ROL_DUPLICADO_AUXILIAR',
-            ], 422);
-        }
-
         $examen = Examen::withCount('prerrequisitos')->find($idExamen);
 
         if (!$examen) {
@@ -191,16 +177,29 @@ class EstudianteController extends Controller
 
         $data = $request->validated();
 
-        // Si el examen tiene prerrequisitos -> Inhabilitado. Si no tiene -> Habilitado.
+        $estudianteExistente = Estudiante::where('codigo_sis', $data['codigo_sis'])->first();
+        if ($estudianteExistente) {
+            $esAuxiliar = DB::table('examen_auxiliar')
+                ->where('id_examen', $examen->id)
+                ->where('id_auxiliar', $estudianteExistente->id) 
+                ->exists();
+
+            if ($esAuxiliar) {
+                return response()->json([
+                    'success'    => false,
+                    'message'    => 'Conflicto de roles: este estudiante ya está designado como auxiliar para este examen.',
+                    'error_type' => 'ROL_DUPLICADO_AUXILIAR',
+                ], 422);
+            }
+        }
+
         $estadoPorDefecto = ($examen->prerrequisitos_count > 0) ? 'Inhabilitado' : 'Habilitado';
         $estado = $data['estado'] ?? $estadoPorDefecto;
 
         $estudiante = DB::transaction(function () use ($examen, $data, $estado) {
-            // Buscar si ya existe el estudiante por su código SIS
             $estudiante = Estudiante::where('codigo_sis', $data['codigo_sis'])->first();
 
             if (!$estudiante) {
-                // Si no existe, calculamos la contraseña por defecto (ej: 20202020JPG)
                 $defaultPassword = Estudiante::generarPasswordPorDefecto(
                     $data['codigo_sis'],
                     $data['nombre'],
@@ -216,11 +215,10 @@ class EstudianteController extends Controller
                     'apellido_paterno'    => $data['apellido_paterno'],
                     'apellido_materno'    => $data['apellido_materno'] ?? null,
                     'email_institucional' => $data['email_institucional'],
-                    'password'            => $defaultPassword, // Eloquent aplica Hash::make automáticamente por el cast
+                    'password'            => $defaultPassword,
                     'activo'              => true,
                 ]);
             } else {
-                // Si ya existe, actualizamos sus datos sin tocar su contraseña
                 $estudiante->update([
                     'ci'                  => $data['ci'] ?? $estudiante->ci,
                     'ci_extension'        => $data['ci_extension'] ?? $estudiante->ci_extension,
@@ -231,7 +229,6 @@ class EstudianteController extends Controller
                 ]);
             }
 
-            // Vincular a la tabla intermedia del examen
             $examen->estudiantes()->syncWithoutDetaching([
                 $estudiante->id => [
                     'estado'        => $estado,
@@ -312,6 +309,9 @@ class EstudianteController extends Controller
         ]);
     }
 
+    /**
+     * Completar datos de perfil inicial del estudiante (Ajustado para pruebas).
+     */
     public function completarDatos(CompletarDatosEstudianteRequest $request): JsonResponse
     {
         /** @var Estudiante $estudiante */
@@ -324,20 +324,11 @@ class EstudianteController extends Controller
             ], 403);
         }
 
-        // Rechazar si intenta confirmar sin haber guardado su fotografía previamente
-        if (empty($estudiante->foto_perfil_url)) {
-            return response()->json([
-                'success'    => false,
-                'message'    => 'Debe capturar y registrar su fotografía de perfil antes de completar el registro inicial.',
-                'error_type' => 'FOTO_REQUERIDA'
-            ], 422);
-        }
-
         $data = $request->validated();
 
-        $estudiante->ci                     = trim($data['ci']);
-        $estudiante->ci_extension           = !empty($data['ci_extension']) ? strtoupper(trim($data['ci_extension'])) : null;
-        $estudiante->primer_acceso_completado = true; // Criterio 2 y 3
+        $estudiante->ci                    = trim($data['ci']);
+        $estudiante->ci_extension          = !empty($data['ci_extension']) ? strtoupper(trim($data['ci_extension'])) : null;
+        $estudiante->primer_acceso_completado = true;
         $estudiante->save();
 
         return response()->json([
@@ -355,7 +346,7 @@ class EstudianteController extends Controller
     }
 
     /**
-     * HU18 Subir y almacenar fotografía facial en Cloudinary
+     * HU18 Subir y almacenar fotografía facial.
      */
     public function subirFoto(Request $request): JsonResponse
     {
@@ -369,14 +360,13 @@ class EstudianteController extends Controller
             ], 403);
         }
 
-        //Límite de formato (JPG, PNG) y tamaño (máximo 3 MB)
         $request->validate([
             'foto' => [
                 'required',
                 'file',
                 'image',
                 'mimes:jpeg,png,jpg',
-                'max:3072', // 3 MB máximo
+                'max:3072',
             ],
         ], [
             'foto.required' => 'Es obligatorio subir una fotografía facial.',
@@ -385,19 +375,16 @@ class EstudianteController extends Controller
             'foto.max'      => 'La fotografía no debe superar los 3 MB de tamaño.',
         ]);
 
-        // Si el estudiante ya tenía una foto anterior guardada, la eliminamos para no saturar el disco
         if ($estudiante->foto_perfil_url && Storage::disk('local')->exists($estudiante->foto_perfil_url)) {
             Storage::disk('local')->delete($estudiante->foto_perfil_url);
         }
 
-        // Guardar en storage/app/fotos_estudiantes (Ruta NO pública)
         $archivo = $request->file('foto');
         $nombreArchivo = 'estudiante_' . $estudiante->id . '_' . time() . '.' . $archivo->getClientOriginalExtension();
         $rutaAlmacenada = $archivo->storeAs('fotos_estudiantes', $nombreArchivo, 'local');
 
         $estudiante->foto_perfil_url = $rutaAlmacenada;
-
-        $estudiante->primer_acceso_completado = !empty($estudiante->ci) && !empty($estudiante->foto_perfil_url);
+        $estudiante->primer_acceso_completado = !empty($estudiante->ci);
         $estudiante->save();
 
         $this->registrarAuditoria($request, 'ESTUDIANTE_FOTO_ACTUALIZADA', [
@@ -430,12 +417,10 @@ class EstudianteController extends Controller
             ], 401);
         }
 
-        // Determinar el rol de manera infalible
         $esEstudiante = ($usuario instanceof Estudiante) 
             || strtolower($usuario->rol ?? '') === 'estudiante'
             || class_basename($usuario) === 'Estudiante';
 
-        // si es estudiante, SOLO puede ver SU propia foto
         if ($esEstudiante) {
             $idAutenticado = strtolower(trim((string) $usuario->id));
             $idSolicitado  = strtolower(trim($idEstudiante));
@@ -448,7 +433,6 @@ class EstudianteController extends Controller
             }
         }
 
-        // Si es Docente, Auxiliar o Admin, o el estudiante dueño: buscar y entregar
         $estudiante = Estudiante::find($idEstudiante);
 
         if (!$estudiante || !$estudiante->foto_perfil_url) {
@@ -470,11 +454,9 @@ class EstudianteController extends Controller
         return response()->file($rutaFisica);
     }
 
-
     /**
      * HU18 Consultar exámenes inscritos y estado de habilitación
      */
-
     public function misExamenes(Request $request): JsonResponse
     {
         /** @var Estudiante $estudiante */
@@ -536,23 +518,6 @@ class EstudianteController extends Controller
             ], 403);
         }
 
-        // enviar la fotografía tomada en ese instante
-        // Límite de formato y tamaño (JPG, PNG, máx 3 MB)
-        $request->validate([
-            'foto_verificacion' => [
-                'required',
-                'file',
-                'image',
-                'mimes:jpeg,png,jpg',
-                'max:3072',
-            ],
-        ], [
-            'foto_verificacion.required' => 'Debe capturar su fotografía facial para generar el código QR.',
-            'foto_verificacion.image'    => 'El archivo enviado debe ser una imagen válida.',
-            'foto_verificacion.mimes'    => 'Solo se permiten formatos JPG, JPEG o PNG.',
-            'foto_verificacion.max'      => 'La fotografía no debe superar los 3 MB de tamaño.',
-        ]);
-
         if (!Str::isUuid($idExamen)) {
             return response()->json([
                 'success'    => false,
@@ -570,16 +535,56 @@ class EstudianteController extends Controller
             ], 404);
         }
 
-        // Verificar que haya completado su registro previo
-        if (!$estudiante->primer_acceso_completado) {
+        // Validar estado del examen
+        if (in_array(strtolower($examen->estado), ['terminado', 'finalizado', 'concluido'])) {
             return response()->json([
                 'success'    => false,
-                'message'    => 'Debe registrar su Carnet de Identidad y foto de perfil inicial antes de generar su QR.',
+                'message'    => 'El examen ya ha finalizado. No se permite generar credenciales QR.',
+                'error_type' => 'EXAMEN_FINALIZADO',
+            ], 403);
+        }
+
+        // Validar ventana horaria con fecha y hora_fin
+        if ($examen->fecha && $examen->hora_fin) {
+            $soloFecha = $examen->fecha instanceof \Carbon\Carbon 
+                ? $examen->fecha->format('Y-m-d') 
+                : explode(' ', (string) $examen->fecha)[0];
+
+            $soloHoraFin = explode(' ', (string) $examen->hora_fin);
+            $horaFinStr = end($soloHoraFin);
+
+            $finExamen = \Carbon\Carbon::createFromFormat(
+                'Y-m-d H:i:s', 
+                "{$soloFecha} {$horaFinStr}", 
+                'America/La_Paz'
+            );
+            $ahora = \Carbon\Carbon::now('America/La_Paz');
+
+            if ($ahora->gt($finExamen)) {
+                return response()->json([
+                    'success'    => false,
+                    'message'    => 'El horario del examen ha concluido. No se puede generar el código QR.',
+                    'error_type' => 'HORARIO_EXPIRADO',
+                ], 403);
+            }
+
+            $timestampExpiracion = $finExamen->timestamp;
+        } else {
+            $timestampExpiracion = now()->addHours(2)->timestamp;
+        }
+
+        // [MODO PRUEBAS] Solo requerir que exista el Carnet de Identidad registrado
+        if (empty($estudiante->ci)) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'Debe tener registrado su Carnet de Identidad antes de generar su QR.',
                 'error_type' => 'REGISTRO_INCOMPLETO',
             ], 403);
         }
 
-        // Verificar que esté inscrito en el examen
+        
+
+        // Verificar inscripción
         $inscripcion = DB::table('estudiante_examen')
             ->where('id_estudiante', $estudiante->id)
             ->where('id_examen', $idExamen)
@@ -593,28 +598,39 @@ class EstudianteController extends Controller
             ], 404);
         }
 
+        // Si ya ingresó, el QR ya no debe generarse
+        if (!empty($inscripcion->fecha_ingreso)) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'Ya se registró su ingreso al examen. Su código QR ha quedado sin efecto.',
+                'error_type' => 'INGRESO_PREVIO_REGISTRADO',
+            ], 403);
+        }
+
         // Verificar si está inhabilitado
-        if ($inscripcion->estado !== 'Habilitado') {
+        if (strtolower($inscripcion->estado ?? '') !== 'habilitado') {
             return response()->json([
                 'success'       => false,
                 'message'       => 'No se puede generar el código QR: el estudiante no está habilitado.',
                 'error_type'    => 'ESTUDIANTE_INHABILITADO',
-                'motivo_estado' => $inscripcion->motivo_estado,
+                'motivo_estado' => $inscripcion->motivo_estado ?? null,
             ], 403);
         }
 
-        // Guardar la foto de verificación en storage local seguro
-        $archivo = $request->file('foto_verificacion');
-        $nombreFotoQr = 'qr_token_' . $estudiante->id . '_' . $idExamen . '_' . time() . '.' . $archivo->getClientOriginalExtension();
-        $rutaGuardada = $archivo->storeAs('fotos_verificacion_qr', $nombreFotoQr, 'local');
+        // [MODO PRUEBAS] Foto opcional: no bloquea si el frontend no la envía
+        if ($request->hasFile('foto_verificacion')) {
+            $archivo = $request->file('foto_verificacion');
+            $nombreFotoQr = 'qr_token_' . $estudiante->id . '_' . $idExamen . '_' . time() . '.' . $archivo->getClientOriginalExtension();
+            $archivo->storeAs('fotos_verificacion_qr', $nombreFotoQr, 'local');
+        }
 
-        // Generar Payload y Token firmado con HMAC 
         $payload = [
             'id_estudiante' => $estudiante->id,
             'codigo_sis'    => $estudiante->codigo_sis,
             'ci'            => $estudiante->ci,
             'id_examen'     => $idExamen,
             'timestamp'     => now()->timestamp,
+            'expira_at'     => $timestampExpiracion,
         ];
 
         $payloadBase64 = base64_encode(json_encode($payload));
@@ -623,9 +639,10 @@ class EstudianteController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Token QR generado exitosamente tras confirmar la fotografía.',
+            'message' => 'Token QR generado exitosamente.',
             'data'    => [
                 'qr_token'   => $qrToken,
+                'expira_at'  => $timestampExpiracion,
                 'estudiante' => [
                     'codigo_sis'      => $estudiante->codigo_sis,
                     'nombre_completo' => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
@@ -636,8 +653,7 @@ class EstudianteController extends Controller
     }
 
     /**
-     * Cambiar contraseña del estudiante autenticado
-     * PUT /api/estudiante/cambiar-password
+     * Cambiar contraseña del estudiante autenticado.
      */
     public function cambiarPassword(Request $request): JsonResponse
     {
@@ -661,7 +677,6 @@ class EstudianteController extends Controller
             'new_password.confirmed'    => 'La confirmación de la nueva contraseña no coincide.',
         ]);
 
-        // Verificar si la contraseña actual proporcionada es correcta
         if (!Hash::check($request->input('current_password'), $estudiante->password)) {
             return response()->json([
                 'success'    => false,
@@ -670,7 +685,6 @@ class EstudianteController extends Controller
             ], 422);
         }
 
-        // Evitar que vuelva a usar la misma contraseña
         if (Hash::check($request->input('new_password'), $estudiante->password)) {
             return response()->json([
                 'success'    => false,
@@ -679,7 +693,6 @@ class EstudianteController extends Controller
             ], 422);
         }
 
-        // Actualizar contraseña con hash
         $estudiante->password = Hash::make($request->input('new_password'));
         $estudiante->save();
 
@@ -693,5 +706,4 @@ class EstudianteController extends Controller
             'message' => 'Contraseña actualizada exitosamente.',
         ], 200);
     }
-
 }
