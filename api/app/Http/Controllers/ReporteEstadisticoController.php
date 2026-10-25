@@ -8,6 +8,8 @@ use App\Models\Examen;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 class ReporteEstadisticoController extends Controller
 {
@@ -42,10 +44,18 @@ class ReporteEstadisticoController extends Controller
                 'message' => 'No tienes permiso para generar el reporte de este examen.',
             ], 403);
         }
+        $filtros = $this->validarFiltrosFecha($request);
+
+$fechaExamen = $examen->fecha?->format('Y-m-d');
+
+$examenDentroDelRango =
+    (!isset($filtros['fecha_desde']) || $fechaExamen >= $filtros['fecha_desde'])
+    && (!isset($filtros['fecha_hasta']) || $fechaExamen <= $filtros['fecha_hasta']);
 
         // Asistencia y ausencia se calculan desde la nómina del examen.
         $asistencia = DB::table('estudiante_examen')
             ->where('id_examen', $examen->id)
+            ->when(!$examenDentroDelRango, fn ($query) => $query->whereRaw('1 = 0'))
             ->selectRaw('COUNT(*) AS total_inscritos')
             ->selectRaw('COUNT(fecha_ingreso) AS total_asistentes')
             ->selectRaw('COUNT(*) - COUNT(fecha_ingreso) AS total_ausentes')
@@ -54,6 +64,7 @@ class ReporteEstadisticoController extends Controller
         // Los intentos se cuentan desde sus registros de auditoría.
         $intentos = DB::table('logs_asistencias')
             ->where('id_examen', $examen->id)
+            ->when(!$examenDentroDelRango, fn ($query) => $query->whereRaw('1 = 0'))
             ->selectRaw(
                 "COUNT(*) FILTER (WHERE resultado = ?) AS intentos_inhabilitados",
                 ['RECHAZADO_INHABILITADO']
@@ -85,6 +96,43 @@ class ReporteEstadisticoController extends Controller
         ]);
     }
 
+    private function validarFiltrosFecha(Request $request): array
+    {
+        $validator = Validator::make(
+    $request->query(),
+    [
+        'fecha_desde' => ['sometimes', 'required', 'date_format:Y-m-d'],
+        'fecha_hasta' => ['sometimes', 'required', 'date_format:Y-m-d'],
+    ],
+    [
+        'fecha_desde.required' => 'La fecha inicial es obligatoria.',
+        'fecha_desde.date_format' => 'La fecha inicial debe tener el formato AAAA-MM-DD.',
+        'fecha_hasta.required' => 'La fecha final es obligatoria.',
+        'fecha_hasta.date_format' => 'La fecha final debe tener el formato AAAA-MM-DD.',
+    ]
+);
+
+        if ($validator->fails()) {
+            throw new ValidationException($validator);
+        }
+
+        $filtros = $validator->validated();
+
+        if (
+            isset($filtros['fecha_desde'], $filtros['fecha_hasta'])
+            && $filtros['fecha_hasta'] < $filtros['fecha_desde']
+        ) {
+            throw ValidationException::withMessages([
+                'fecha_hasta' => [
+                    'La fecha final no puede ser anterior a la fecha inicial.',
+                ],
+            ]);
+        }
+
+        return $filtros;
+    }
+
+
     public function franjasHorarias(Request $request, string $idExamen): JsonResponse
     {
         $usuario = $request->user();
@@ -115,9 +163,18 @@ class ReporteEstadisticoController extends Controller
             ], 403);
         }
 
+                $filtros = $this->validarFiltrosFecha($request);
+
+        $fechaExamen = $examen->fecha?->format('Y-m-d');
+
+        $examenDentroDelRango =
+            (!isset($filtros['fecha_desde']) || $fechaExamen >= $filtros['fecha_desde'])
+            && (!isset($filtros['fecha_hasta']) || $fechaExamen <= $filtros['fecha_hasta']);
+
         // Agrupar los ingresos efectivos por hora local de Bolivia.
         $resultados = DB::table('estudiante_examen')
             ->where('id_examen', $examen->id)
+            ->when(!$examenDentroDelRango, fn ($query) => $query->whereRaw('1 = 0'))
             ->whereNotNull('fecha_ingreso')
             ->selectRaw(
                 "EXTRACT(HOUR FROM fecha_ingreso)::int AS hora"
