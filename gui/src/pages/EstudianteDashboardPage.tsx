@@ -45,6 +45,15 @@ export default function EstudianteDashboardPage() {
   const [mensajeQr, setMensajeQr] = useState('')
   const [qrToken, setQrToken] = useState<string | null>(null)
   const [fotoVerificacion, setFotoVerificacion] = useState<File | null>(null)
+  // Cambio de contraseña
+const [passwordActual, setPasswordActual] = useState('')
+const [passwordNueva, setPasswordNueva] = useState('')
+const [passwordConfirmacion, setPasswordConfirmacion] = useState('')
+const [cambiandoPassword, setCambiandoPassword] = useState(false)
+const [mensajePassword, setMensajePassword] = useState('')
+const [errorPassword, setErrorPassword] = useState('')
+const [mostrarPassword, setMostrarPassword] = useState(false)
+const [modalPasswordAbierto, setModalPasswordAbierto] = useState(false)
   const usuario: UsuarioEstudiante | null = (() => {
     try {
       const guardado = localStorage.getItem('user_data')
@@ -348,54 +357,54 @@ export default function EstudianteDashboardPage() {
 
       setCamaraAbierta(true)
     } catch (error) {
-  console.error('Error al abrir la cámara QR:', error)
+      console.error('Error al abrir la cámara QR:', error)
 
-  if (error instanceof Error) {
-    switch (error.name) {
-      case 'NotAllowedError':
-      case 'PermissionDeniedError':
-        setErrorQr(
-          'No tienes permiso para usar la cámara. Habilita el permiso en tu navegador e inténtalo nuevamente.',
-        )
-        break
+      if (error instanceof Error) {
+        switch (error.name) {
+          case 'NotAllowedError':
+          case 'PermissionDeniedError':
+            setErrorQr(
+              'No tienes permiso para usar la cámara. Habilita el permiso en tu navegador e inténtalo nuevamente.',
+            )
+            break
 
-      case 'NotFoundError':
-      case 'DevicesNotFoundError':
-        setErrorQr(
-          'No se encontró una cámara disponible en este dispositivo.',
-        )
-        break
+          case 'NotFoundError':
+          case 'DevicesNotFoundError':
+            setErrorQr(
+              'No se encontró una cámara disponible en este dispositivo.',
+            )
+            break
 
-      case 'NotReadableError':
-      case 'TrackStartError':
-        setErrorQr(
-          'No se pudo iniciar la cámara. Puede estar siendo utilizada por otra aplicación. Ciérrala e inténtalo nuevamente.',
-        )
-        break
+          case 'NotReadableError':
+          case 'TrackStartError':
+            setErrorQr(
+              'No se pudo iniciar la cámara. Puede estar siendo utilizada por otra aplicación. Ciérrala e inténtalo nuevamente.',
+            )
+            break
 
-      case 'OverconstrainedError':
-        setErrorQr(
-          'La cámara no admite la configuración solicitada. Comprueba tu dispositivo e inténtalo nuevamente.',
-        )
-        break
+          case 'OverconstrainedError':
+            setErrorQr(
+              'La cámara no admite la configuración solicitada. Comprueba tu dispositivo e inténtalo nuevamente.',
+            )
+            break
 
-      case 'SecurityError':
-        setErrorQr(
-          'El navegador bloqueó el acceso a la cámara. Abre la aplicación mediante HTTPS o localhost.',
-        )
-        break
+          case 'SecurityError':
+            setErrorQr(
+              'El navegador bloqueó el acceso a la cámara. Abre la aplicación mediante HTTPS o localhost.',
+            )
+            break
 
-      default:
+          default:
+            setErrorQr(
+              'No se pudo abrir la cámara. Comprueba los permisos del navegador e inténtalo nuevamente.',
+            )
+        }
+      } else {
         setErrorQr(
-          'No se pudo abrir la cámara. Comprueba los permisos del navegador e inténtalo nuevamente.',
+          'Ocurrió un error al acceder a la cámara. Comprueba los permisos e inténtalo nuevamente.',
         )
+      }
     }
-  } else {
-    setErrorQr(
-      'Ocurrió un error al acceder a la cámara. Comprueba los permisos e inténtalo nuevamente.',
-    )
-  }
-}
   }
 
   const capturarFotoQr = () => {
@@ -509,6 +518,143 @@ export default function EstudianteDashboardPage() {
       setSolicitandoQr(false)
     }
   }
+  const descargarQr = () => {
+    const svg = document.querySelector(
+      '[data-qr-estudiante="true"]',
+    )
+
+    if (!(svg instanceof SVGSVGElement)) {
+      setErrorQr('No se encontró el código QR para descargar.')
+      return
+    }
+
+    const svgCopia = svg.cloneNode(true) as SVGSVGElement
+    const contenidoSvg = new XMLSerializer().serializeToString(svgCopia)
+    const archivoSvg = new Blob(
+      [contenidoSvg],
+      { type: 'image/svg+xml;charset=utf-8' },
+    )
+    const urlSvg = URL.createObjectURL(archivoSvg)
+    const imagen = new Image()
+
+    imagen.onload = () => {
+      const canvas = document.createElement('canvas')
+      const escala = 3
+
+      canvas.width = imagen.width * escala
+      canvas.height = imagen.height * escala
+
+      const contexto = canvas.getContext('2d')
+
+      if (!contexto) {
+        URL.revokeObjectURL(urlSvg)
+        setErrorQr('No se pudo preparar la imagen del QR.')
+        return
+      }
+
+      contexto.fillStyle = '#FFFFFF'
+      contexto.fillRect(0, 0, canvas.width, canvas.height)
+      contexto.drawImage(imagen, 0, 0, canvas.width, canvas.height)
+
+      URL.revokeObjectURL(urlSvg)
+
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          setErrorQr('No se pudo generar la imagen PNG del QR.')
+          return
+        }
+
+        const urlPng = URL.createObjectURL(blob)
+        const enlace = document.createElement('a')
+
+        enlace.href = urlPng
+        enlace.download = `QR-examen-${examenQrId}.png`
+        enlace.click()
+
+        URL.revokeObjectURL(urlPng)
+        setErrorQr('')
+      }, 'image/png')
+    }
+
+    imagen.onerror = () => {
+      URL.revokeObjectURL(urlSvg)
+      setErrorQr('No se pudo convertir el QR a imagen.')
+    }
+
+    imagen.src = urlSvg
+  }
+  const cambiarPassword = async () => {
+  setMensajePassword('')
+  setErrorPassword('')
+
+  if (!passwordActual || !passwordNueva || !passwordConfirmacion) {
+    setErrorPassword('Debes completar todos los campos.')
+    return
+  }
+
+  if (passwordNueva.length < 8) {
+    setErrorPassword('La nueva contraseña debe tener al menos 8 caracteres.')
+    return
+  }
+
+  if (passwordNueva !== passwordConfirmacion) {
+    setErrorPassword('La confirmación de la nueva contraseña no coincide.')
+    return
+  }
+
+  if (passwordActual === passwordNueva) {
+    setErrorPassword(
+      'La nueva contraseña no puede ser igual a la contraseña actual.',
+    )
+    return
+  }
+
+  try {
+    setCambiandoPassword(true)
+
+    await estudiantesService.cambiarPassword({
+      current_password: passwordActual,
+      new_password: passwordNueva,
+      new_password_confirmation: passwordConfirmacion,
+    })
+
+    setMensajePassword('¡Tu contraseña se cambió correctamente!')
+setPasswordActual('')
+setPasswordNueva('')
+setPasswordConfirmacion('')
+setMostrarPassword(false)
+
+// Mostrar el mensaje de éxito y cerrar el modal después de 2 segundos.
+setTimeout(() => {
+  setModalPasswordAbierto(false)
+  setMensajePassword('')
+}, 2000)
+  } catch (error: unknown) {
+    console.error('Error al cambiar la contraseña:', error)
+
+    const errorApi = error as {
+      response?: {
+        data?: {
+          message?: string
+          errors?: Record<string, string[]>
+        }
+      }
+    }
+
+    const erroresValidacion = errorApi.response?.data?.errors
+    const primerError = erroresValidacion
+      ? Object.values(erroresValidacion).flat()[0]
+      : undefined
+
+    setErrorPassword(
+      primerError ||
+        errorApi.response?.data?.message ||
+        'No se pudo cambiar la contraseña. Inténtalo nuevamente.',
+    )
+  } finally {
+    setCambiandoPassword(false)
+  }
+}
   return (
     <div className="space-y-6 p-4 md:p-6">
       <section className="rounded-2xl border bg-card p-6 shadow-sm">
@@ -565,12 +711,28 @@ export default function EstudianteDashboardPage() {
                   id="ci"
                   type="text"
                   value={ci}
-                  onChange={(e) => setCi(e.target.value)}
+                  onChange={(e) => {
+                    setCi(e.target.value)
+                    setErrorPerfil('')
+                  }}
                   required
                   maxLength={20}
+                  inputMode="numeric"
+                  pattern="[0-9]+"
+                  aria-invalid={Boolean(errorPerfil)}
+                  aria-describedby={errorPerfil ? 'ci-error' : undefined}
                   placeholder="Ingresa tu CI"
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                  className={`w-full rounded-lg border bg-background px-3 py-2 text-sm ${errorPerfil
+                    ? 'border-red-500 focus-visible:outline-red-500'
+                    : ''
+                    }`}
                 />
+
+                {errorPerfil && (
+                  <p id="ci-error" role="alert" className="text-sm text-red-600">
+                    {errorPerfil}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -705,6 +867,237 @@ export default function EstudianteDashboardPage() {
           </p>
         )}
       </section>
+            {/* Cambiar contraseña */}
+<section className="rounded-2xl border bg-card p-6 shadow-sm">
+  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex items-center gap-3">
+      <div className="rounded-lg bg-primary/10 p-2 text-primary">
+        <UserRound size={22} />
+      </div>
+
+      <div>
+        <h2 className="text-lg font-semibold">Cambiar contraseña</h2>
+        <p className="text-sm text-muted-foreground">
+          Actualiza tu contraseña para mantener segura tu cuenta.
+        </p>
+      </div>
+    </div>
+
+    <button
+      type="button"
+      onClick={() => {
+        setErrorPassword('')
+        setMensajePassword('')
+        setModalPasswordAbierto(true)
+      }}
+      className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+    >
+      <Save size={16} />
+      Cambiar contraseña
+    </button>
+  </div>
+</section>
+
+{/* Modal para cambiar contraseña */}
+{modalPasswordAbierto && (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+    onMouseDown={(e) => {
+      if (e.target === e.currentTarget && !cambiandoPassword) {
+        setModalPasswordAbierto(false)
+        setErrorPassword('')
+        setMensajePassword('')
+      }
+    }}
+  >
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="titulo-modal-password"
+      className="w-full max-w-lg rounded-2xl border bg-card p-6 shadow-xl"
+    >
+      {/* Encabezado */}
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-primary/10 p-2 text-primary">
+            <UserRound size={22} />
+          </div>
+
+          <div>
+            <h2
+              id="titulo-modal-password"
+              className="text-lg font-semibold"
+            >
+              Cambiar contraseña
+            </h2>
+
+            <p className="text-sm text-muted-foreground">
+              Actualiza tu contraseña para mantener segura tu cuenta.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setModalPasswordAbierto(false)
+            setErrorPassword('')
+            setMensajePassword('')
+          }}
+          disabled={cambiandoPassword}
+          aria-label="Cerrar modal"
+          className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      {/* Formulario */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          void cambiarPassword()
+        }}
+        className="space-y-4"
+      >
+        <div className="space-y-2">
+          <label
+            htmlFor="passwordActual"
+            className="text-sm font-medium"
+          >
+            Contraseña actual
+          </label>
+
+          <input
+            id="passwordActual"
+            type={mostrarPassword ? 'text' : 'password'}
+            autoComplete="current-password"
+            value={passwordActual}
+            onChange={(e) => {
+              setPasswordActual(e.target.value)
+              setErrorPassword('')
+              setMensajePassword('')
+            }}
+            required
+            className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+            placeholder="Ingresa tu contraseña actual"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label
+            htmlFor="passwordNueva"
+            className="text-sm font-medium"
+          >
+            Nueva contraseña
+          </label>
+
+          <input
+            id="passwordNueva"
+            type={mostrarPassword ? 'text' : 'password'}
+            autoComplete="new-password"
+            value={passwordNueva}
+            onChange={(e) => {
+              setPasswordNueva(e.target.value)
+              setErrorPassword('')
+              setMensajePassword('')
+            }}
+            minLength={8}
+            required
+            className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+            placeholder="Mínimo 8 caracteres"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label
+            htmlFor="passwordConfirmacion"
+            className="text-sm font-medium"
+          >
+            Confirmar nueva contraseña
+          </label>
+
+          <input
+            id="passwordConfirmacion"
+            type={mostrarPassword ? 'text' : 'password'}
+            autoComplete="new-password"
+            value={passwordConfirmacion}
+            onChange={(e) => {
+              setPasswordConfirmacion(e.target.value)
+              setErrorPassword('')
+              setMensajePassword('')
+            }}
+            minLength={8}
+            required
+            className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+            placeholder="Repite la nueva contraseña"
+          />
+        </div>
+
+        {/* Mostrar contraseñas */}
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={mostrarPassword}
+            onChange={(e) => setMostrarPassword(e.target.checked)}
+            className="h-4 w-4 accent-primary"
+          />
+          Mostrar contraseñas
+        </label>
+
+        {/* Mensajes */}
+        {mensajePassword && (
+          <p
+            role="status"
+            className="rounded-lg bg-green-50 p-3 text-sm text-green-800"
+          >
+            {mensajePassword}
+          </p>
+        )}
+
+        {errorPassword && (
+          <p
+            role="alert"
+            className="rounded-lg bg-red-50 p-3 text-sm text-red-700"
+          >
+            {errorPassword}
+          </p>
+        )}
+
+        {/* Botones */}
+        <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={() => {
+              setModalPasswordAbierto(false)
+              setErrorPassword('')
+              setMensajePassword('')
+              setPasswordActual('')
+              setPasswordNueva('')
+              setPasswordConfirmacion('')
+              setMostrarPassword(false)
+            }}
+            disabled={cambiandoPassword}
+            className="rounded-lg border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+
+          <button
+            type="submit"
+            disabled={cambiandoPassword}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Save size={16} />
+            {cambiandoPassword
+              ? 'Cambiando contraseña...'
+              : 'Cambiar contraseña'}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
       <section className="space-y-4">
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-primary/10 p-2 text-primary">
@@ -850,23 +1243,23 @@ export default function EstudianteDashboardPage() {
                                 </p>
                               </div>
 
-                              
-<div className="relative w-full max-w-md overflow-hidden rounded-xl border bg-black">
-  <video
-  ref={videoQrRef}
-  autoPlay
-  playsInline
-  muted
-  className="w-full h-auto min-h-[240px] max-h-[65dvh] object-cover rounded-xl border bg-black sm:max-w-md"
-/>
-  <svg
-    viewBox="0 0 320 300"
-    preserveAspectRatio="xMidYMid meet"
-    className="pointer-events-none absolute inset-0 h-full w-full"
-    aria-hidden="true"
-  >
-    <path
-      d="M160 35
+
+                              <div className="relative w-full max-w-md overflow-hidden rounded-xl border bg-black">
+                                <video
+                                  ref={videoQrRef}
+                                  autoPlay
+                                  playsInline
+                                  muted
+                                  className="w-full h-auto min-h-[240px] max-h-[65dvh] object-cover rounded-xl border bg-black sm:max-w-md"
+                                />
+                                <svg
+                                  viewBox="0 0 320 300"
+                                  preserveAspectRatio="xMidYMid meet"
+                                  className="pointer-events-none absolute inset-0 h-full w-full"
+                                  aria-hidden="true"
+                                >
+                                  <path
+                                    d="M160 35
          C118 35 100 69 100 111
          C100 140 111 159 128 173
          L128 188
@@ -878,18 +1271,18 @@ export default function EstudianteDashboardPage() {
          L192 173
          C209 159 220 140 220 111
          C220 69 202 35 160 35 Z"
-      fill="none"
-      stroke="white"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
+                                    fill="none"
+                                    stroke="white"
+                                    strokeWidth="2.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
 
-  <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/70 px-3 py-2 text-xs font-medium text-white">
-    Centra tu rostro y hombros
-  </div>
-</div>
+                                <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/70 px-3 py-2 text-xs font-medium text-white">
+                                  Centra tu rostro y hombros
+                                </div>
+                              </div>
 
                             </div>
                             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-2">
@@ -956,12 +1349,19 @@ export default function EstudianteDashboardPage() {
                             <h3 className="font-semibold">Tu código QR de ingreso</h3>
 
                             <QRCodeSVG
+                              data-qr-estudiante="true"
                               value={qrToken}
                               size={220}
                               level="M"
                               includeMargin
                             />
-
+                            <button
+                              type="button"
+                              onClick={descargarQr}
+                              className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
+                            >
+                              Descargar QR
+                            </button>
                             <p className="text-center text-sm text-muted-foreground">
                               Presenta este código QR para verificar tu ingreso al examen.
                             </p>

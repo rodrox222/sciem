@@ -209,4 +209,16 @@ motivo_estado: string | null
     formData,
   )
 },
+
+ cambiarPassword(payload: {
+  current_password: string
+  new_password: string
+  new_password_confirmation: string
+}) {
+  return api.put<{
+    success: boolean
+    message: string
+    error_type?: string
+  }>('/estudiante/cambiar-password', payload)
+},
 }
