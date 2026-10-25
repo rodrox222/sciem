@@ -233,6 +233,12 @@ Route::middleware('auth:sanctum')->group(function () {
         [ReporteEstadisticoController::class, 'resumen']
     );
 
+    Route::middleware('role:admin,administrador,docente')
+    ->get(
+        'examenes/{idExamen}/reportes/estadisticas/franjas-horarias',
+        [ReporteEstadisticoController::class, 'franjasHorarias']
+    );
+
     // HU 18: MODULO DE ESTUDIANTES
     Route::middleware('role:estudiante')->prefix('estudiante')->group(function () {
         // Completar o cambiar CI
