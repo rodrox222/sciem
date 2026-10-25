@@ -4,9 +4,13 @@ export interface Noticia {
   id: string;
   titulo: string;
   contenido: string;
-  prioridad: 'Normal' | 'Alta' | 'Urgente';
   publico_objetivo: 'Todos' | 'Docentes' | 'Estudiantes';
   es_publica: boolean;
+  id_examen?: string | null;
+  examen?: {
+    id: string;
+    materia_id?: string;
+  } | null;
   autor: {
     id: string;
     nombre: string;
@@ -25,9 +29,9 @@ export interface PaginatedResponse<T> {
 export interface StoreNoticiaPayload {
   titulo: string;
   contenido: string;
-  prioridad: 'Normal' | 'Alta' | 'Urgente';
   publico_objetivo: 'Todos' | 'Docentes' | 'Estudiantes';
   es_publica: boolean;
+  id_examen?: string | null;
 }
 
 export const noticiasService = {
@@ -40,8 +44,11 @@ export const noticiasService = {
     return api.post<{ message: string; noticia: Noticia }>('/noticias', payload);
   },
 
-  // Nuevo método para editar (Punto 4)
   update: async (id: string, payload: StoreNoticiaPayload) => {
     return api.put<{ message: string; noticia: Noticia }>(`/noticias/${id}`, payload);
   },
+
+  delete: async (id: string) => {
+    return api.delete<{ message: string }>(`/noticias/${id}`);
+  }
 };

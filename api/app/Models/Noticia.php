@@ -2,32 +2,31 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Database\Eloquent\Concerns\HasUuids; 
 
 class Noticia extends Model
 {
-    use HasUuids;
-
-    protected $table = 'noticias';
+    use HasFactory, HasUuids; 
 
     protected $fillable = [
         'titulo',
         'contenido',
-        'prioridad',
         'publico_objetivo',
         'es_publica',
         'autor_id',
         'autor_tipo',
+        'id_examen' 
     ];
 
-    protected $casts = [
-        'es_publica' => 'boolean',
-    ];
-
-    public function autor(): MorphTo
+    public function autor()
     {
         return $this->morphTo(__FUNCTION__, 'autor_tipo', 'autor_id');
+    }
+
+    public function examen()
+    {
+        return $this->belongsTo(Examen::class, 'id_examen');
     }
 }

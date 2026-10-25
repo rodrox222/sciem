@@ -240,5 +240,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::post('noticias', [NoticiaController::class, 'store']);
         Route::put('noticias/{id}', [NoticiaController::class, 'update']);
+        Route::delete('noticias/{id}', [NoticiaController::class, 'destroy']);
     });
 });

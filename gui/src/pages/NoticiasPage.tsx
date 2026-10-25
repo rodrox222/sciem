@@ -5,6 +5,7 @@ import { authService } from '@/services/auth.service';
 import { noticiasService, type Noticia } from '@/services/noticias.service';
 import { NewsCard } from '@/components/home/NewsCard';
 import { NuevaNoticiaModal } from '@/components/noticias/NuevaNoticiaModal';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'; // <--- IMPORTACIÓN NUEVA
 
 export const NoticiasPage: React.FC = () => {
   const [noticias, setNoticias] = useState<Noticia[]>([]);
@@ -16,11 +17,13 @@ export const NoticiasPage: React.FC = () => {
   const [noticiaEditando, setNoticiaEditando] = useState<Noticia | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
-  // Obtener estado de autenticación y datos del usuario
+  // Estados para el Modal de Confirmación
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [noticiaToDelete, setNoticiaToDelete] = useState<Noticia | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const userContext = authService.getCurrentUser();
   const isAuthenticated = userContext.isAuthenticated;
-  
-  // CORRECCIÓN: Se reemplaza "any" por una definición segura de tipo
   const currentUserId = (userContext as { id?: string }).id; 
   const normalizedRole = userContext.role.toLowerCase() === 'administrador' ? 'admin' : userContext.role.toLowerCase();
   
@@ -59,6 +62,31 @@ export const NoticiasPage: React.FC = () => {
     setIsNoticiaModalOpen(true);
   };
 
+  // Disparador del Modal de Confirmación
+  const handleDeleteTrigger = (noticia: Noticia) => {
+    setNoticiaToDelete(noticia);
+    setIsConfirmOpen(true);
+  };
+
+  // Ejecución real de la eliminación
+  const handleConfirmDelete = async () => {
+    if (!noticiaToDelete) return;
+    
+    setIsDeleting(true);
+    try {
+      await noticiasService.delete(noticiaToDelete.id);
+      setIsConfirmOpen(false);
+      setNoticiaToDelete(null);
+      handleReload();
+    } catch (error) {
+      console.error('Error al eliminar la noticia', error);
+      // Aquí también podrías usar un toast notification en lugar del alert si ya tienes uno implementado
+      alert('Hubo un error al intentar eliminar la noticia.'); 
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleCreate = () => {
     setNoticiaEditando(null);
     setIsNoticiaModalOpen(true);
@@ -67,14 +95,14 @@ export const NoticiasPage: React.FC = () => {
   return (
     <>
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-8 flex flex-col sm:flex-row sm:itemss-center justify-between gap-4 border-b border-border pb-4">
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
           <div className="flex items-center gap-3">
             <Megaphone className="h-8 w-8 text-sci-cyan" />
             <div>
               <h1 className="text-3xl font-black text-sci-navy">Noticias</h1>
               <p className="text-sm text-muted-foreground">
                 {isAuthenticated 
-                  ? 'Comunicados internos y alertas operativas del sistema.' 
+                  ? 'Noticias internas, actualizaciones y comunicados del sistema.' 
                   : 'Información pública y comunicados generales de la Facultad.'}
               </p>
             </div>
@@ -86,7 +114,7 @@ export const NoticiasPage: React.FC = () => {
               className="flex items-center gap-2 bg-sci-blue text-white shadow-sm transition-all hover:bg-sci-navy cursor-pointer"
             >
               <PlusCircle className="h-4 w-4" />
-              Publicar Aviso
+              Publicar Noticia
             </Button>
           )}
         </div>
@@ -98,21 +126,22 @@ export const NoticiasPage: React.FC = () => {
         ) : noticias.length === 0 ? (
           <div className="flex min-h-[40vh] flex-col items-center justify-center text-slate-400">
             <Megaphone className="mb-4 h-12 w-12 opacity-20" />
-            <p className="text-lg font-medium">No hay Noticias publicados en este momento.</p>
+            <p className="text-lg font-medium">No hay noticias publicadas en este momento.</p>
           </div>
         ) : (
           <>
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
               {noticias.map((noticia) => {
                 const isAuthor = noticia.autor.id === currentUserId;
-                const canEditNotice = normalizedRole === 'admin' || (normalizedRole === 'docente' && isAuthor);
+                const canManageNotice = normalizedRole === 'admin' || (normalizedRole === 'docente' && isAuthor);
 
                 return (
                   <NewsCard 
                     key={noticia.id} 
                     noticia={noticia} 
-                    canEdit={canEditNotice}
+                    canManage={canManageNotice}
                     onEdit={handleEdit}
+                    onDelete={handleDeleteTrigger} // <--- CAMBIO AQUÍ
                   />
                 );
               })}
@@ -145,6 +174,7 @@ export const NoticiasPage: React.FC = () => {
         )}
       </div>
 
+      {/* Modal de Creación/Edición */}
       {canPublishNews && (
         <NuevaNoticiaModal 
           isOpen={isNoticiaModalOpen} 
@@ -153,6 +183,17 @@ export const NoticiasPage: React.FC = () => {
           noticiaEditando={noticiaEditando}
         />
       )}
+
+      {/* Modal de Confirmación de Borrado */}
+        <ConfirmDialog
+          isOpen={isConfirmOpen}
+          title="Eliminar noticia"
+          description="Esta acción eliminará permanentemente la noticia seleccionada y ya no será visible para ningún usuario."
+          itemName={noticiaToDelete?.titulo}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setIsConfirmOpen(false)}
+          loading={isDeleting}
+        />
     </>
   );
 };
