@@ -10,6 +10,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class ReporteEstadisticoController extends Controller
 {
@@ -95,6 +98,252 @@ $examenDentroDelRango =
             ],
         ]);
     }
+    public function descargar(Request $request, string $idExamen)
+{
+    $usuario = $request->user();
+
+    // Solo administradores y docentes pueden descargar reportes.
+    if (!$usuario || !in_array(get_class($usuario), [
+        Admin::class,
+        Docente::class,
+    ], true)) {
+        return response()->json([
+            'message' => 'No tienes permiso para descargar reportes estadísticos.',
+        ], 403);
+    }
+
+    $examen = Examen::find($idExamen);
+
+    if (!$examen) {
+        return response()->json([
+            'message' => 'El examen no existe.',
+        ], 404);
+    }
+
+    // El docente solo puede descargar reportes de sus propios exámenes.
+    if (
+        $usuario instanceof Docente
+        && (string) $examen->id_docente !== (string) $usuario->id
+    ) {
+        return response()->json([
+            'message' => 'No tienes permiso para generar el reporte de este examen.',
+        ], 403);
+    }
+
+    $filtros = $this->validarFiltrosFecha($request);
+    $fechaExamen = $examen->fecha?->format('Y-m-d');
+
+    $examenDentroDelRango =
+        (!isset($filtros['fecha_desde']) || $fechaExamen >= $filtros['fecha_desde'])
+        && (!isset($filtros['fecha_hasta']) || $fechaExamen <= $filtros['fecha_hasta']);
+
+    // Resumen de asistencia.
+    $asistencia = DB::table('estudiante_examen')
+        ->where('id_examen', $examen->id)
+        ->when(!$examenDentroDelRango, fn ($query) => $query->whereRaw('1 = 0'))
+        ->selectRaw('COUNT(*) AS total_inscritos')
+        ->selectRaw('COUNT(fecha_ingreso) AS total_asistentes')
+        ->selectRaw('COUNT(*) - COUNT(fecha_ingreso) AS total_ausentes')
+        ->first();
+
+    // Resumen de intentos rechazados.
+    $intentos = DB::table('logs_asistencias')
+        ->where('id_examen', $examen->id)
+        ->when(!$examenDentroDelRango, fn ($query) => $query->whereRaw('1 = 0'))
+        ->selectRaw(
+            "COUNT(*) FILTER (WHERE resultado = ?) AS intentos_inhabilitados",
+            ['RECHAZADO_INHABILITADO']
+        )
+        ->selectRaw(
+            "COUNT(*) FILTER (WHERE resultado = ?) AS intentos_no_inscritos",
+            ['RECHAZADO_NO_INSCRITO']
+        )
+        ->selectRaw(
+            "COUNT(*) FILTER (WHERE resultado = ?) AS ingresos_duplicados_bloqueados",
+            ['RECHAZADO_YA_INGRESO']
+        )
+        ->first();
+
+    // Detalle de estudiantes inscritos y su asistencia.
+    $estudiantes = DB::table('estudiante_examen as ee')
+        ->join('estudiantes as e', 'e.id', '=', 'ee.id_estudiante')
+        ->where('ee.id_examen', $examen->id)
+        ->when(!$examenDentroDelRango, fn ($query) => $query->whereRaw('1 = 0'))
+        ->select([
+            'e.codigo_sis',
+            'e.ci',
+            'e.nombre',
+            'e.apellido_paterno',
+            'e.apellido_materno',
+            'ee.estado',
+            'ee.fecha_ingreso',
+        ])
+        ->orderBy('e.apellido_paterno')
+        ->orderBy('e.apellido_materno')
+        ->orderBy('e.nombre')
+        ->get();
+
+    // Detalle de los tres tipos de intentos rechazados del reporte.
+    $registrosIntentos = DB::table('logs_asistencias as l')
+        ->leftJoin('estudiantes as e', 'e.id', '=', 'l.id_estudiante')
+        ->where('l.id_examen', $examen->id)
+        ->whereIn('l.resultado', [
+            'RECHAZADO_INHABILITADO',
+            'RECHAZADO_NO_INSCRITO',
+            'RECHAZADO_YA_INGRESO',
+        ])
+        ->when(!$examenDentroDelRango, fn ($query) => $query->whereRaw('1 = 0'))
+        ->select([
+            'l.resultado',
+            'l.codigo_sis_escaneado',
+            'l.mensaje',
+            'l.fecha_escaneo',
+            'e.nombre',
+            'e.apellido_paterno',
+            'e.apellido_materno',
+        ])
+        ->orderBy('l.fecha_escaneo')
+        ->get();
+
+    // Agrupar los ingresos por hora y completar las 24 franjas.
+    $resultadosFranjas = DB::table('estudiante_examen')
+        ->where('id_examen', $examen->id)
+        ->whereNotNull('fecha_ingreso')
+        ->when(!$examenDentroDelRango, fn ($query) => $query->whereRaw('1 = 0'))
+        ->selectRaw('EXTRACT(HOUR FROM fecha_ingreso)::int AS hora')
+        ->selectRaw('COUNT(*) AS total_ingresos')
+        ->groupByRaw('EXTRACT(HOUR FROM fecha_ingreso)')
+        ->orderBy('hora')
+        ->get()
+        ->keyBy('hora');
+
+    // Crear el libro Excel.
+    $spreadsheet = new Spreadsheet();
+
+    // Hoja 1: Resumen.
+    $hoja = $spreadsheet->getActiveSheet();
+    $hoja->setTitle('Resumen');
+
+    $hoja->fromArray([
+        ['REPORTE ESTADÍSTICO DEL EXAMEN'],
+        ['Examen', $examen->nombre],
+        ['Fecha del examen', $fechaExamen],
+        ['Zona horaria', 'America/La_Paz'],
+        ['Fecha desde', $filtros['fecha_desde'] ?? 'Sin límite'],
+        ['Fecha hasta', $filtros['fecha_hasta'] ?? 'Sin límite'],
+        [],
+        ['Indicador', 'Cantidad'],
+        ['Total inscritos', (int) $asistencia->total_inscritos],
+        ['Total asistentes', (int) $asistencia->total_asistentes],
+        ['Total ausentes', (int) $asistencia->total_ausentes],
+        ['Intentos de estudiantes inhabilitados', (int) $intentos->intentos_inhabilitados],
+        ['Intentos de personas no inscritas', (int) $intentos->intentos_no_inscritos],
+        ['Ingresos duplicados bloqueados', (int) $intentos->ingresos_duplicados_bloqueados],
+    ], null, 'A1', true);
+
+    // Hoja 2: Asistencia.
+    $hojaAsistencia = $spreadsheet->createSheet();
+    $hojaAsistencia->setTitle('Asistencia');
+
+    $hojaAsistencia->fromArray([
+        [
+            'Código SIS',
+            'CI',
+            'Nombre',
+            'Apellido paterno',
+            'Apellido materno',
+            'Estado de habilitación',
+            'Asistencia',
+            'Fecha y hora de ingreso',
+        ],
+    ], null, 'A1');
+
+    $fila = 2;
+
+    foreach ($estudiantes as $estudiante) {
+        $hojaAsistencia->fromArray([[
+            $estudiante->codigo_sis ?? '',
+            $estudiante->ci ?? '',
+            $estudiante->nombre ?? '',
+            $estudiante->apellido_paterno ?? '',
+            $estudiante->apellido_materno ?? '',
+            $estudiante->estado ?? '',
+            $estudiante->fecha_ingreso !== null ? 'Asistente' : 'Ausente',
+            $estudiante->fecha_ingreso ?? '',
+        ]], null, 'A' . $fila);
+
+        $fila++;
+    }
+
+    // Hoja 3: Intentos rechazados.
+    $hojaIntentos = $spreadsheet->createSheet();
+    $hojaIntentos->setTitle('Intentos');
+
+    $hojaIntentos->fromArray([
+        [
+            'Tipo de rechazo',
+            'Código SIS escaneado',
+            'Nombre',
+            'Apellido paterno',
+            'Apellido materno',
+            'Mensaje',
+            'Fecha y hora del intento',
+        ],
+    ], null, 'A1');
+
+    $fila = 2;
+
+    foreach ($registrosIntentos as $intento) {
+        $hojaIntentos->fromArray([[
+            $intento->resultado ?? '',
+            $intento->codigo_sis_escaneado ?? '',
+            $intento->nombre ?? '',
+            $intento->apellido_paterno ?? '',
+            $intento->apellido_materno ?? '',
+            $intento->mensaje ?? '',
+            $intento->fecha_escaneo ?? '',
+        ]], null, 'A' . $fila);
+
+        $fila++;
+    }
+
+    // Hoja 4: Franjas horarias.
+    $hojaFranjas = $spreadsheet->createSheet();
+    $hojaFranjas->setTitle('Franjas horarias');
+
+    $hojaFranjas->fromArray([
+        ['Hora de inicio', 'Hora de fin', 'Total de ingresos'],
+    ], null, 'A1');
+
+    for ($hora = 0; $hora < 24; $hora++) {
+        $hojaFranjas->fromArray([[
+            sprintf('%02d:00', $hora),
+            sprintf('%02d:00', ($hora + 1) % 24),
+            (int) ($resultadosFranjas->get($hora)->total_ingresos ?? 0),
+        ]], null, 'A' . ($hora + 2), true);
+    }
+
+    // Ajustar el ancho de las columnas para facilitar la lectura.
+    foreach ($spreadsheet->getAllSheets() as $hojaActual) {
+        foreach (range('A', $hojaActual->getHighestDataColumn()) as $columna) {
+            $hojaActual->getColumnDimension($columna)->setAutoSize(true);
+        }
+    }
+
+    $nombreArchivo = 'reporte_estadistico_' . $examen->id . '.xlsx';
+
+    return response()->streamDownload(
+        function () use ($spreadsheet) {
+            $writer = new Xlsx($spreadsheet);
+            $writer->save('php://output');
+            $spreadsheet->disconnectWorksheets();
+        },
+        $nombreArchivo,
+        [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]
+    );
+}
 
     private function validarFiltrosFecha(Request $request): array
     {

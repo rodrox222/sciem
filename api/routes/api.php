@@ -238,6 +238,11 @@ Route::middleware('auth:sanctum')->group(function () {
         'examenes/{idExamen}/reportes/estadisticas/franjas-horarias',
         [ReporteEstadisticoController::class, 'franjasHorarias']
     );
+    Route::middleware('role:admin,administrador,docente')
+    ->get(
+        'examenes/{idExamen}/reportes/estadisticas/descargar',
+        [ReporteEstadisticoController::class, 'descargar']
+    );
 
     // HU 18: MODULO DE ESTUDIANTES
     Route::middleware('role:estudiante')->prefix('estudiante')->group(function () {
