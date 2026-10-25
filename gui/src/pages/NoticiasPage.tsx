@@ -67,11 +67,11 @@ export const NoticiasPage: React.FC = () => {
   return (
     <>
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
+        <div className="mb-8 flex flex-col sm:flex-row sm:itemss-center justify-between gap-4 border-b border-border pb-4">
           <div className="flex items-center gap-3">
             <Megaphone className="h-8 w-8 text-sci-cyan" />
             <div>
-              <h1 className="text-3xl font-black text-sci-navy">Avisos Operativos</h1>
+              <h1 className="text-3xl font-black text-sci-navy">Noticias</h1>
               <p className="text-sm text-muted-foreground">
                 {isAuthenticated 
                   ? 'Comunicados internos y alertas operativas del sistema.' 
@@ -98,7 +98,7 @@ export const NoticiasPage: React.FC = () => {
         ) : noticias.length === 0 ? (
           <div className="flex min-h-[40vh] flex-col items-center justify-center text-slate-400">
             <Megaphone className="mb-4 h-12 w-12 opacity-20" />
-            <p className="text-lg font-medium">No hay avisos publicados en este momento.</p>
+            <p className="text-lg font-medium">No hay Noticias publicados en este momento.</p>
           </div>
         ) : (
           <>
