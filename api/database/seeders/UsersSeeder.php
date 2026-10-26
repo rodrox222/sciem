@@ -31,11 +31,11 @@ class UsersSeeder extends Seeder
         DB::table('docente')->updateOrInsert(
             ['email' => 'docente@fcyt.umss.edu.bo'],
             [
-                'id' => (string) Str::uuid(),
+                'id' => 'e2510d30-530c-449f-992c-423fb9ef5e93',
                 'ci' => '11111111',
                 'ci_extension' => null,
-                'nombre' => 'un docente',
-                'apellido_paterno' => 'cualquier',
+                'nombre' => 'jackson',
+                'apellido_paterno' => 'Orellana',
                 'apellido_materno' => 'mamani',
                 'email_verified_at' => now(),
                 'password' => Hash::make('docente123'),
@@ -78,7 +78,6 @@ class UsersSeeder extends Seeder
                 'updated_at' => now(),
             ]
         );
-
 
         DB::table('docente')->updateOrInsert(
             ['email' => 'kleverulloa69@gmail.com'],
@@ -131,7 +130,6 @@ class UsersSeeder extends Seeder
             ]
         );
 
-
         DB::table('docente')->updateOrInsert(
             ['email' => 'revollofernando001@gmail.com'],
             [
@@ -149,22 +147,31 @@ class UsersSeeder extends Seeder
             ]
         );
         
-        // Auxiliar
-        DB::table('auxiliar')->updateOrInsert(
-            ['email' => '202301640@est.umss.edu'],
+        // ==========================================
+        // Estudiante con rol de Auxiliar habilitado
+        // ==========================================
+        DB::table('estudiantes')->updateOrInsert(
+            ['email_institucional' => '202301640@est.umss.edu'],
             [
                 'id' => (string) Str::uuid(),
+                'codigo_sis' => '202301640', 
                 'ci' => '11111111',
                 'ci_extension' => null,
-                'nombre' => 'auxiliar',
-                'apellido_paterno' => 'ejemplo',
+                'nombre' => 'Estudiante',
+                'apellido_paterno' => 'Auxiliar',
                 'apellido_materno' => null,
-                'email_verified_at' => now(),
                 'password' => Hash::make('SMG43210'),
+                'primer_acceso_completado' => true,
                 'activo' => true,
+                'es_auxiliar' => true, 
                 'created_at' => now(),
                 'updated_at' => now(),
             ]
         );
+
+        $idEstudianteAuxiliar = DB::table('estudiantes')
+            ->where('email_institucional', '202301640@est.umss.edu')
+            ->value('id');
+
     }
 }

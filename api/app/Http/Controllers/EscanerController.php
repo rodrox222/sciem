@@ -9,11 +9,13 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class EscanerController extends Controller
 {
     /**
      * Endpoint para escanear QR y auditar intentos indebidos (HU-13)
+     * POST /api/examenes/{id_examen}/escanear-ingreso
      */
     public function escanear(Request $request, string $idExamen): JsonResponse
     {
@@ -23,46 +25,56 @@ class EscanerController extends Controller
 
         $rawQr = $request->input('qr_data');
         $idExamenToken = null;
-        $expiraEn = null;
+        $idEstudianteToken = null;
+        $codigoSis = null;
+        $materiaQr = null;
         $qrData = [];
 
-        // Detección robusta de formato (JSON directo de React o Token firmado Base64/JWT)
         $trimmedQr = trim($rawQr);
+
+        // Detección de formato (JSON crudo o Token Base64 con HMAC)
         if (str_starts_with($trimmedQr, '{') && str_ends_with($trimmedQr, '}')) {
             $qrData = json_decode($trimmedQr, true) ?? [];
+            $codigoSis = $qrData['sis'] ?? $qrData['codigo_sis'] ?? null;
+            $materiaQr = $qrData['materia'] ?? null;
+            $idExamenToken = $qrData['id_examen'] ?? null;
         } elseif (str_contains($trimmedQr, '.')) {
             $partes = explode('.', $trimmedQr);
             $payloadJson = base64_decode($partes[0]);
             $qrData = json_decode($payloadJson, true) ?? [];
-            $idExamenToken = $qrData['id_examen'] ?? null;
-            $expiraEn = isset($qrData['expira_en']) ? Carbon::parse($qrData['expira_en']) : null;
+
+            $idExamenToken     = $qrData['id_examen'] ?? null;
+            $idEstudianteToken = $qrData['id_estudiante'] ?? null;
+            $codigoSis         = $qrData['codigo_sis'] ?? $qrData['sis'] ?? null;
+        } else {
+            $codigoSis = $trimmedQr;
         }
 
-        $codigoSis = $qrData['sis'] ?? $qrData['codigo_sis'] ?? $trimmedQr;
         $examen = Examen::with('materia:id,nombre')->findOrFail($idExamen);
 
-        // Capturar datos del usuario autenticado (docente o auxiliar)
+        // Capturar datos del usuario auditor (docente o auxiliar)
         $usuario = $request->user();
         $rol = $usuario ? ($usuario->rol ?? class_basename($usuario)) : 'docente';
         $userId = $usuario?->id;
 
-        // Validar expiración si el QR incluye fecha límite
-        if ($expiraEn && Carbon::now()->greaterThan($expiraEn)) {
-            return response()->json([
-                'success'   => false,
-                'resultado' => 'RECHAZADO_QR_EXPIRADO',
-                'message'   => 'El código QR ha expirado. El estudiante debe generar uno nuevo.',
-            ], 403);
+        // Identificar al estudiante en el sistema antes de evaluar las reglas
+        $estudiante = null;
+        if ($idEstudianteToken && Str::isUuid($idEstudianteToken)) {
+            $estudiante = Estudiante::find($idEstudianteToken);
+        }
+        if (!$estudiante && $codigoSis) {
+            $estudiante = Estudiante::where('codigo_sis', $codigoSis)->first();
         }
 
-        // Validar correspondencia de examen si viene dentro del token
-        if ($idExamenToken && $idExamenToken !== $examen->id) {
+        // QR DE OTRO EXAMEN O MATERIA DISTINTA
+        $esExamenDistinto = ($idExamenToken && $idExamenToken !== $examen->id);
+        $esMateriaDistinta = ($materiaQr && $examen->materia && strcasecmp(trim($materiaQr), trim($examen->materia->nombre)) !== 0);
+
+        if ($esExamenDistinto || $esMateriaDistinta) {
             IntentoNoAutorizado::create([
                 'id_examen'                => $examen->id,
-                'id_estudiante'            => null,
-                'identificador_presentado' => $codigoSis,
-                'tipo_intento'             => 'NO_INSCRITO',
-                'motivo'                   => 'QR corresponde a otro examen o materia distinta',
+                'id_estudiante'            => $estudiante?->id, // Asocia al estudiante si existe en el sistema
+                'tipo_intento'             => 'EXAMEN_DISTINTO',
                 'registrado_por_user_type' => $rol,
                 'registrado_por_user_id'   => $userId,
                 'fecha_hora'               => Carbon::now('America/La_Paz'),
@@ -71,41 +83,16 @@ class EscanerController extends Controller
             return response()->json([
                 'success'   => false,
                 'resultado' => 'RECHAZADO_EXAMEN_DISTINTO',
-                'message'   => 'El código QR presentado corresponde a otra evaluación.',
+                'message'   => 'El código QR presentado corresponde a otra evaluación o materia.',
             ], 403);
         }
 
-        // Validar materia si el QR la especifica
-        $materiaQr = $qrData['materia'] ?? null;
-        if ($materiaQr && $examen->materia && strcasecmp(trim($materiaQr), trim($examen->materia->nombre)) !== 0) {
-            IntentoNoAutorizado::create([
-                'id_examen'                => $examen->id,
-                'id_estudiante'            => null,
-                'identificador_presentado' => $codigoSis,
-                'tipo_intento'             => 'NO_INSCRITO',
-                'motivo'                   => "Materia no corresponde (Presentó: '{$materiaQr}', Examen: '{$examen->materia->nombre}')",
-                'registrado_por_user_type' => $rol,
-                'registrado_por_user_id'   => $userId,
-                'fecha_hora'               => Carbon::now('America/La_Paz'),
-            ]);
-
-            return response()->json([
-                'success'   => false,
-                'resultado' => 'RECHAZADO_MATERIA_DISTINTA',
-                'message'   => "Código QR incorrecto. Corresponde a la materia: {$materiaQr}.",
-            ], 403);
-        }
-
-        // Buscar estudiante en el sistema universitario
-        $estudiante = Estudiante::where('codigo_sis', $codigoSis)->first();
-
+        // USUARIO NO REGISTRADO EN EL SISTEMA
         if (!$estudiante) {
             IntentoNoAutorizado::create([
                 'id_examen'                => $examen->id,
                 'id_estudiante'            => null,
-                'identificador_presentado' => $codigoSis,
-                'tipo_intento'             => 'NO_INSCRITO',
-                'motivo'                   => 'Estudiante no registrado en el sistema universitario',
+                'tipo_intento'             => 'NO_REGISTRADO',
                 'registrado_por_user_type' => $rol,
                 'registrado_por_user_id'   => $userId,
                 'fecha_hora'               => Carbon::now('America/La_Paz'),
@@ -114,11 +101,11 @@ class EscanerController extends Controller
             return response()->json([
                 'success'   => false,
                 'resultado' => 'RECHAZADO_NO_REGISTRADO',
-                'message'   => 'El estudiante no está registrado en el sistema.',
+                'message'   => 'El estudiante no está registrado en el sistema universitario.',
             ], 403);
         }
 
-        // CASO A: Verificar si está matriculado en este examen
+        // ESTUDIANTE NO INSCRITO A ESTE EXAMEN
         $inscripcion = DB::table('estudiante_examen')
             ->where('id_examen', $examen->id)
             ->where('id_estudiante', $estudiante->id)
@@ -128,18 +115,16 @@ class EscanerController extends Controller
             IntentoNoAutorizado::create([
                 'id_examen'                => $examen->id,
                 'id_estudiante'            => $estudiante->id,
-                'identificador_presentado' => $estudiante->codigo_sis,
                 'tipo_intento'             => 'NO_INSCRITO',
-                'motivo'                   => 'No matriculado en el examen',
                 'registrado_por_user_type' => $rol,
                 'registrado_por_user_id'   => $userId,
                 'fecha_hora'               => Carbon::now('America/La_Paz'),
             ]);
 
             return response()->json([
-                'success'   => false,
-                'resultado' => 'RECHAZADO_NO_INSCRITO',
-                'message'   => 'El estudiante no se encuentra inscrito en esta evaluación.',
+                'success'    => false,
+                'resultado'  => 'RECHAZADO_NO_INSCRITO',
+                'message'    => 'El estudiante no se encuentra inscrito en este examen.',
                 'estudiante' => [
                     'nombre' => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
                     'sis'    => $estudiante->codigo_sis,
@@ -147,40 +132,33 @@ class EscanerController extends Controller
             ], 403);
         }
 
-        // CASO B: Verificar si está inhabilitado por prerrequisitos
+        // ESTUDIANTE QUE NO CUMPLE REQUERIMIENTOS (INHABILITADO)
         $estado = $inscripcion->estado ?? 'Inhabilitado';
 
         if ($estado !== 'Habilitado') {
-            $motivoObs = $inscripcion->motivo_estado ?? 'No cumple con los prerrequisitos asignados.';
-
             IntentoNoAutorizado::create([
                 'id_examen'                => $examen->id,
                 'id_estudiante'            => $estudiante->id,
-                'identificador_presentado' => $estudiante->codigo_sis,
                 'tipo_intento'             => 'INHABILITADO',
-                'motivo'                   => $motivoObs,
                 'registrado_por_user_type' => $rol,
                 'registrado_por_user_id'   => $userId,
                 'fecha_hora'               => Carbon::now('America/La_Paz'),
             ]);
 
             return response()->json([
-                'success'   => false,
-                'resultado' => 'RECHAZADO_INHABILITADO',
-                'message'   => 'Estudiante inhabilitado para rendir este examen.',
-                'detalles'  => [
-                    'motivo_inhabilitacion' => $motivoObs,
-                ],
+                'success'    => false,
+                'resultado'  => 'RECHAZADO_INHABILITADO',
+                'message'    => 'Estudiante inhabilitado para rendir este examen.',
                 'estudiante' => [
-                    'nombre' => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
-                    'sis'    => $estudiante->codigo_sis,
+                    'nombre'   => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
+                    'sis'      => $estudiante->codigo_sis,
                     'ci'       => $estudiante->ci,
                     'foto_url' => $estudiante->foto_perfil_url,
                 ]
             ], 403);
         }
 
-        // Si cumple todo, registrar ingreso en la tabla pivote
+        // INGRESO AUTORIZADO
         DB::table('estudiante_examen')
             ->where('id_examen', $examen->id)
             ->where('id_estudiante', $estudiante->id)
@@ -189,12 +167,12 @@ class EscanerController extends Controller
             ]);
 
         return response()->json([
-            'success'   => true,
-            'resultado' => 'PERMITIDO',
-            'message'   => 'Ingreso autorizado.',
+            'success'    => true,
+            'resultado'  => 'PERMITIDO',
+            'message'    => 'Ingreso autorizado.',
             'estudiante' => [
-                'nombre' => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
-                'sis'    => $estudiante->codigo_sis,
+                'nombre'   => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
+                'sis'      => $estudiante->codigo_sis,
                 'ci'       => $estudiante->ci,
                 'foto_url' => $estudiante->foto_perfil_url,
             ]

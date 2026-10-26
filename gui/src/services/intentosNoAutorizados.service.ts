@@ -1,34 +1,35 @@
-
 import { api } from './api'
 import type { PaginatedResponse } from '@/types/api'
 
-
 export interface EstudianteIntento {
   id: string
-  codigo_sis?: string | null
-  ci?: string | null
-  ci_extension?: string | null
-  nombre?: string | null
-  apellido_paterno?: string | null
-  apellido_materno?: string | null
+  codigo_sis: string | null
+  ci: string | null
+  ci_extension: string | null
+  nombre_completo: string
+  foto_url: string | null
 }
 
 export interface IntentoNoAutorizado {
   id: string
-  id_examen: string
-  id_estudiante: string | null
   identificador_presentado: string | null
   tipo_intento: 'INHABILITADO' | 'NO_INSCRITO'
   motivo: string | null
-  registrado_por_user_type: string | null
-  registrado_por_user_id: string | null
   fecha_hora: string
-  created_at?: string
-  updated_at?: string
-  estudiante?: EstudianteIntento | null
+  codigo_sis: string | null
+  estudiante: EstudianteIntento | null
 }
+
+export interface ExamenIntentos {
+  id: string
+  nombre: string
+  materia: string | null
+  aula: string | null
+}
+
 export interface IntentosNoAutorizadosResponse {
   success: boolean
+  examen: ExamenIntentos
   data: PaginatedResponse<IntentoNoAutorizado>
 }
 

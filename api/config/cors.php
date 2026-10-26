@@ -9,6 +9,9 @@ return [
         'https://sciem-five.vercel.app',
         'http://localhost:5173',
         'http://localhost:4173',
+        'http://localhost',
+        'https://localhost',
+        'capacitor://localhost',
     ],
 
     'allowed_origins_patterns' => [],

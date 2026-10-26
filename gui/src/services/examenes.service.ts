@@ -104,6 +104,10 @@ export const examenesService = {
     return api.get<PaginatedResponse<Examen>>(`/examenes${buildExamQuery(filters)}`)
   },
 
+  misExamenes(filters: ExamenFilters = {}) {
+    return api.get<PaginatedResponse<Examen>>(`/mis-examenes${buildExamQuery(filters)}`)
+  },
+
   get(id: string) {
     return api.get<Examen>(`/examenes/${id}`)
   },

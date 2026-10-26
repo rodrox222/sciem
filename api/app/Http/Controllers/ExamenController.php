@@ -16,6 +16,9 @@ use Illuminate\Support\Facades\DB;
 
 class ExamenController extends Controller
 {
+    /**
+     * Agenda Académica / Home: Público. Trae todos los exámenes programados.
+     */
     public function index(Request $request): JsonResponse
     {
         $query = Examen::with([
@@ -33,12 +36,59 @@ class ExamenController extends Controller
             $query->where('estado', $estado);
         }
 
-        // Filtro por fecha única
         if ($fecha = $request->query('fecha')) {
             $query->where('fecha', $fecha);
         }
 
-        // Filtro por rango de fechas
+        if ($fechaDesde = $request->query('fecha_desde')) {
+            $query->where('fecha', '>=', $fechaDesde);
+        }
+        if ($fechaHasta = $request->query('fecha_hasta')) {
+            $query->where('fecha', '<=', $fechaHasta);
+        }
+
+        $perPage = (int) $request->query('per_page', 10);
+        $examenes = $query->orderBy('fecha', 'desc')->orderBy('hora_ini', 'asc')->paginate($perPage);
+
+        return response()->json($examenes);
+    }
+
+    /**
+     * Dashboard "Mis exámenes": Exclusivo del docente titular o auxiliar asignado.
+     */
+    public function misExamenes(Request $request): JsonResponse
+    {
+        /** @var \App\Models\Docente|\App\Models\Auxiliar|\App\Models\Admin $user */
+        $user = $request->user();
+
+        $query = Examen::with([
+            'materia:id,nombre',
+            'aula:id,nombre',
+            'docente:id,nombre,apellido_paterno',
+            'normas:id,titulo,tipo',
+        ]);
+
+        if ($user instanceof Docente || ($user->rol ?? '') === 'docente') {
+            $query->where('id_docente', $user->id);
+        } elseif ($user instanceof Auxiliar || ($user->rol ?? '') === 'auxiliar') {
+            $query->whereHas('auxiliares', function ($q) use ($user) {
+                $q->where('id_auxiliar', $user->id)
+                  ->where('estado', 'Aceptada');
+            });
+        }
+
+        if ($search = $request->query('search')) {
+            $query->where('nombre', 'ilike', "%{$search}%");
+        }
+
+        if ($estado = $request->query('estado')) {
+            $query->where('estado', $estado);
+        }
+
+        if ($fecha = $request->query('fecha')) {
+            $query->where('fecha', $fecha);
+        }
+
         if ($fechaDesde = $request->query('fecha_desde')) {
             $query->where('fecha', '>=', $fechaDesde);
         }
@@ -55,16 +105,20 @@ class ExamenController extends Controller
     public function store(StoreExamenRequest $request): JsonResponse
     {
         $data = $request->validated();
+        $user = $request->user();
+
+        // Si quien crea es docente, forzar id_docente a su propio ID
+        if ($user instanceof Docente || ($user->rol ?? '') === 'docente') {
+            $data['id_docente'] = $user->id;
+        }
 
         $examen = DB::transaction(function () use ($data, $request) {
             $examen = Examen::create($data);
 
-            // Las normas son opcionales
             if ($request->has('normas_ids') && is_array($request->input('normas_ids'))) {
                 $examen->normas()->sync($request->input('normas_ids'));
             }
 
-            // Normas particulares opcionales
             if ($request->has('normas_particulares') && is_array($request->input('normas_particulares'))) {
                 foreach ($request->input('normas_particulares') as $part) {
                     if (!empty($part['titulo']) && !empty($part['descripcion'])) {
@@ -95,7 +149,10 @@ class ExamenController extends Controller
         ], 201);
     }
 
-    public function show(string $id): JsonResponse
+    /**
+     * Consulta individual del examen (Blindado contra accesos no autorizados)
+     */
+    public function show(Request $request, string $id): JsonResponse
     {
         $examen = Examen::with(['materia', 'aula', 'docente', 'normas'])->find($id);
 
@@ -103,15 +160,33 @@ class ExamenController extends Controller
             return response()->json(['message' => 'Examen no encontrado.'], 404);
         }
 
+        // Validación de pertenencia/rol
+        if (!$this->validarAccesoExamen($request->user(), $examen, false)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Acceso denegado: no tienes permisos para acceder a esta evaluación.',
+            ], 403);
+        }
+
         return response()->json($examen);
     }
 
+    /**
+     * Actualización del examen (Solo docente titular o admin)
+     */
     public function update(UpdateExamenRequest $request, string $id): JsonResponse
     {
         $examen = Examen::find($id);
 
         if (!$examen) {
             return response()->json(['message' => 'Examen no encontrado.'], 404);
+        }
+
+        if (!$this->validarAccesoExamen($request->user(), $examen, true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Acceso denegado: no puedes modificar un examen del cual no eres titular.',
+            ], 403);
         }
 
         $data = $request->validated();
@@ -149,12 +224,22 @@ class ExamenController extends Controller
         ]);
     }
 
+    /**
+     * Eliminación del examen (Solo docente titular o admin)
+     */
     public function destroy(Request $request, string $id): JsonResponse
     {
         $examen = Examen::find($id);
 
         if (!$examen) {
             return response()->json(['message' => 'Examen no encontrado.'], 404);
+        }
+
+        if (!$this->validarAccesoExamen($request->user(), $examen, true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Acceso denegado: no puedes eliminar un examen del cual no eres titular.',
+            ], 403);
         }
 
         $detalles = [
@@ -167,6 +252,36 @@ class ExamenController extends Controller
         $this->registrarAuditoria($request, 'EXAMEN_ELIMINADO', $detalles);
 
         return response()->json(['message' => 'Examen eliminado exitosamente.']);
+    }
+
+    /**
+     * Helper de autorización:
+     * - $soloEscritura = false: permite lectura a admin, docente titular y auxiliar aceptado.
+     * - $soloEscritura = true: permite edición/borrado solo a admin y docente titular.
+     */
+    private function validarAccesoExamen($user, Examen $examen, bool $soloEscritura = false): bool
+    {
+        if (!$user) {
+            return false;
+        }
+
+        if ($user instanceof Admin || ($user->rol ?? '') === 'admin' || ($user->rol ?? '') === 'administrador') {
+            return true;
+        }
+
+        if ($user instanceof Docente || ($user->rol ?? '') === 'docente') {
+            return $examen->id_docente === $user->id;
+        }
+
+        if (!$soloEscritura && ($user instanceof Auxiliar || ($user->rol ?? '') === 'auxiliar')) {
+            return DB::table('examen_auxiliar')
+                ->where('id_examen', $examen->id)
+                ->where('id_auxiliar', $user->id)
+                ->where('estado', 'Aceptada')
+                ->exists();
+        }
+
+        return false;
     }
 
     private function registrarAuditoria(Request $request, string $accion, array $detalles = []): void
