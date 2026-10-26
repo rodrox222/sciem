@@ -5,7 +5,6 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
-use PDOException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -15,25 +14,32 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->trustProxies(at: '*');
+
         $middleware->web(append: [
-            \App\Http\Middleware\HandleInertiaRequests::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
         ]);
 
-        // Registro del alias para roles
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
         ]);
-
-        //
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->render(function (QueryException|PDOException $e, Request $request) {
+        $exceptions->render(function (QueryException|\PDOException $e, Request $request) {
+            // Si está en local o con debug activado, mostrar el error real para no quedar a ciegas
+            if (config('app.debug')) {
+                return null;
+            }
+
             if ($request->is('api/*') || $request->expectsJson()) {
+                $origin = $request->header('Origin', 'https://sciem-five.vercel.app');
                 return response()->json([
                     'status'  => 'error',
                     'message' => 'El servicio de base de datos no se encuentra disponible temporalmente. Intente más tarde.',
-                ], 503);
+                ], 503)->withHeaders([
+                    'Access-Control-Allow-Origin'      => $origin,
+                    'Access-Control-Allow-Credentials' => 'true',
+                ]);
             }
         });
     })->create();

@@ -11,6 +11,7 @@ use App\Models\Docente;
 use App\Models\LogAuditoria;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class AulaController extends Controller
 {
@@ -19,23 +20,30 @@ class AulaController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Aula::query();
+        $search = $request->query('search');
+        $estado = $request->query('estado');
+        $perPage = (int) $request->query('per_page', 10);
 
-        if ($search = $request->query('search')) {
+        // Cachear catálogo de selector (disponibles en lote)
+        if ($estado === 'Disponible' && $perPage >= 50 && !$search) {
+            $aulas = Cache::remember('catalogo_aulas_disponibles', 300, function () use ($perPage) {
+                return Aula::where('estado', 'Disponible')->orderBy('nombre', 'asc')->paginate($perPage);
+            });
+            return response()->json($aulas);
+        }
+
+        $query = Aula::query();
+        if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('nombre', 'ilike', "%{$search}%")
                   ->orWhere('ubicacion', 'ilike', "%{$search}%");
             });
         }
-
-        if ($estado = $request->query('estado')) {
+        if ($estado) {
             $query->where('estado', $estado);
         }
 
-        $perPage = (int) $request->query('per_page', 10);
-        $aulas = $query->orderBy('nombre', 'asc')->paginate($perPage);
-
-        return response()->json($aulas);
+        return response()->json($query->orderBy('nombre', 'asc')->paginate($perPage));
     }
 
     /**
@@ -45,6 +53,8 @@ class AulaController extends Controller
     {
         $data = $request->validated();
         $aula = Aula::create($data);
+
+        Cache::forget('catalogo_aulas_disponibles');
 
         $this->registrarAuditoria($request, 'AULA_CREADA', [
             'aula_id'   => $aula->id,
@@ -86,6 +96,8 @@ class AulaController extends Controller
         $data = $request->validated();
         $aula->update($data);
 
+        Cache::forget('catalogo_aulas_disponibles');
+
         $this->registrarAuditoria($request, 'AULA_ACTUALIZADA', [
             'aula_id'             => $aula->id,
             'campos_actualizados' => array_keys($data),
@@ -115,6 +127,8 @@ class AulaController extends Controller
 
         $aula->delete();
 
+        Cache::forget('catalogo_aulas_disponibles');
+
         $this->registrarAuditoria($request, 'AULA_ELIMINADA', $detalles);
 
         return response()->json(['message' => 'Aula eliminada exitosamente.']);
@@ -137,16 +151,16 @@ class AulaController extends Controller
         $nombreCompleto = trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}");
 
         LogAuditoria::create([
-            'user_type'          => get_class($user),
-            'user_id'            => $user->id,
-            'rol_en_el_momento'  => $rol,
-            'usuario_nombre'     => $nombreCompleto !== '' ? $nombreCompleto : $user->nombre,
-            'usuario_email'      => $user->email ?? null,
-            'modulo'             => 'AULAS',
-            'accion'             => $accion,
-            'ip_origen'          => $request->ip() ?? '127.0.0.1',
-            'user_agent'         => $request->userAgent(),
-            'detalles'           => $detalles,
+            'user_type'         => get_class($user),
+            'user_id'           => $user->id,
+            'rol_en_el_momento' => $rol,
+            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : $user->nombre,
+            'usuario_email'     => $user->email ?? null,
+            'modulo'            => 'AULAS',
+            'accion'            => $accion,
+            'ip_origen'         => $request->ip() ?? '127.0.0.1',
+            'user_agent'        => $request->userAgent(),
+            'detalles'          => $detalles,
         ]);
     }
 }

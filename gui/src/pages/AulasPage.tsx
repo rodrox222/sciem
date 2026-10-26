@@ -41,6 +41,12 @@ const topBorderStyles: Record<AulaEstado, string> = {
   Ocupada: 'bg-sci-red',
 }
 
+const todayLocal = () => {
+  const now = new Date()
+  const offset = now.getTimezoneOffset() * 60_000
+  return new Date(now.getTime() - offset).toISOString().slice(0, 10)
+}
+
 export default function AulasPage() {
   const [aulas, setAulas] = useState<Aula[]>([])
   const [searchInput, setSearchInput] = useState('')
@@ -111,26 +117,7 @@ export default function AulasPage() {
     setSuccess('')
   }
 
-  const ensureUniqueName = async (payload: AulaPayload) => {
-    const response = await aulasService.list({
-      search: payload.nombre,
-      perPage: 100,
-    })
-    const duplicate = response.data.some(
-      (aula) =>
-        aula.nombre.trim().toLocaleLowerCase() ===
-          payload.nombre.trim().toLocaleLowerCase() &&
-        aula.id !== aulaSeleccionada?.id,
-    )
-
-    if (duplicate) {
-      throw new Error('Ya existe un ambiente registrado con ese nombre.')
-    }
-  }
-
   const saveAula = async (payload: AulaPayload) => {
-    await ensureUniqueName(payload)
-
     if (aulaSeleccionada) {
       const response = await aulasService.update(aulaSeleccionada.id, payload)
       setSuccess(response.message || 'Ambiente actualizado correctamente.')
@@ -149,12 +136,18 @@ export default function AulasPage() {
       setChangingId(aula.id)
       setError('')
       try {
-        const response = await examenesService.list({ perPage: 100 })
+        // Consultar únicamente exámenes futuros programados
+        const response = await examenesService.list({
+          estado: 'Programado',
+          fecha_desde: todayLocal(),
+          perPage: 50,
+        })
         const now = new Date()
 
         const examenesAsignados = (response.data || []).filter((exam) => {
           const esMismaAula =
             exam.aula?.id === aula.id ||
+            exam.id_aula === aula.id ||
             exam.aula?.nombre === aula.nombre
 
           if (!esMismaAula || !exam.fecha) return false
@@ -163,7 +156,7 @@ export default function AulasPage() {
           const cleanTime = (exam.hora_ini || '00:00').slice(0, 5)
           const examDate = new Date(`${cleanDate}T${cleanTime}:00`)
 
-          return !Number.isNaN(examDate.getTime()) && examDate >= now && exam.estado === 'Programado'
+          return !Number.isNaN(examDate.getTime()) && examDate >= now
         })
 
         setExamenesFuturos(examenesAsignados)

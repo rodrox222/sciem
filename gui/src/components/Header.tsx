@@ -1,4 +1,3 @@
-// src/components/Header.tsx
 import React, { useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -19,20 +18,28 @@ const NAV_ITEMS_BY_ROLE: Record<string, NavItem[]> = {
     { name: 'Usuarios', href: '/usuarios' },
     { name: 'Ambientes', href: '/aulas' },
     { name: 'Normativas', href: '/normas' },
+    { name: 'Materias', href: '/materias' },
     { name: 'Exámenes', href: '/examenes' },
     { name: 'Estudiantes', href: '/estudiantes' },
     { name: 'Auditoría', href: '/dashboard/auditoria' },
     { name: 'Configuración', href: '/configuracion' },
+    { name: 'Noticias', href: '/noticias' },
   ],
   docente: [
     { name: 'Inicio', href: '/dashboard' },
     { name: 'Mis exámenes', href: '/examenes' },
     { name: 'Estudiantes', href: '/estudiantes' },
+    { name: 'Noticias', href: '/noticias' },
   ],
   auxiliar: [
     { name: 'Inicio', href: '/dashboard' },
     { name: 'Control de ingreso', href: '/control' },
     { name: 'Aulas', href: '/aulas' },
+    { name: 'Noticias', href: '/noticias' },
+  ],
+  estudiante: [
+    { name: 'Mi módulo', href: '/estudiante' },
+    { name: 'Noticias', href: '/noticias' },
   ],
 };
 
@@ -68,9 +75,8 @@ export const Header: React.FC = () => {
 
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 sm:h-20 items-center justify-between">
-          
           {/* Logo SCI */}
-          <div 
+          <div
             className="flex cursor-pointer select-none items-center gap-2 sm:gap-3"
             onClick={() => goTo(isAuthenticated ? '/dashboard' : '/')}
           >
@@ -86,7 +92,7 @@ export const Header: React.FC = () => {
           </div>
 
           {/* Escudos institucionales (Desktop) */}
-          <div className="hidden lg:flex items-center gap-8">
+          <div className="hidden xl:flex items-center gap-8">
             <div className="flex items-center gap-2.5">
               <img src={logoFcyt} alt="FCyT" className="h-8 w-auto object-contain" />
               <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">
@@ -108,11 +114,9 @@ export const Header: React.FC = () => {
                 <span className="hidden xl:inline-flex items-center rounded-full border border-border bg-muted/40 px-3.5 py-1 text-xs font-medium text-muted-foreground">
                   Sesión activa
                 </span>
-                
                 <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-primary-foreground font-bold text-sm">
                   {userName.charAt(0).toUpperCase()}
                 </span>
-                
                 <div className="hidden sm:flex flex-col text-left">
                   <span className="max-w-[140px] truncate text-sm font-semibold text-foreground">
                     {userName}
@@ -121,7 +125,6 @@ export const Header: React.FC = () => {
                     {role}
                   </span>
                 </div>
-
                 <Button
                   variant="outline"
                   size="sm"
@@ -148,7 +151,7 @@ export const Header: React.FC = () => {
               variant="ghost"
               size="icon"
               onClick={() => setMobileOpen((prev) => !prev)}
-              className="sm:hidden"
+              className="xl:hidden"
               aria-label="Alternar menú de navegación"
             >
               {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -157,10 +160,10 @@ export const Header: React.FC = () => {
         </div>
 
         {/* Navegación Desktop */}
-        <nav className="hidden sm:flex justify-center border-t border-border pt-1 text-xs sm:text-sm font-medium">
+        <nav className="hidden xl:flex justify-center border-t border-border pt-1 text-xs sm:text-sm font-medium">
           {isAuthenticated ? (
             navItems.map((item) => {
-              const active = location.pathname === item.href;
+              const active = location.pathname.startsWith(item.href);
               return (
                 <button
                   key={item.name}
@@ -202,9 +205,12 @@ export const Header: React.FC = () => {
               </button>
               <button
                 type="button"
-                disabled
-                title="Disponible próximamente"
-                className="border-b-2 border-transparent px-4 py-2.5 text-muted-foreground/60 cursor-not-allowed select-none"
+                onClick={() => goTo('/noticias')}
+                className={`border-b-2 px-5 py-2.5 transition-colors cursor-pointer ${
+                  location.pathname === '/noticias'
+                    ? 'border-primary font-bold text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
               >
                 Noticias
               </button>
@@ -214,7 +220,7 @@ export const Header: React.FC = () => {
 
         {/* Menú Desplegable Móvil */}
         {mobileOpen && (
-          <nav className="border-t border-border py-3 sm:hidden space-y-1">
+          <nav className="border-t border-border py-3 xl:hidden space-y-1">
             {isAuthenticated ? (
               <>
                 {navItems.map((item) => (
@@ -254,10 +260,10 @@ export const Header: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  disabled
-                  className="block w-full rounded-lg px-4 py-2.5 text-left text-sm font-medium text-muted-foreground/50 cursor-not-allowed"
+                  onClick={() => goTo('/noticias')}
+                  className="block w-full rounded-lg px-4 py-2.5 text-left text-sm font-medium hover:bg-muted cursor-pointer"
                 >
-                  Noticias (Próximamente)
+                  Noticias
                 </button>
               </>
             )}

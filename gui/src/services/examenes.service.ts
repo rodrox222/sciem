@@ -44,16 +44,13 @@ export interface ExamenPayload {
   hora_fin: string
   id_aula: string
   id_docente: string
+  normas_ids?: string[]
+  normas_particulares?: { titulo: string; descripcion: string }[]
 }
 
 interface ExamenMutationResponse {
   message: string
   examen: Examen
-}
-
-interface MateriaMutationResponse {
-  message: string
-  materia: CatalogItem
 }
 
 export interface Prerrequisito {
@@ -79,6 +76,8 @@ export interface ExamenFilters {
   search?: string
   estado?: ExamenEstado | ''
   fecha?: string
+  fecha_desde?: string
+  fecha_hasta?: string
   page?: number
   perPage?: number
 }
@@ -88,15 +87,25 @@ const buildExamQuery = (filters: ExamenFilters) => {
   if (filters.search) params.set('search', filters.search)
   if (filters.estado) params.set('estado', filters.estado)
   if (filters.fecha) params.set('fecha', filters.fecha)
+  if (filters.fecha_desde) params.set('fecha_desde', filters.fecha_desde)
+  if (filters.fecha_hasta) params.set('fecha_hasta', filters.fecha_hasta)
   if (filters.page) params.set('page', String(filters.page))
   if (filters.perPage) params.set('per_page', String(filters.perPage))
   const query = params.toString()
   return query ? `?${query}` : ''
 }
 
+// Variables de deduplicación y caché en memoria
+let cachedDocentes: DocenteItem[] | null = null
+let pendingDocentesPromise: Promise<DocenteItem[]> | null = null
+
 export const examenesService = {
   list(filters: ExamenFilters = {}) {
     return api.get<PaginatedResponse<Examen>>(`/examenes${buildExamQuery(filters)}`)
+  },
+
+  misExamenes(filters: ExamenFilters = {}) {
+    return api.get<PaginatedResponse<Examen>>(`/mis-examenes${buildExamQuery(filters)}`)
   },
 
   get(id: string) {
@@ -111,16 +120,34 @@ export const examenesService = {
     return api.put<ExamenMutationResponse>(`/examenes/${id}`, payload)
   },
 
-  listMaterias() {
-    return api.get<CatalogItem[]>('/materias?all=1')
+  delete(id: string) {
+    return api.delete<{ message: string }>(`/examenes/${id}`)
   },
 
-  createMateria(nombre: string) {
-    return api.post<MateriaMutationResponse>('/materias', { nombre })
+  async listDocentes(): Promise<{ data: DocenteItem[] }> {
+    if (cachedDocentes && cachedDocentes.length > 0) {
+      return { data: cachedDocentes }
+    }
+
+    if (!pendingDocentesPromise) {
+      pendingDocentesPromise = api
+        .get<DocenteItem[]>('/docentes')
+        .then((docentes) => {
+          cachedDocentes = docentes
+          return docentes
+        })
+        .finally(() => {
+          pendingDocentesPromise = null
+        })
+    }
+
+    const data = await pendingDocentesPromise
+    return { data }
   },
 
-  listDocentes() {
-    return api.get<PaginatedResponse<DocenteItem>>('/users?tipo_usuario=docente&activo=true')
+  clearDocentesCache() {
+    cachedDocentes = null
+    pendingDocentesPromise = null
   },
 
   // --- Prerrequisitos de Examen ---
@@ -131,22 +158,22 @@ export const examenesService = {
   createPrerrequisito(examId: string, payload: PrerrequisitoPayload) {
     return api.post<{ message: string; prerrequisito: Prerrequisito }>(
       `/examenes/${examId}/prerrequisitos`,
-      payload
+      payload,
     )
   },
 
   toggleCumplimiento(prerrequisitoId: string, estudianteId: string, cumplido: boolean) {
     return api.patch<{ message: string }>(
       `/prerrequisitos/${prerrequisitoId}/estudiantes/${estudianteId}`,
-      { cumplido }
+      { cumplido },
     )
   },
 
   // --- Forzado manual docente ---
   cambiarHabilitacion(examId: string, estudianteId: string, payload: HabilitacionPayload) {
-    return api.patch<{ message: string; data: any }>(
+    return api.patch<{ message: string; data: unknown }>(
       `/examenes/${examId}/estudiantes/${estudianteId}/habilitacion`,
-      payload
+      payload,
     )
   },
 }

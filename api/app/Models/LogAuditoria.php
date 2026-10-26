@@ -33,7 +33,7 @@ class LogAuditoria extends Model
     protected function casts(): array
     {
         return [
-            'detalles' => 'array', // Retirar si tu migración final no tiene esta columna
+            'detalles' => 'array', 
             'created_at' => 'datetime',
         ];
     }

@@ -1,5 +1,3 @@
-// gui/src/services/api.ts
-
 export type ValidationErrors = Record<string, string[]>;
 
 export class ApiError extends Error {
@@ -16,12 +14,17 @@ export class ApiError extends Error {
   }
 }
 
-// Resuelve la URL desde el .env del frontend. 
-// Si no existe, usa la ruta relativa /api para cuando se usa proxy o mismo host.
+// Resuelve la URL: si no existe en .env, usa directamente la IP de tu servidor local
 const getBaseUrl = (): string => {
   const envUrl = import.meta.env.VITE_API_URL?.trim();
-  return (envUrl || '/api').replace(/\/$/, '');
+  const url = envUrl || 'http://192.168.1.17:8200';
+  return url.replace(/\/api\/?$/, '').replace(/\/$/, '');
 };
+
+//const getBaseUrl = (): string => {
+//  const envUrl = import.meta.env.VITE_API_URL?.trim();
+//  return (envUrl || '/api').replace(/\/$/, '');
+//};
 
 const parseResponse = async (response: Response): Promise<unknown> => {
   if (response.status === 204) return null;
@@ -36,18 +39,18 @@ const parseResponse = async (response: Response): Promise<unknown> => {
 };
 
 /**
- * Cliente principal para peticiones HTTP a la API de Laravel.
+ * Cliente principal para peticiones HTTP a la API de Laravel
  */
 export async function apiRequest<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  retries = 2
 ): Promise<T> {
   const token = localStorage.getItem('auth_token');
   const headers = new Headers(options.headers);
 
   headers.set('Accept', 'application/json');
 
-  // Solo añade Content-Type JSON si no es FormData (evita romper subida de archivos)
   if (options.body && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
@@ -56,9 +59,16 @@ export async function apiRequest<T>(
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  // Normaliza el path para asegurar que empiece con slash
+  //const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  //const url = `${getBaseUrl()}${cleanPath}`;
+  //const method = (options.method ?? 'GET').toUpperCase();
+
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  const url = `${getBaseUrl()}${cleanPath}`;
+  
+  // Garantiza que SIEMPRE viaje hacia /api/... sin duplicar /api/api
+  const apiPath = cleanPath.startsWith('/api/') ? cleanPath : `/api${cleanPath}`;
+  const url = `${getBaseUrl()}${apiPath}`;
+  const method = (options.method ?? 'GET').toUpperCase();
 
   let response: Response;
 
@@ -68,10 +78,19 @@ export async function apiRequest<T>(
       headers,
     });
   } catch {
+    if (retries > 0 && method === 'GET') {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      return apiRequest<T>(path, options, retries - 1);
+    }
     throw new ApiError(
       'No se pudo conectar con el servidor. Verifica que los contenedores de Docker estén activos.',
       0
     );
+  }
+
+  if (response.status === 503 && retries > 0 && method === 'GET') {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return apiRequest<T>(path, options, retries - 1);
   }
 
   const payload = await parseResponse(response);
@@ -85,6 +104,7 @@ export async function apiRequest<T>(
     if (response.status === 401) {
       localStorage.removeItem('auth_token');
       localStorage.removeItem('auth_user');
+      localStorage.removeItem('user_role');
     }
 
     throw new ApiError(
@@ -98,7 +118,6 @@ export async function apiRequest<T>(
   return payload as T;
 }
 
-// Métodos auxiliares rápidos
 export const api = {
   get: <T>(path: string, options?: RequestInit) =>
     apiRequest<T>(path, { ...options, method: 'GET' }),

@@ -15,9 +15,11 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
+            ConfiguracionSistemaSeeder::class,
             UsersSeeder::class,
             EstudianteSeeder::class,
-            ExamenSeeder::class,
+            ExamenSeeder2::class,
+            //ExamenSeeder2::class, es para probar examenes que ya terminan su horario y no permiten más ingresos
             PrerrequisitoSeeder::class,
         ]);
     }

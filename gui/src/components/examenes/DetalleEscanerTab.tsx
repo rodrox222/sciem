@@ -27,6 +27,9 @@ import {
 } from '@/services/estudiantes.service'
 import type { Examen } from '@/services/examenes.service'
 
+import { ControlesOffline } from '@/components/ControlesOffline'
+import { procesarIngresoEscaneado } from '@/services/verificacionScannerService'
+
 const READER_ID = 'qr-camera-stream-unique'
 
 interface AsistenciaItem {
@@ -41,13 +44,17 @@ interface AsistenciaItem {
 }
 
 interface VerificationResponse {
+  success?: boolean
   message: string
   resultado: string
   estudiante?: {
-    id: string
-    nombre_completo: string
-    codigo_sis: string
-    ci: string
+    id?: string
+    nombre?: string
+    nombre_completo?: string
+    sis?: string
+    codigo_sis?: string
+    ci?: string | null
+    foto_url?: string | null
   }
   detalles?: {
     materia?: string
@@ -72,13 +79,13 @@ const mapVerificationError = (error: unknown): ResultadoValidacionAcceso => {
     return {
       estado: 'rechazado',
       codigo: 'ERROR_VALIDACION',
-      motivo: 'Ocurrió un error inesperado al validar el ingreso.',
+      motivo: error instanceof Error ? error.message : 'Ocurrió un error inesperado al validar el ingreso.',
     }
   }
 
   const payload =
-    error.errors && typeof error.errors === 'object'
-      ? (error.errors as unknown as VerificationErrorPayload)
+    error.data && typeof error.data === 'object'
+      ? (error.data as VerificationErrorPayload)
       : undefined
 
   switch (payload?.resultado) {
@@ -101,11 +108,19 @@ const mapVerificationError = (error: unknown): ResultadoValidacionAcceso => {
         codigo: 'NO_INSCRITO',
         motivo: payload.message ?? error.message,
       }
+    case 'RECHAZADO_EXAMEN_DISTINTO':
     case 'RECHAZADO_MATERIA_INCORRECTA':
       return {
         estado: 'rechazado',
         codigo: 'MATERIA_INCORRECTA',
         motivo: payload.message ?? error.message,
+      }
+    case 'RECHAZADO_QR_EXPIRADO':
+    case 'HORARIO_EXPIRADO':
+      return {
+        estado: 'rechazado',
+        codigo: 'QR_INVALIDO',
+        motivo: payload.message ?? 'El código QR ha expirado. El horario concluyó.',
       }
     case 'EXAMEN_NO_ENCONTRADO':
       return {
@@ -114,6 +129,7 @@ const mapVerificationError = (error: unknown): ResultadoValidacionAcceso => {
         motivo: payload.message ?? error.message,
       }
     case 'ERROR_DATOS_INVALIDOS':
+    case 'FIRMA_INVALIDA':
       return {
         estado: 'rechazado',
         codigo: 'QR_INVALIDO',
@@ -157,6 +173,8 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
   const isPausedRef = useRef(false)
   const scannerInstanceRef = useRef<Html5Qrcode | null>(null)
 
+  const token = localStorage.getItem('auth_token') ?? localStorage.getItem('token') ?? ''
+
   // Cargar estudiantes que ya ingresaron
   const loadAsistencias = useCallback(async () => {
     setLoadingAsistencias(true)
@@ -166,7 +184,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
       )
       setAsistencias(res.asistencias || [])
     } catch {
-      // Ignorar fallo silencioso
+      // Ignorar fallo silencioso si está offline
     } finally {
       setLoadingAsistencias(false)
     }
@@ -178,7 +196,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
       const res = await estudiantesService.listByExam(exam.id)
       setRoster(res.estudiantes || [])
     } catch {
-      // Ignorar fallo silencioso
+      // Ignorar fallo silencioso si está offline
     }
   }, [exam.id])
 
@@ -203,39 +221,92 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
     setCameraActive(false)
   }, [])
 
+  // Proceso de escaneo con soporte híbrido Online/Offline
   const handleScan = useCallback(
-    async (decodedText: string) => {
-      if (isPausedRef.current) return
+  async (decodedText: string) => {
+    if (isPausedRef.current) return
 
-      isPausedRef.current = true
-      setValidationResult(null)
-      setIsValidating(true)
+    isPausedRef.current = true
+    setValidationResult(null)
+    setIsValidating(true)
 
-      try {
-        const response = await api.post<VerificationResponse>(
-          `/examenes/${exam.id}/verificar-ingreso`,
-          { qr_data: decodedText }
-        )
+    try {
+      // 1. Intentar validar directamente contra la API de Laravel
+      const res = await api.post<VerificationResponse>(
+        `/examenes/${exam.id}/verificar-ingreso`,
+        { qr_data: decodedText }
+      )
 
-        setValidationResult({
-          estado: 'autorizado',
-          estudiante: {
-            nombreCompleto: response.estudiante?.nombre_completo,
-            codigoSis: response.estudiante?.codigo_sis,
-          },
-          horaIngreso: response.detalles?.hora_ingreso,
-        })
-        setShowModal(true)
-        void loadAsistencias()
-      } catch (error) {
+      // Si fue exitoso (200 OK)
+      setValidationResult({
+        estado: 'autorizado',
+        estudiante: {
+          nombreCompleto: res.estudiante?.nombre_completo || res.estudiante?.nombre,
+          codigoSis: res.estudiante?.codigo_sis || res.estudiante?.sis,
+        },
+        horaIngreso: res.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
+      })
+      void loadAsistencias()
+      setShowModal(true)
+    } catch (error: any) {
+      // 2. Solo cortamos si el servidor SÍ respondió con un código HTTP real (400, 403, 409)
+      const tieneRespuestaDelServidor = Boolean(error?.status && error.status >= 400)
+
+      if (tieneRespuestaDelServidor && error instanceof ApiError) {
         setValidationResult(mapVerificationError(error))
         setShowModal(true)
-      } finally {
-        setIsValidating(false)
+        return
       }
-    },
-    [exam.id, loadAsistencias]
-  )
+
+      // 3. Respaldo Offline: Si no hubo respuesta del servidor (sin Wi-Fi / red caída)
+      console.warn('Sin conexión al servidor. Procesando escaneo en modo offline...')
+
+      try {
+        const resOffline = await procesarIngresoEscaneado(decodedText, exam.id, token)
+
+        if (resOffline.success) {
+          setValidationResult({
+            estado: 'autorizado',
+            estudiante: {
+              nombreCompleto: resOffline.estudiante?.nombre_completo,
+              codigoSis: resOffline.estudiante?.codigo_sis,
+            },
+            horaIngreso: resOffline.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
+          })
+          void loadAsistencias()
+        } else {
+          const esDuplicado =
+            resOffline.mensaje?.toLowerCase().includes('ya ingresó') ||
+            resOffline.mensaje?.toLowerCase().includes('duplicado') ||
+            resOffline.detalles?.resultado === 'RECHAZADO_YA_INGRESO'
+
+          const esInhabilitado =
+            resOffline.mensaje?.toLowerCase().includes('inhabilitado') ||
+            resOffline.mensaje?.toLowerCase().includes('sin cumplir') ||
+            resOffline.detalles?.resultado === 'RECHAZADO_INHABILITADO'
+
+          setValidationResult({
+            estado: 'rechazado',
+            codigo: esDuplicado
+              ? 'YA_INGRESO'
+              : esInhabilitado
+                ? 'INHABILITADO'
+                : 'ERROR_VALIDACION',
+            motivo: resOffline.mensaje,
+            primerIngreso: resOffline.detalles?.primer_ingreso,
+          })
+        }
+      } catch (offlineErr) {
+        setValidationResult(mapVerificationError(offlineErr))
+      }
+
+      setShowModal(true)
+    } finally {
+      setIsValidating(false)
+    }
+  },
+  [exam.id, token, loadAsistencias]
+)
 
   // Ingreso Manual Asistido sin QR
   const handleIngresoManual = async (student: EstudianteInscritoExamen) => {
@@ -384,7 +455,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
                     </div>
                     <p className="mt-4 text-sm font-extrabold">Validando ingreso...</p>
                     <p className="mt-1 text-xs font-medium text-white/75">
-                      Esperando respuesta del sistema
+                      Verificando credencial de acceso
                     </p>
                   </div>
                 )}
@@ -501,8 +572,11 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
           </Card>
         </div>
 
-        {/* Columna Derecha: Control de Sesión y Estudiantes en Sala (5 cols) */}
+        {/* Columna Derecha: Controles Offline, Control de Sesión y Estudiantes en Sala (5 cols) */}
         <div className="space-y-4 lg:col-span-5">
+          {/* Bloque de Gestión Offline (HU-21) */}
+          <ControlesOffline idExamen={exam.id} token={token} />
+
           {/* Tarjeta de Control de Sesión */}
           <Card className="rounded-2xl border-border bg-card shadow-xs">
             <CardContent className="space-y-3 p-5 text-xs">

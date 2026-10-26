@@ -1,11 +1,16 @@
 <?php
 
-use App\Http\Controllers\ProfileController;
-use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
-//para hu2 de login
+// Ruta raíz para verificación de estado y salud del backend (Health Check)
+Route::get('/', function () {
+    return response()->json([
+        'status'  => 'online',
+        'service' => 'SCIEM Backend API',
+    ]);
+});
+
+// Rutas auxiliares de prueba para vistas Blade
 Route::get('/test-login', function () {
     return view('test_auth');
 });
@@ -13,24 +18,3 @@ Route::get('/test-login', function () {
 Route::get('/reset-password', function () {
     return view('test-reset');
 });
-
-Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
-});
-
-Route::get('/dashboard', function () {
-    return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
-
-Route::middleware('auth')->prefix('profile')->name('profile.')->controller(ProfileController::class)->group(function () {
-    Route::get('/', 'edit')->name('edit');
-    Route::patch('/', 'update')->name('update');
-    Route::delete('/', 'destroy')->name('destroy');
-});
-
-//require __DIR__.'/auth.php';

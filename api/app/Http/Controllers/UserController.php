@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class UserController extends Controller
 {
@@ -48,7 +49,7 @@ class UserController extends Controller
         $coleccion = $coleccion->sortByDesc('created_at')->values();
 
         $page = LengthAwarePaginator::resolveCurrentPage();
-        $perPage = 10;
+        $perPage = (int) $request->query('per_page', 10);
         $items = $coleccion->slice(($page - 1) * $perPage, $perPage)->values();
         $paginado = new LengthAwarePaginator($items, $coleccion->count(), $perPage, $page, [
             'path' => LengthAwarePaginator::resolveCurrentPath(),
@@ -59,24 +60,41 @@ class UserController extends Controller
     }
 
     /**
-     * Crear un nuevo usuario
+     * Crear un nuevo usuario compatible con el Pooler de PostgreSQL/Supabase
      */
     public function store(StoreUserRequest $request): JsonResponse
     {
         $data = $request->validated();
-        $data['activo'] = $data['activo'] ?? true;
         $tipo = $data['tipo_usuario'];
         unset($data['tipo_usuario']);
 
-        $modelClass = $this->obtenerClaseModelo($tipo);
-        $user = $modelClass::create($data);
+        $activoBool = isset($data['activo'])
+            ? filter_var($data['activo'], FILTER_VALIDATE_BOOLEAN)
+            : true;
 
-        $this->registrarLog($request, 'USUARIO_CREADO', [
-            'tipo_usuario' => $tipo,
-            'target_id'    => $user->id,
-            'ci'           => $user->ci,
-            'email'        => $user->email ?? null,
-        ]);
+        if ($tipo === 'admin') {
+            unset($data['email']);
+        }
+
+        // Blindaje contra la emulación de PDO: inyectar el literal SQL directo
+        $data['activo'] = $activoBool ? DB::raw('true') : DB::raw('false');
+
+        $modelClass = $this->obtenerClaseModelo($tipo);
+        $user = new $modelClass();
+        $user->fill($data);
+        $user->save();
+
+        try {
+            $this->registrarLog($request, 'USUARIO_CREADO', [
+                'tipo_usuario' => $tipo,
+                'target_id'    => (string) $user->id,
+                'ci'           => $user->ci,
+                'ci_extension' => $user->ci_extension ?? null,
+                'email'        => $user->email ?? null,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('No se pudo registrar log de auditoría al crear usuario: ' . $e->getMessage());
+        }
 
         return response()->json([
             'message' => 'Usuario creado exitosamente.',
@@ -113,100 +131,32 @@ class UserController extends Controller
         $tipoActual = $res['tipo'];
         $data = $request->validated();
 
-        // Extraer y remover el rol de los datos a actualizar
-        $nuevoTipo = $data['tipo_usuario'] ?? $tipoActual;
         unset($data['tipo_usuario']);
 
-        // Si no se envió contraseña nueva, no tocarla
         if (empty($data['password'])) {
             unset($data['password']);
         }
 
-        // Si hay cambio de rol entre tablas distintas
-        if ($nuevoTipo !== $tipoActual) {
-            // Protección: No dejar al sistema sin administradores activos
-            if ($tipoActual === 'admin' && $user->activo) {
-                $adminsActivos = Admin::where('activo', true)->count();
-                if ($adminsActivos <= 1) {
-                    return response()->json([
-                        'message' => 'No se puede cambiar el rol al único administrador activo.'
-                    ], 422);
-                }
-            }
-
-            // Exigir email si el nuevo rol lo requiere y no existe
-            $emailFinal = $data['email'] ?? $user->email ?? null;
-            if (in_array($nuevoTipo, ['docente', 'auxiliar']) && empty($emailFinal)) {
-                return response()->json([
-                    'message' => 'El correo es obligatorio para docentes y auxiliares.'
-                ], 422);
-            }
-
-            try {
-                $user = DB::transaction(function () use ($user, $tipoActual, $nuevoTipo, $data, $emailFinal) {
-                    $claseDestino = $this->obtenerClaseModelo($nuevoTipo);
-
-                    // Extraer los atributos existentes limpios
-                    $atributosBase = $user->getAttributes();
-
-                    // Lista blanca de columnas permitidas comunes en la base de datos
-                    $camposPermitidos = [
-                        'id',
-                        'ci',
-                        'ci_extension',
-                        'nombre',
-                        'apellido_paterno',
-                        'apellido_materno',
-                        'email',
-                        'password',
-                        'activo',
-                        'ultimo_acceso',
-                        'created_at',
-                        'updated_at',
-                    ];
-
-                    $datosLimpios = [];
-                    foreach ($camposPermitidos as $campo) {
-                        if (array_key_exists($campo, $data)) {
-                            $datosLimpios[$campo] = $data[$campo];
-                        } elseif (array_key_exists($campo, $atributosBase)) {
-                            $datosLimpios[$campo] = $atributosBase[$campo];
-                        }
-                    }
-
-                    // Asegurar que si el rol destino es admin, no intente insertar email ni ci_extension
-                    if ($nuevoTipo === 'admin') {
-                        unset($datosLimpios['email'], $datosLimpios['ci_extension']);
-                    } else {
-                        $datosLimpios['email'] = $emailFinal;
-                    }
-
-                    // 1. Eliminar primero el registro de la tabla origen (para liberar CI/Email)
-                    $user->delete();
-
-                    // 2. Crear el registro en la tabla destino con el mismo ID
-                    $nuevoRegistro = new $claseDestino();
-                    $nuevoRegistro->forceFill($datosLimpios);
-                    $nuevoRegistro->save();
-
-                    return $nuevoRegistro;
-                });
-
-                $tipoActual = $nuevoTipo;
-            } catch (\Exception $e) {
-                return response()->json([
-                    'message' => 'Error al migrar de rol: ' . $e->getMessage()
-                ], 422);
-            }
-        } else {
-            $user->update($data);
+        if ($tipoActual === 'admin') {
+            unset($data['email']);
         }
 
-        $this->registrarLog($request, 'USUARIO_ACTUALIZADO', [
-            'tipo_usuario'        => $tipoActual,
-            'target_id'           => $user->id,
-            'campos_actualizados' => array_keys($data),
-        ]);
+        if (isset($data['activo'])) {
+            $esActivo = filter_var($data['activo'], FILTER_VALIDATE_BOOLEAN);
+            $data['activo'] = $esActivo ? DB::raw('true') : DB::raw('false');
+        }
+
+        $user->update($data);
+
+        try {
+            $this->registrarLog($request, 'USUARIO_ACTUALIZADO', [
+                'tipo_usuario'        => $tipoActual,
+                'target_id'           => (string) $user->id,
+                'campos_actualizados' => array_keys($data),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('No se pudo registrar log de auditoría al actualizar usuario: ' . $e->getMessage());
+        }
 
         return response()->json([
             'message' => 'Usuario actualizado exitosamente.',
@@ -232,14 +182,18 @@ class UserController extends Controller
             return $error;
         }
 
-        $user->activo = false;
+        $user->activo = DB::raw('false');
         $user->save();
 
-        $this->registrarLog($request, 'USUARIO_DESACTIVADO', [
-            'tipo_usuario' => $tipo,
-            'target_id'    => $user->id,
-            'motivo'       => 'Baja lógica desde módulo de usuarios',
-        ]);
+        try {
+            $this->registrarLog($request, 'USUARIO_DESACTIVADO', [
+                'tipo_usuario' => $tipo,
+                'target_id'    => (string) $user->id,
+                'motivo'       => 'Baja lógica desde módulo de usuarios',
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('No se pudo registrar log de auditoría al desactivar usuario: ' . $e->getMessage());
+        }
 
         return response()->json(['message' => 'Usuario desactivado exitosamente.']);
     }
@@ -314,7 +268,7 @@ class UserController extends Controller
             'apellido_paterno' => $u->apellido_paterno,
             'apellido_materno' => $u->apellido_materno,
             'email'            => $u->email ?? null,
-            'activo'           => $u->activo,
+            'activo'           => (bool) $u->activo,
             'tipo_usuario'     => $tipo,
             'ultimo_acceso'    => $u->ultimo_acceso,
             'created_at'       => $u->created_at,
@@ -338,7 +292,7 @@ class UserController extends Controller
         }
 
         if ($activo !== null) {
-            $query->where('activo', $activo);
+            $query->whereRaw('activo is ' . ($activo ? 'true' : 'false'));
         }
     }
 
@@ -349,7 +303,7 @@ class UserController extends Controller
         }
 
         if ($tipo === 'admin' && $user->activo) {
-            $adminsActivos = Admin::where('activo', true)->count();
+            $adminsActivos = Admin::whereRaw('activo is true')->count();
             if ($adminsActivos <= 1) {
                 return response()->json([
                     'message' => 'No se puede desactivar al único administrador activo.'

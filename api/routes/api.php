@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Cache;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ForgotPasswordController;
 use App\Http\Controllers\UserController;
@@ -15,25 +16,32 @@ use App\Http\Controllers\HabilitacionExamenController;
 use App\Http\Controllers\PrerrequisitoController;
 use App\Http\Controllers\VerificacionController;
 use App\Http\Controllers\CargaMasivaEstudianteController;
+use App\Http\Controllers\ConfiguracionSistemaController;
+use App\Http\Controllers\IntentoNoAutorizadoController;
+use App\Http\Controllers\AuxiliarModuloController;
+use App\Http\Controllers\ExpulsionController;
+use App\Http\Controllers\AuxiliarOfflineController;
 use App\Models\Admin;
 use App\Models\Docente;
 use App\Models\Auxiliar;
 use Illuminate\Support\Facades\Artisan;
+use App\Http\Controllers\NoticiaController;
 
 // --- RUTAS PÚBLICAS ---
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLink']);
 Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword']);
+Route::get('noticias', [NoticiaController::class, 'index']);
 
 Route::get('examenes', [ExamenController::class, 'index']);
-Route::get('examenes/{id}', [ExamenController::class, 'show']);
+
 
 Route::get('/seed-render-now', function () {
     Artisan::call('db:seed', ['--force' => true]);
     return response()->json([
-        'output' => Artisan::output(),
+        'output'         => Artisan::output(),
         'total_docentes' => \App\Models\Docente::count(),
-        'docente' => \App\Models\Docente::first(),
+        'docente'        => \App\Models\Docente::first(),
     ]);
 });
 
@@ -66,7 +74,7 @@ Route::middleware('auth:sanctum')->group(function () {
         ]);
     });
 
-    // Endpoint de roles para selectores en frontend
+    // Endpoint de roles estático para selectores
     Route::get('roles', function () {
         return response()->json([
             ['id' => 'admin', 'nombre' => 'Administrador'],
@@ -75,10 +83,44 @@ Route::middleware('auth:sanctum')->group(function () {
         ]);
     });
 
+    // Catálogo directo y compatible con PostgreSQL nativo
+    Route::middleware('role:admin,administrador,docente')->get('docentes', function () {
+        $docentes = Cache::remember('catalogo_docentes_activos', 600, function () {
+            return \Illuminate\Support\Facades\DB::table('docente')
+                ->whereRaw('activo is true')
+                ->orderBy('nombre', 'asc')
+                ->select(['id', 'nombre', 'apellido_paterno', 'apellido_materno'])
+                ->get();
+        });
+
+        return response()->json($docentes);
+    });
+
     // --- ADMINISTRACIÓN ---
     Route::middleware('role:admin,administrador')->group(function () {
+        Route::get('dashboard/stats', function () {
+            $totalUsuarios = \App\Models\Admin::count() 
+                           + \App\Models\Docente::count() 
+                           + \App\Models\Auxiliar::count();
+
+            $totalAulasDisponibles = \App\Models\Aula::where('estado', 'Disponible')->count();
+            $totalExamenesActivos  = \App\Models\Examen::where('estado', 'Programado')->count();
+            $totalEstudiantes      = \App\Models\Estudiante::count();
+
+            return response()->json([
+                'users'    => $totalUsuarios,
+                'rooms'    => $totalAulasDisponibles,
+                'exams'    => $totalExamenesActivos,
+                'students' => $totalEstudiantes,
+            ]);
+        });
+
         Route::apiResource('users', UserController::class);
         Route::get('auditoria', [AuditoriaController::class, 'index']);
+
+        // Parámetro de inactividad de sesión
+        Route::get('configuracion/inactividad', [ConfiguracionSistemaController::class, 'getTiempoInactividad']);
+        Route::put('configuracion/inactividad', [ConfiguracionSistemaController::class, 'updateTiempoInactividad']);
     });
 
     // --- AULAS ---
@@ -98,6 +140,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('examenes', [ExamenController::class, 'store']);
         Route::put('examenes/{id}', [ExamenController::class, 'update']);
         Route::delete('examenes/{id}', [ExamenController::class, 'destroy']);
+    });
+
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::get('mis-examenes', [ExamenController::class, 'misExamenes']);
+        Route::get('examenes/{id}', [ExamenController::class, 'show']);
     });
 
     // --- MATERIAS ---
@@ -129,6 +176,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- ESTUDIANTES (Padrón general) ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('estudiantes', [EstudianteController::class, 'index']);
+        Route::get('estudiantes/buscar', [EstudianteController::class, 'buscar']);
         Route::get('estudiantes/{identificador}', [EstudianteController::class, 'show']);
     });
 
@@ -141,22 +189,15 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // --- HU 9: PRERREQUISITOS Y HABILITACIÓN ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
-        // Listar estudiantes inscritos al examen con estado de habilitación y auditoría
         Route::get('examenes/{examen}/estudiantes', [HabilitacionExamenController::class, 'index']);
-        // Listar prerrequisitos fijados para el examen
         Route::get('examenes/{examen}/prerrequisitos', [PrerrequisitoController::class, 'index']);
-        // motivo rapido de innabilitacion
         Route::get('examenes/{examen}/estudiantes/{estudiante}/motivo', [HabilitacionExamenController::class, 'motivoInhabilitacion']);
     });
 
     Route::middleware('role:admin,administrador,docente')->group(function () {
-        // Crear un prerrequisito para el examen (inhabilita a quienes no tengan ajuste manual)
         Route::post('examenes/{examen}/prerrequisitos', [PrerrequisitoController::class, 'store']);
-        // Marcar o desmarcar si un estudiante cumplió el prerrequisito
         Route::patch('prerrequisitos/{prerrequisito}/estudiantes/{estudiante}', [PrerrequisitoController::class, 'toggleCumplimiento']);
-        // Forzado manual de habilitación/inhabilitación por parte del docente
         Route::patch('examenes/{examen}/estudiantes/{estudiante}/habilitacion', [HabilitacionExamenController::class, 'update']);
-        // prerrequisitos de un estudiante en un examen
         Route::get('examenes/{examen}/estudiantes/{estudiante}/prerrequisitos', [PrerrequisitoController::class, 'prerrequisitosPorEstudiante']);
     });
 
@@ -165,6 +206,76 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('examenes/{id}/verificar-ingreso', [VerificacionController::class, 'verificarIngreso']);
     });
 
+    // --- HU 15: REGISTRO DE EXPULSIONES ---
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::post(
+            'examenes/{id}/expulsiones',
+            [ExpulsionController::class, 'store']
+        );
+    });
+
     Route::post('/examenes/{id}/registro-manual', [VerificacionController::class, 'registrarIngresoManual']);
     Route::get('/examenes/{id}/asistencias', [VerificacionController::class, 'listarAsistencias']);
+
+    // HU 13: REGISTRO Y CONSULTA DE INTENTOS NO CORRESPONDIENTES 
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::get('examenes/{id_examen}/intentos-no-autorizados', [IntentoNoAutorizadoController::class, 'index']);
+        Route::post('examenes/{id_examen}/escanear-ingreso', [VerificacionController::class, 'verificarIngreso']);
+    });
+
+
+    // HU 18: MODULO DE ESTUDIANTES
+    Route::middleware('role:estudiante')->prefix('estudiante')->group(function () {
+        // Completar o cambiar CI
+        Route::match(['post', 'patch'], '/completar-datos', [EstudianteController::class, 'completarDatos']);
+        
+        // Subir foto facial a Cloudinary
+        Route::post('/foto', [EstudianteController::class, 'subirFoto']);
+        
+        // Consultar exámenes inscritos y estado de habilitación
+        Route::get('/mis-examenes', [EstudianteController::class, 'misExamenes']);
+        
+        // Generar token QR dinámico para un examen específico
+        Route::post('/examenes/{idExamen}/qr-token', [EstudianteController::class, 'generarTokenQr']);
+
+        // cambio de contraseña
+        Route::put('/cambiar-password', [EstudianteController::class, 'cambiarPassword']);
+    });
+
+    //HU 19: GESTIÓN DE AUXILIARES
+    Route::middleware('role:admin,administrador,docente')->group(function () {
+        Route::post('examenes/{id_examen}/invitar-auxiliar', [AuxiliarModuloController::class, 'invitarAuxiliar']);
+        Route::get('examenes/{id_examen}/auxiliares', [AuxiliarModuloController::class, 'listarAuxiliaresExamen']);
+    });
+
+    Route::middleware('role:auxiliar')->prefix('auxiliar')->group(function () {
+        Route::get('/invitaciones', [AuxiliarModuloController::class, 'misInvitaciones']);
+        Route::patch('/invitaciones/{id_invitacion}/responder', [AuxiliarModuloController::class, 'responderInvitacion']);
+        Route::get('/mis-examenes', [AuxiliarModuloController::class, 'misExamenesAsignados']);
+    });
+
+    // todos tienen acceso a ver la foto del estudiante, pero solo el propio estudiante puede subirla
+    Route::middleware('role:admin,administrador,docente,auxiliar,estudiante')->group(function () {
+        Route::get('estudiante/foto/{idEstudiante}', [EstudianteController::class, 'verFoto']);
+    });
+
+    // modod offline
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        // Descargar padrón para la base de datos local del móvil
+        Route::get('/examenes/{id}/descargar-padron', [AuxiliarOfflineController::class, 'descargarPadron']);
+
+        // Subir lote de escaneos acumulados offline
+        Route::post('/examenes/{id}/sincronizar-asistencias', [AuxiliarOfflineController::class, 'sincronizarAsistencias']);
+    });
+
+    // --- HU 14: NOTICIAS OPERATIVAS ---
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::get('noticias/internas', [NoticiaController::class, 'index']); 
+    });
+
+    Route::middleware('role:admin,administrador,docente')->group(function () {
+        Route::post('noticias', [NoticiaController::class, 'store']);
+        Route::put('noticias/{id}', [NoticiaController::class, 'update']);
+        Route::delete('noticias/{id}', [NoticiaController::class, 'destroy']);
+    });
 });

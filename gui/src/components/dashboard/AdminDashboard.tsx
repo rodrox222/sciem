@@ -14,10 +14,7 @@ import {
 } from 'lucide-react'
 
 import { api } from '../../services/api'
-import { aulasService } from '../../services/aulas.service'
-import { estudiantesService } from '../../services/estudiantes.service'
 import { examenesService, type Examen } from '../../services/examenes.service'
-import { usuariosService } from '../../services/usuarios.service'
 import type { PaginatedResponse } from '@/types/api'
 
 interface AuditEntry {
@@ -28,6 +25,13 @@ interface AuditEntry {
   created_at: string
 }
 
+interface StatsResponse {
+  users: number
+  rooms: number
+  exams: number
+  students: number
+}
+
 interface DashboardData {
   users: number | null
   rooms: number | null
@@ -35,7 +39,8 @@ interface DashboardData {
   students: number | null
   upcoming: Examen[]
   activity: AuditEntry[]
-  checks: boolean[]
+  hasAuditError: boolean
+  hasExamsError: boolean
 }
 
 const activityLabel = (entry: AuditEntry) => {
@@ -106,41 +111,50 @@ export function AdminDashboard() {
   useEffect(() => {
     let active = true
 
-    void Promise.allSettled([
-      usuariosService.list({ perPage: 1 }),
-      aulasService.list({ estado: 'Disponible', perPage: 1 }),
-      examenesService.list({ estado: 'Programado', perPage: 100 }),
-      estudiantesService.list({ perPage: 1 }),
-      api.get<PaginatedResponse<AuditEntry>>('/auditoria?per_page=4'),
-    ]).then(([users, rooms, exams, students, audits]) => {
-      if (!active) return
+    const loadDashboard = async () => {
+      try {
+        // 1. Obtener métricas consolidadas en una sola petición
+        const stats = await api.get<StatsResponse>('/dashboard/stats').catch(() => null)
 
-      const today = new Date()
-      const upcoming =
-        exams.status === 'fulfilled'
-          ? exams.value.data
-              .filter((exam) => {
-                if (!exam.fecha) return false
-                const cleanDate = exam.fecha.slice(0, 10)
-                const cleanTime = (exam.hora_ini || '00:00').slice(0, 5)
-                const startsAt = new Date(`${cleanDate}T${cleanTime}:00`)
-                return !Number.isNaN(startsAt.getTime()) && startsAt >= today
-              })
-              .sort((a, b) => (a.fecha + a.hora_ini).localeCompare(b.fecha + b.hora_ini))
-              .slice(0, 4)
-          : []
+        // 2. Obtener actividad y próximos exámenes en paralelo pero ligero
+        const [auditsRes, examsRes] = await Promise.allSettled([
+          api.get<PaginatedResponse<AuditEntry>>('/auditoria?per_page=4'),
+          examenesService.list({ estado: 'Programado', perPage: 10 }),
+        ])
 
-      setData({
-        users: users.status === 'fulfilled' ? users.value.total : null,
-        rooms: rooms.status === 'fulfilled' ? rooms.value.total : null,
-        exams: exams.status === 'fulfilled' ? exams.value.total : null,
-        students: students.status === 'fulfilled' ? students.value.total : null,
-        upcoming,
-        activity: audits.status === 'fulfilled' ? audits.value.data : [],
-        checks: [users, rooms, exams, students, audits].map((result) => result.status === 'fulfilled'),
-      })
-      setLoading(false)
-    })
+        if (!active) return
+
+        const today = new Date()
+        const upcoming =
+          examsRes.status === 'fulfilled'
+            ? examsRes.value.data
+                .filter((exam) => {
+                  if (!exam.fecha) return false
+                  const cleanDate = exam.fecha.slice(0, 10)
+                  const cleanTime = (exam.hora_ini || '00:00').slice(0, 5)
+                  const startsAt = new Date(`${cleanDate}T${cleanTime}:00`)
+                  return !Number.isNaN(startsAt.getTime()) && startsAt >= today
+                })
+                .sort((a, b) => (a.fecha + a.hora_ini).localeCompare(b.fecha + b.hora_ini))
+                .slice(0, 4)
+            : []
+
+        setData({
+          users: stats?.users ?? null,
+          rooms: stats?.rooms ?? null,
+          exams: stats?.exams ?? null,
+          students: stats?.students ?? null,
+          upcoming,
+          activity: auditsRes.status === 'fulfilled' ? auditsRes.value.data : [],
+          hasAuditError: auditsRes.status === 'rejected',
+          hasExamsError: examsRes.status === 'rejected',
+        })
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
+    void loadDashboard()
 
     return () => {
       active = false
@@ -237,13 +251,13 @@ export function AdminDashboard() {
             </div>
             {loading ? (
               <p className="py-8 text-center text-sm text-muted-foreground">Cargando actividad…</p>
-            ) : !data?.checks[4] ? (
+            ) : data?.hasAuditError ? (
               <p className="py-8 text-center text-sm text-muted-foreground">No se pudo consultar la auditoría.</p>
-            ) : data.activity.length === 0 ? (
+            ) : data?.activity.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">No hay actividad registrada.</p>
             ) : (
               <div className="divide-y divide-border">
-                {data.activity.map((entry) => (
+                {data?.activity.map((entry) => (
                   <div key={entry.id} className="flex items-center gap-3 py-3 text-sm">
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-sci-cyan/10 text-sci-cyan">
                       <Activity className="h-4 w-4" />
@@ -281,13 +295,13 @@ export function AdminDashboard() {
             </div>
             {loading ? (
               <p className="py-8 text-center text-sm text-muted-foreground">Cargando exámenes…</p>
-            ) : !data?.checks[2] ? (
+            ) : data?.hasExamsError ? (
               <p className="py-8 text-center text-sm text-muted-foreground">No se pudieron consultar los exámenes.</p>
-            ) : data.upcoming.length === 0 ? (
+            ) : data?.upcoming.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">No hay evaluaciones programadas próximas.</p>
             ) : (
               <div className="divide-y divide-border">
-                {data.upcoming.map((exam) => (
+                {data?.upcoming.map((exam) => (
                   <button
                     key={exam.id}
                     type="button"

@@ -17,7 +17,7 @@ class ExamenSeeder extends Seeder
     {
         // Asegurar o crear una Materia de prueba
         $materia = Materia::firstOrCreate(
-            ['nombre' => 'Taller de Ingeniería de Software'],
+            ['nombre' => 'Introduccion a la programacion'],
             ['id' => (string) Str::uuid()]
         );
 
@@ -32,24 +32,26 @@ class ExamenSeeder extends Seeder
             ]
         );
 
-        // Asegurar o crear un Docente de prueba
-        $docente = Docente::firstOrCreate(
-            ['email' => 'docente.tis@gmail.com'],
-            [
-                'id'               => (string) Str::uuid(),
-                'ci'               => '5421987',
-                'ci_extension'     => 'CB',
-                'nombre'           => 'Marco Antonio',
-                'apellido_paterno' => 'Montecinos',
-                'apellido_materno' => 'Choque',
-                'password'         => Hash::make('password123'),
-                'activo'           => true,
-            ]
-        );
+       $docente = Docente::where('email', 'docente@fcyt.umss.edu.bo')->first();
+
+        if (!$docente) {
+            $docente = Docente::create([
+                'id'                => (string) Str::uuid(),
+                'email'             => 'docente@fcyt.umss.edu.bo',
+                'ci'                => '11111111',
+                'ci_extension'      => null,
+                'nombre'            => 'jackson',
+                'apellido_paterno'  => 'Orellana',
+                'apellido_materno'  => 'mamani',
+                'email_verified_at' => now(),
+                'password'          => Hash::make('docente123'),
+                'activo'            => true,
+            ]);
+        }
 
         // Crear el Examen
         $examen = Examen::updateOrCreate(
-            ['nombre' => 'Primer Examen Parcial - TIS'],
+            ['nombre' => 'segundo parcial'],
             [
                 'id'         => (string) Str::uuid(),
                 'id_materia' => $materia->id,
@@ -62,45 +64,20 @@ class ExamenSeeder extends Seeder
             ]
         );
 
-        // asignar los estudiantes a la tabla intermedia 'estudiante_examen'
-        $estudiantes = Estudiante::all();
+       $estudiantes = Estudiante::take(2)->get();
 
-        if ($estudiantes->count() > 0) {
-            // Estudiante 1: Habilitado sin motivo
-            if (isset($estudiantes[0])) {
-                $examen->estudiantes()->syncWithoutDetaching([
-                    $estudiantes[0]->id => [
-                        'estado'                => 'Habilitado',
-                        'motivo_estado' => null,
-                        'created_at'            => now(),
-                        'updated_at'            => now(),
-                    ],
-                ]);
-            }
+        $syncData = [];
+        foreach ($estudiantes as $estudiante) {
+            $syncData[$estudiante->id] = [
+                'estado'        => 'Habilitado',
+                'motivo_estado' => null,
+                'created_at'    => now(),
+                'updated_at'    => now(),
+            ];
+        }
 
-            // Estudiante 2: Habilitado sin motivo
-            if (isset($estudiantes[1])) {
-                $examen->estudiantes()->syncWithoutDetaching([
-                    $estudiantes[1]->id => [
-                        'estado'                => 'Habilitado',
-                        'motivo_estado' => null,
-                        'created_at'            => now(),
-                        'updated_at'            => now(),
-                    ],
-                ]);
-            }
-
-            // Estudiante 3: Inhabilitado con motivo para pruebas
-            if (isset($estudiantes[2])) {
-                $examen->estudiantes()->syncWithoutDetaching([
-                    $estudiantes[2]->id => [
-                        'estado'                => 'Inhabilitado',
-                        'motivo_estado' => 'No cumple con el 80% de asistencia mínima requerida.',
-                        'created_at'            => now(),
-                        'updated_at'            => now(),
-                    ],
-                ]);
-            }
+        if (!empty($syncData)) {
+            $examen->estudiantes()->sync($syncData);
         }
     }
 }

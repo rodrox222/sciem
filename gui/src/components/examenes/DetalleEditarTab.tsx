@@ -1,14 +1,24 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { AlertCircle, BookOpenCheck, CalendarDays, Check, Clock3, LoaderCircle, MapPin, Save, UserCheck } from 'lucide-react'
+import {
+  AlertCircle,
+  BookOpenCheck,
+  CalendarDays,
+  Check,
+  Clock3,
+  LoaderCircle,
+  MapPin,
+  Save,
+  UserCheck,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
 import { aulasService, type Aula } from '@/services/aulas.service'
 import { normasService, type Norma } from '@/services/normas.service'
+import { materiasService, type Materia } from '@/services/materias.service'
 import {
   examenesService,
-  type CatalogItem,
   type DocenteItem,
   type Examen,
   type ExamenPayload,
@@ -60,7 +70,7 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
     id_docente: exam.id_docente,
   })
 
-  const [materias, setMaterias] = useState<CatalogItem[]>([])
+  const [materias, setMaterias] = useState<Materia[]>([])
   const [aulas, setAulas] = useState<Aula[]>([])
   const [docentes, setDocentes] = useState<DocenteItem[]>([])
   const [normas, setNormas] = useState<Norma[]>([])
@@ -79,16 +89,17 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
 
   const loadDependencies = useCallback(async () => {
     setLoading(true)
+    setError('')
     try {
-      const [subjects, rooms, rules, teachers] = await Promise.all([
-        examenesService.listMaterias(),
+      const [subjects, rooms, rules, teachersRes] = await Promise.all([
+        materiasService.listAll(),
         aulasService.list({ estado: 'Disponible', perPage: 100 }),
         normasService.listAll({ tipo: 'General' }),
-        isAdmin ? examenesService.listDocentes().then((r) => r.data) : Promise.resolve([]),
+        isAdmin ? examenesService.listDocentes() : Promise.resolve({ data: [] }),
       ])
       setMaterias(subjects)
       setAulas(
-        rooms.data.some((r) => r.id === exam.id_aula)
+        rooms.data.some((r: Aula) => r.id === exam.id_aula)
           ? rooms.data
           : [
               ...rooms.data,
@@ -99,16 +110,16 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
                 capacidad: 0,
                 estado: 'Disponible',
               },
-            ]
+            ],
       )
       setNormas(rules)
-      setDocentes(teachers)
+      setDocentes(teachersRes.data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al cargar opciones de edición.')
     } finally {
       setLoading(false)
     }
-  }, [isAdmin, exam])
+  }, [isAdmin, exam.id_aula])
 
   useEffect(() => {
     void loadDependencies()
@@ -120,25 +131,6 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
     )
   }
 
-  const checkScheduleConflict = async () => {
-    const response = await examenesService.list({ fecha: form.fecha, perPage: 100 })
-    const actualIni = normalizeTime(form.hora_ini)
-    const actualFin = endTime
-
-    return response.data.find((other) => {
-      if (other.id === exam.id) return false
-
-      const mismaAula = other.id_aula === form.id_aula || other.aula?.id === form.id_aula
-      if (!mismaAula) return false
-      if (other.estado === 'Terminado') return false
-
-      const otroIni = normalizeTime(other.hora_ini)
-      const otroFin = normalizeTime(other.hora_fin)
-
-      return actualIni < otroFin && actualFin > otroIni
-    })
-  }
-
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setSaving(true)
@@ -146,13 +138,6 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
     setSuccess('')
 
     try {
-      const conflict = await checkScheduleConflict()
-      if (conflict) {
-        throw new Error(
-          `Conflicto de horario: El aula ya se encuentra ocupada por la evaluación "${conflict.nombre}" de ${normalizeTime(conflict.hora_ini)} a ${normalizeTime(conflict.hora_fin)}.`
-        )
-      }
-
       const payload: ExamenPayload = {
         nombre: form.nombre.trim(),
         id_materia: form.id_materia,
@@ -162,10 +147,10 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
         hora_fin: endTime,
         id_aula: form.id_aula,
         id_docente: form.id_docente,
+        normas_ids: selectedNorms,
       }
 
       await examenesService.update(exam.id, payload)
-      await normasService.assignToExam(exam.id, selectedNorms)
       setSuccess('Evaluación actualizada correctamente.')
       onUpdated()
     } catch (err) {
@@ -252,7 +237,9 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
                   className="h-10 w-full rounded-xl border border-border bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
                 >
                   {docentes.map((d) => (
-                    <option key={d.id} value={d.id}>{d.nombre}</option>
+                    <option key={d.id} value={d.id}>
+                      {[d.nombre, d.apellido_paterno, d.apellido_materno].filter(Boolean).join(' ')}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -313,9 +300,11 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
                       selected ? 'border-sci-blue bg-sci-blue/5' : 'border-border bg-card'
                     }`}
                   >
-                    <span className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded border ${
-                      selected ? 'border-sci-blue bg-sci-blue text-white' : 'border-border'
-                    }`}>
+                    <span
+                      className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded border ${
+                        selected ? 'border-sci-blue bg-sci-blue text-white' : 'border-border'
+                      }`}
+                    >
                       {selected && <Check className="h-3.5 w-3.5" />}
                     </span>
                     <span className="font-semibold text-sci-navy">{rule.titulo}</span>

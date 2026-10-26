@@ -14,13 +14,16 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use Illuminate\Support\Facades\Hash;
 
 class CargaMasivaEstudianteController extends Controller
 {
     private const TAMANO_LOTE = 50;
 
     public function storePorExamen(CargaMasivaEstudiantesRequest $request, string $idExamen): JsonResponse
-    {
+    {   
+        set_time_limit(300);
+        ini_set('memory_limit', '512M');
         // Validar existencia del examen
         $examen = Examen::find($idExamen);
         if (!$examen) {
@@ -39,7 +42,7 @@ class CargaMasivaEstudianteController extends Controller
             ], 403);
         }
 
-        // Cargar el archivo con PhpSpreadsheet (soporta .xlsx, .xls y .csv)
+        // Cargar el archivo con PhpSpreadsheet
         $archivo = $request->file('archivo');
         try {
             $spreadsheet = IOFactory::load($archivo->getRealPath());
@@ -59,16 +62,21 @@ class CargaMasivaEstudianteController extends Controller
             ->flip()
             ->toArray();
 
+        // Obtener prerrequisitos que ya tenga asignados el examen
+        $prerrequisitosExamen = DB::table('prerrequisitos_examen')
+            ->where('id_examen', $idExamen)
+            ->pluck('id')
+            ->toArray();
+
         $filasValidadas = [];
         $sisProcesados = [];
-        $errores = [];
+        $totalOmitidosPorDuplicado = 0;
 
-        // Recorrer hoja por hoja
+        // Procesar hojas del archivo
         foreach ($spreadsheet->getAllSheets() as $hoja) {
-            $nombreHoja = $hoja->getTitle();
             $maxFila = $hoja->getHighestRow();
 
-            // Buscar la celda con exactamente '#' en las primeras 30 filas
+            // Buscar celda '#' en las primeras 30 filas
             $filaCabecera = null;
             $colNumero = null;
             $limiteBusqueda = min(30, $maxFila);
@@ -84,12 +92,10 @@ class CargaMasivaEstudianteController extends Controller
                 }
             }
 
-            // Si la hoja no tiene la cabecera '#' esperada, continuar con la siguiente hoja
             if (!$filaCabecera) {
                 continue;
             }
 
-            // Mapeo relativo de columnas a partir de '#'
             $colSis       = chr(ord($colNumero) + 1);
             $colApellidos = chr(ord($colNumero) + 2);
             $colNombres   = chr(ord($colNumero) + 3);
@@ -106,7 +112,6 @@ class CargaMasivaEstudianteController extends Controller
                 // Detectar fila vacía
                 if ($rawSis === '' && $rawApellidos === '' && $rawNombres === '') {
                     $filasVaciasConsecutivas++;
-                    // Condición de parada: 3 líneas consecutivas vacías
                     if ($filasVaciasConsecutivas >= 3) {
                         break;
                     }
@@ -115,84 +120,63 @@ class CargaMasivaEstudianteController extends Controller
 
                 $filasVaciasConsecutivas = 0;
 
-                // Omitir separadores u otras filas que no tengan código SIS numérico
+                // Omitir filas sin formato SIS numérico válido
                 if (!preg_match('/^[0-9]{6,12}$/', $rawSis)) {
                     continue;
                 }
 
-                // Validar duplicados dentro del mismo archivo
+                // Se ignora y se pasa al siguiente (sin rollback) si ve duplicado
                 if (isset($sisProcesados[$rawSis])) {
-                    $errores[] = [
-                        'hoja'          => $nombreHoja,
-                        'fila'          => $fila,
-                        'identificador' => $rawSis,
-                        'motivo'        => "El estudiante con SIS '{$rawSis}' aparece duplicado en el archivo.",
-                    ];
+                    $totalOmitidosPorDuplicado++;
                     continue;
                 }
 
-                // Validar si ya está inscrito en el examen
+                // Se ignora y se pasa al siguiente (sin rollback) si ve duplicado
                 if (isset($estudiantesBdPorSis[$rawSis])) {
                     $idExistente = $estudiantesBdPorSis[$rawSis];
                     if (isset($inscritosEnEsteExamen[$idExistente])) {
-                        $errores[] = [
-                            'hoja'          => $nombreHoja,
-                            'fila'          => $fila,
-                            'identificador' => $rawSis,
-                            'motivo'        => "El estudiante con SIS '{$rawSis}' ya se encuentra inscrito en este examen.",
-                        ];
+                        $totalOmitidosPorDuplicado++;
                         continue;
                     }
                 }
 
-                // Separar apellidos (Paterno y Materno)
+                // Separar apellidos
                 $partesApellidos = preg_split('/\s+/', $rawApellidos);
                 $apellidoPaterno = $partesApellidos[0] ?? '';
                 $apellidoMaterno = count($partesApellidos) > 1 ? implode(' ', array_slice($partesApellidos, 1)) : null;
 
-                // Formatear correo institucional si viene incompleto
                 $email = str_contains($rawEmail, '@') ? $rawEmail : "{$rawSis}@est.umss.edu";
 
-                $registro = [
+                $sisProcesados[$rawSis] = true;
+                $filasValidadas[] = [
                     'codigo_sis'          => $rawSis,
-                    'ci'                  => null,
-                    'ci_extension'        => null,
                     'nombre'              => $rawNombres,
                     'apellido_paterno'    => $apellidoPaterno,
                     'apellido_materno'    => $apellidoMaterno,
                     'email_institucional' => $email,
                 ];
-
-                $sisProcesados[$rawSis] = true;
-                $filasValidadas[] = $registro;
             }
         }
 
-        // FASE DE VALIDACIÓN ATÓMICA: Si se detectó algún conflicto, se rechaza todo
-        if (count($errores) > 0) {
-            return response()->json([
-                'message'       => 'Se encontraron conflictos en el archivo. La operación fue cancelada.',
-                'error_type'    => 'CONFLICTOS_EN_CARGA',
-                'total_errores' => count($errores),
-                'errores'       => $errores,
-            ], 422);
-        }
-
+        // Si el archivo no tenía alumnos nuevos procesables
         if (count($filasValidadas) === 0) {
             return response()->json([
-                'message'    => 'No se encontraron registros de estudiantes válidos en el archivo.',
-                'error_type' => 'SIN_REGISTROS_VALIDOS',
+                'message'    => 'No se encontraron nuevos registros para inscribir. Es posible que todos los alumnos del archivo ya estuvieran registrados o duplicados.',
+                'error_type' => 'SIN_REGISTROS_NUEVOS',
+                'omitidos'   => $totalOmitidosPorDuplicado
             ], 422);
         }
 
-        // FASE DE INSERCIÓN: Solo se ejecuta si NO hubo ningún error en todo el archivo
+        // FASE DE INSERCIÓN TRANSACCIONAL
         DB::beginTransaction();
 
         try {
             $loteNuevosEstudiantes = [];
             $lotePivote = [];
+            $lotePrerrequisitos = [];
 
             foreach ($filasValidadas as $datos) {
+                // Si existe en tabla estudiantes, actualiza datos
                 if (isset($estudiantesBdPorSis[$datos['codigo_sis']])) {
                     $idEstudiante = $estudiantesBdPorSis[$datos['codigo_sis']];
 
@@ -204,29 +188,41 @@ class CargaMasivaEstudianteController extends Controller
                         'updated_at'          => now(),
                     ]);
                 } else {
+                    // Si no existe en estudiantes, se prepara para crearlo
                     $idEstudiante = (string) Str::uuid();
                     $estudiantesBdPorSis[$datos['codigo_sis']] = $idEstudiante;
 
+                    // Generar contraseña por defecto con cod sis + iniciales mayúsculas
+                    $passwordPlano = Estudiante::generarPasswordPorDefecto(
+                        $datos['codigo_sis'],
+                        $datos['nombre'],
+                        $datos['apellido_paterno'] ?? null,
+                        $datos['apellido_materno'] ?? null
+                    );
+
                     $loteNuevosEstudiantes[] = [
-                        'id'                  => $idEstudiante,
-                        'codigo_sis'          => $datos['codigo_sis'],
-                        'ci'                  => null,
-                        'ci_extension'        => null,
-                        'nombre'              => $datos['nombre'],
-                        'apellido_paterno'    => $datos['apellido_paterno'],
-                        'apellido_materno'    => $datos['apellido_materno'],
-                        'email_institucional' => $datos['email_institucional'],
-                        'activo'              => true,
-                        'created_at'          => now(),
-                        'updated_at'          => now(),
+                        'id'                       => $idEstudiante,
+                        'codigo_sis'               => $datos['codigo_sis'],
+                        'ci'                       => null,
+                        'ci_extension'             => null,
+                        'nombre'                   => $datos['nombre'],
+                        'apellido_paterno'         => $datos['apellido_paterno'],
+                        'apellido_materno'         => $datos['apellido_materno'],
+                        'email_institucional'      => $datos['email_institucional'],
+                        'password'                 => Hash::make($passwordPlano),
+                        'primer_acceso_completado' => false,
+                        'activo'                   => true,
+                        'created_at'               => now(),
+                        'updated_at'               => now(),
                     ];
                 }
 
+                // habilitado por defecto
                 $lotePivote[] = [
                     'id_examen'                 => $idExamen,
                     'id_estudiante'             => $idEstudiante,
-                    'estado'                    => 'Inhabilitado',
-                    'motivo_estado'             => 'No cumple con los prerrequisitos asignados.',
+                    'estado'                    => 'Habilitado', // <--- Habilitado por defecto
+                    'motivo_estado'             => null,
                     'ajuste_manual'             => false,
                     'modificado_por_docente_id' => null,
                     'fecha_ajuste_manual'       => null,
@@ -234,6 +230,20 @@ class CargaMasivaEstudianteController extends Controller
                     'updated_at'                => now(),
                 ];
 
+                // Crear prerrequisitos existentes en TRUE
+                foreach ($prerrequisitosExamen as $idPrerreq) {
+                    $lotePrerrequisitos[] = [
+                        'id_prerrequisito'        => $idPrerreq,
+                        'id_estudiante'           => $idEstudiante,
+                        'cumplido'                => true,
+                        'fecha_cumplimiento'      => now(),
+                        'revisado_por_docente_id' => $user instanceof Docente ? $user->id : null,
+                        'created_at'              => now(),
+                        'updated_at'              => now(),
+                    ];
+                }
+
+                // Inserción por lotes
                 if (count($lotePivote) >= self::TAMANO_LOTE) {
                     if (!empty($loteNuevosEstudiantes)) {
                         Estudiante::insert($loteNuevosEstudiantes);
@@ -242,27 +252,40 @@ class CargaMasivaEstudianteController extends Controller
 
                     DB::table('estudiante_examen')->insert($lotePivote);
                     $lotePivote = [];
+
+                    if (!empty($lotePrerrequisitos)) {
+                        DB::table('estudiante_prerrequisito')->insert($lotePrerrequisitos);
+                        $lotePrerrequisitos = [];
+                    }
                 }
             }
 
+            // Vaciar remanentes
             if (!empty($loteNuevosEstudiantes)) {
                 Estudiante::insert($loteNuevosEstudiantes);
             }
             if (!empty($lotePivote)) {
                 DB::table('estudiante_examen')->insert($lotePivote);
             }
+            if (!empty($lotePrerrequisitos)) {
+                DB::table('estudiante_prerrequisito')->insert($lotePrerrequisitos);
+            }
 
+            // Registrar auditoría
             $this->registrarAuditoria($request, 'CARGA_MASIVA_EXITOSA', [
                 'examen_id'        => $idExamen,
                 'total_insertados' => count($filasValidadas),
+                'total_omitidos'   => $totalOmitidosPorDuplicado,
             ]);
 
             DB::commit();
 
             return response()->json([
+                'success'          => true,
                 'message'          => 'Carga completada con éxito.',
                 'examen_id'        => $idExamen,
                 'total_insertados' => count($filasValidadas),
+                'total_omitidos'   => $totalOmitidosPorDuplicado,
             ], 201);
 
         } catch (\Throwable $e) {

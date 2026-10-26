@@ -16,7 +16,7 @@ class InscribirEstudianteExamenRequest extends FormRequest
     {
         return [
             'codigo_sis'          => ['required', 'string', 'max:20'],
-            'ci'                  => ['required', 'string', 'max:20'],
+            'ci'                  => ['nullable', 'string', 'max:20'],
             'ci_extension'        => ['nullable', 'string', 'max:10'],
             'nombre'              => ['required', 'string', 'max:100'],
             'apellido_paterno'    => ['required', 'string', 'max:100'],
