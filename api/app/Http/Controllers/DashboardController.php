@@ -10,6 +10,7 @@ use App\Models\Examen;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Throwable;
 
 class DashboardController extends Controller
@@ -35,13 +36,21 @@ class DashboardController extends Controller
 
         $secciones = [];
 
-        try {
-            $secciones['resumen'] = match ($rol) {
-                'admin' => $this->resumenAdmin(),
-                'docente' => $this->resumenDocente($usuario),
-                'auxiliar' => $this->resumenAuxiliar($usuario),
-                'estudiante' => $this->resumenEstudiante($usuario),
-            };
+               try {
+            $claveCache = $rol === 'admin'
+                ? 'dashboard:admin:resumen'
+                : "dashboard:{$rol}:{$usuario->id}:resumen";
+
+            $secciones['resumen'] = Cache::remember(
+                $claveCache,
+                now()->addSeconds(60),
+                fn () => match ($rol) {
+                    'admin' => $this->resumenAdmin(),
+                    'docente' => $this->resumenDocente($usuario),
+                    'auxiliar' => $this->resumenAuxiliar($usuario),
+                    'estudiante' => $this->resumenEstudiante($usuario),
+                }
+            );
         } catch (Throwable $e) {
             report($e);
 
