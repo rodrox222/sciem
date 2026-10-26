@@ -24,11 +24,13 @@ use App\Models\Admin;
 use App\Models\Docente;
 use App\Models\Auxiliar;
 use Illuminate\Support\Facades\Artisan;
+use App\Http\Controllers\NoticiaController;
 
 // --- RUTAS PÚBLICAS ---
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLink']);
 Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword']);
+Route::get('noticias', [NoticiaController::class, 'index']);
 
 Route::get('examenes', [ExamenController::class, 'index']);
 Route::get('examenes/{id}', [ExamenController::class, 'show']);
@@ -228,5 +230,16 @@ Route::middleware('auth:sanctum')->group(function () {
         
         // Generar token QR dinámico para un examen específico
         Route::post('/examenes/{idExamen}/qr-token', [EstudianteController::class, 'generarTokenQr']);
+    });
+
+    // --- HU 14: NOTICIAS OPERATIVAS ---
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::get('noticias/internas', [NoticiaController::class, 'index']); 
+    });
+
+    Route::middleware('role:admin,administrador,docente')->group(function () {
+        Route::post('noticias', [NoticiaController::class, 'store']);
+        Route::put('noticias/{id}', [NoticiaController::class, 'update']);
+        Route::delete('noticias/{id}', [NoticiaController::class, 'destroy']);
     });
 });
