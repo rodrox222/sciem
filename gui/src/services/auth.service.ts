@@ -55,17 +55,24 @@ export const authService = {
   getCurrentUser: () => {
     const role = localStorage.getItem('user_role') || '';
     let name = role || 'Usuario';
+    let id: string | number | undefined = undefined;
 
     try {
       const raw = localStorage.getItem('user_data');
       const data = raw ? JSON.parse(raw) : null;
-      if (data?.nombre) {
-        name = `${data.nombre} ${data.apellido || ''}`.trim();
+      if (data) {
+        if (data.nombre) {
+          name = `${data.nombre} ${data.apellido || ''}`.trim();
+        }
+        if (data.id) {
+          id = data.id;
+        }
       }
     } catch {
       // Respaldo si el parseo falla
     }
 
-    return { role, name, isAuthenticated: Boolean(localStorage.getItem('auth_token')) };
+    //RETORNAMOS EL ID JUNTO AL RESTO DE LA DATA
+    return { id, role, name, isAuthenticated: Boolean(localStorage.getItem('auth_token')) }; 
   },
 };
