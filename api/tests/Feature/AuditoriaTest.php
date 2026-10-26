@@ -119,39 +119,41 @@ it('TC-HU3-15: genera el registro de auditoría en el mismo momento de la operac
 })->group('grupo1');
 
 it('TC-HU8-12: registra en auditoría cada carga masiva (usuario, fecha/hora, resumen)', function () {
-    // GAP CONFIRMADO: CargaMasivaEstudianteController::store() no llama a LogAuditoria::create()
-    // en ningún punto (revisado en el código real). Este test fallará hoy a propósito, como
-    // pendiente visible para el dev de ese controller.
     $admin = Admin::factory()->create();
+    $examen = \App\Models\Examen::factory()->create();
 
-    $csv = "codigo_sis,ci,ci_extension,nombre,apellido_paterno,apellido_materno,email_institucional\n"
-         . "202312345,8234567,,Ana,Gomez,,202312345@est.umss.edu\n";
+    // Ruta vigente: POST examenes/{idExamen}/estudiantes/carga-masiva. El controller lee una plantilla
+    // anclada en una celda '#' y luego SIS | Apellidos | Nombres | Email.
+    $csv = "#,SIS,Apellidos,Nombres,Email\n"
+         . "1,202312345,Gomez Perez,Ana,202312345@est.umss.edu\n";
     $archivo = \Illuminate\Http\UploadedFile::fake()->createWithContent('estudiantes.csv', $csv);
 
-    $this->actingAs($admin, 'sanctum')->postJson('/api/estudiantes/carga-masiva', ['archivo' => $archivo])
+    $this->actingAs($admin, 'sanctum')
+        ->postJson("/api/examenes/{$examen->id}/estudiantes/carga-masiva", ['archivo' => $archivo])
         ->assertCreated();
 
-    $this->assertDatabaseHas('logs_auditoria', ['user_id' => $admin->id, 'modulo' => 'CargaMasivaEstudiantes']);
+    $this->assertDatabaseHas('logs_auditoria', [
+        'user_id' => $admin->id, 'modulo' => 'CARGA_MASIVA', 'accion' => 'CARGA_MASIVA_EXITOSA',
+    ]);
 })->group('grupo1');
 
 it('TC-HU9-8: registra en auditoría todo cambio de estado de habilitación, incluyendo el motivo', function () {
-    // GAP CONFIRMADO: HabilitacionExamenController::update() tampoco llama a LogAuditoria::create().
-    // Mismo tratamiento: se deja como falla visible, no oculta.
-    $admin = Admin::factory()->create();
+    // GAP CONFIRMADO: HabilitacionExamenController::update() no escribe en logs_auditoria.
+    // Actor Docente: con un Admin la FK de modificado_por_docente_id daría 500 antes de llegar a auditar.
+    $docente = Docente::factory()->create();
     $examen = \App\Models\Examen::factory()->create();
     $estudiante = \App\Models\Estudiante::factory()->create();
-    $examen->estudiantes()->attach($estudiante->id, ['estado' => 'Habilitado']);
+    $examen->estudiantes()->attach($estudiante->id, [
+        'estado' => 'Habilitado', 'motivo_estado' => null, 'ajuste_manual' => false,
+    ]);
 
-    $this->actingAs($admin, 'sanctum')->patchJson(
+    $this->actingAs($docente, 'sanctum')->patchJson(
         "/api/examenes/{$examen->id}/estudiantes/{$estudiante->id}/habilitacion",
-        ['estado' => 'Inhabilitado', 'motivo_inhabilitacion' => 'No cumple con requisito de inscripción previa.']
+        ['estado' => 'Inhabilitado', 'motivo_estado' => 'Documentacion incompleta']
     )->assertOk();
 
-    $this->assertDatabaseHas('logs_auditoria', ['user_id' => $admin->id, 'modulo' => 'Habilitacion']);
+    expect(
+        DB::table('logs_auditoria')->where('user_id', $docente->id)
+            ->whereRaw('detalles::text ilike ?', ['%Documentacion incompleta%'])->exists()
+    )->toBeTrue();
 })->group('grupo1');
-
-it('TC-HU12-8: cada intento de ingreso es consultable identificando al usuario', function () {
-    // HU-12 no tiene controller, ruta ni tabla implementados aún (confirmado: no existe
-    // `registro_ingreso` ni `inscripcion` en el schema). No hay nada que probar todavía.
-})->skip('HU-12 (Control de Concurrencia e Ingreso) aún no implementada — sin tabla/controller.')
-  ->group('grupo1');
