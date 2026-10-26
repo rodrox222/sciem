@@ -14,13 +14,16 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use Illuminate\Support\Facades\Hash;
 
 class CargaMasivaEstudianteController extends Controller
 {
     private const TAMANO_LOTE = 50;
 
     public function storePorExamen(CargaMasivaEstudiantesRequest $request, string $idExamen): JsonResponse
-    {
+    {   
+        set_time_limit(300);
+        ini_set('memory_limit', '512M');
         // Validar existencia del examen
         $examen = Examen::find($idExamen);
         if (!$examen) {
@@ -189,18 +192,28 @@ class CargaMasivaEstudianteController extends Controller
                     $idEstudiante = (string) Str::uuid();
                     $estudiantesBdPorSis[$datos['codigo_sis']] = $idEstudiante;
 
+                    // Generar contraseña por defecto con cod sis + iniciales mayúsculas
+                    $passwordPlano = Estudiante::generarPasswordPorDefecto(
+                        $datos['codigo_sis'],
+                        $datos['nombre'],
+                        $datos['apellido_paterno'] ?? null,
+                        $datos['apellido_materno'] ?? null
+                    );
+
                     $loteNuevosEstudiantes[] = [
-                        'id'                  => $idEstudiante,
-                        'codigo_sis'          => $datos['codigo_sis'],
-                        'ci'                  => null,
-                        'ci_extension'        => null,
-                        'nombre'              => $datos['nombre'],
-                        'apellido_paterno'    => $datos['apellido_paterno'],
-                        'apellido_materno'    => $datos['apellido_materno'],
-                        'email_institucional' => $datos['email_institucional'],
-                        'activo'              => true,
-                        'created_at'          => now(),
-                        'updated_at'          => now(),
+                        'id'                       => $idEstudiante,
+                        'codigo_sis'               => $datos['codigo_sis'],
+                        'ci'                       => null,
+                        'ci_extension'             => null,
+                        'nombre'                   => $datos['nombre'],
+                        'apellido_paterno'         => $datos['apellido_paterno'],
+                        'apellido_materno'         => $datos['apellido_materno'],
+                        'email_institucional'      => $datos['email_institucional'],
+                        'password'                 => Hash::make($passwordPlano),
+                        'primer_acceso_completado' => false,
+                        'activo'                   => true,
+                        'created_at'               => now(),
+                        'updated_at'               => now(),
                     ];
                 }
 

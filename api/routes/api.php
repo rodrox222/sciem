@@ -18,8 +18,9 @@ use App\Http\Controllers\VerificacionController;
 use App\Http\Controllers\CargaMasivaEstudianteController;
 use App\Http\Controllers\ConfiguracionSistemaController;
 use App\Http\Controllers\IntentoNoAutorizadoController;
-use App\Http\Controllers\EscanerController;
+use App\Http\Controllers\AuxiliarModuloController;
 use App\Http\Controllers\ExpulsionController;
+use App\Http\Controllers\AuxiliarOfflineController;
 use App\Models\Admin;
 use App\Models\Docente;
 use App\Models\Auxiliar;
@@ -33,7 +34,7 @@ Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword'
 Route::get('noticias', [NoticiaController::class, 'index']);
 
 Route::get('examenes', [ExamenController::class, 'index']);
-Route::get('examenes/{id}', [ExamenController::class, 'show']);
+
 
 Route::get('/seed-render-now', function () {
     Artisan::call('db:seed', ['--force' => true]);
@@ -141,6 +142,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('examenes/{id}', [ExamenController::class, 'destroy']);
     });
 
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::get('mis-examenes', [ExamenController::class, 'misExamenes']);
+        Route::get('examenes/{id}', [ExamenController::class, 'show']);
+    });
+
     // --- MATERIAS ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('materias', [MateriaController::class, 'index']);
@@ -214,8 +220,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // HU 13: REGISTRO Y CONSULTA DE INTENTOS NO CORRESPONDIENTES 
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('examenes/{id_examen}/intentos-no-autorizados', [IntentoNoAutorizadoController::class, 'index']);
-        Route::post('examenes/{id_examen}/escanear-ingreso', [EscanerController::class, 'escanear']);    
+        Route::post('examenes/{id_examen}/escanear-ingreso', [VerificacionController::class, 'verificarIngreso']);
     });
+
 
     // HU 18: MODULO DE ESTUDIANTES
     Route::middleware('role:estudiante')->prefix('estudiante')->group(function () {
@@ -230,6 +237,35 @@ Route::middleware('auth:sanctum')->group(function () {
         
         // Generar token QR dinámico para un examen específico
         Route::post('/examenes/{idExamen}/qr-token', [EstudianteController::class, 'generarTokenQr']);
+
+        // cambio de contraseña
+        Route::put('/cambiar-password', [EstudianteController::class, 'cambiarPassword']);
+    });
+
+    //HU 19: GESTIÓN DE AUXILIARES
+    Route::middleware('role:admin,administrador,docente')->group(function () {
+        Route::post('examenes/{id_examen}/invitar-auxiliar', [AuxiliarModuloController::class, 'invitarAuxiliar']);
+        Route::get('examenes/{id_examen}/auxiliares', [AuxiliarModuloController::class, 'listarAuxiliaresExamen']);
+    });
+
+    Route::middleware('role:auxiliar')->prefix('auxiliar')->group(function () {
+        Route::get('/invitaciones', [AuxiliarModuloController::class, 'misInvitaciones']);
+        Route::patch('/invitaciones/{id_invitacion}/responder', [AuxiliarModuloController::class, 'responderInvitacion']);
+        Route::get('/mis-examenes', [AuxiliarModuloController::class, 'misExamenesAsignados']);
+    });
+
+    // todos tienen acceso a ver la foto del estudiante, pero solo el propio estudiante puede subirla
+    Route::middleware('role:admin,administrador,docente,auxiliar,estudiante')->group(function () {
+        Route::get('estudiante/foto/{idEstudiante}', [EstudianteController::class, 'verFoto']);
+    });
+
+    // modod offline
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        // Descargar padrón para la base de datos local del móvil
+        Route::get('/examenes/{id}/descargar-padron', [AuxiliarOfflineController::class, 'descargarPadron']);
+
+        // Subir lote de escaneos acumulados offline
+        Route::post('/examenes/{id}/sincronizar-asistencias', [AuxiliarOfflineController::class, 'sincronizarAsistencias']);
     });
 
     // --- HU 14: NOTICIAS OPERATIVAS ---

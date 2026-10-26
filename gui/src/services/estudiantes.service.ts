@@ -48,7 +48,6 @@ export interface CompletarDatosEstudiantePayload {
   ci: string
   ci_extension?: string | null
 }
-
 export interface PerfilEstudianteResponse {
   success: boolean
   message: string
@@ -57,12 +56,10 @@ export interface PerfilEstudianteResponse {
     codigo_sis: string
     ci: string | null
     ci_extension: string | null
-    nombre_completo: string
-    foto_perfil_url: string | null
+    foto_url: string | null
     primer_acceso_completado: boolean
   }
 }
-
 export interface SubirFotoEstudianteResponse {
   success: boolean
   message: string
@@ -94,13 +91,11 @@ export interface MisExamenesResponse {
   total_examenes: number
   examenes: ExamenEstudiante[]
 }
-
 export interface TokenQrResponse {
   success: boolean
   message: string
   data: {
     qr_token: string
-    expira_en: string
     estudiante: {
       codigo_sis: string
       nombre_completo: string
@@ -108,7 +103,6 @@ export interface TokenQrResponse {
     }
   }
 }
-
 export interface EstudiantePayload {
   codigo_sis: string
   ci: string
@@ -186,38 +180,45 @@ motivo_estado: string | null
   unenroll(examId: string, estudianteId: string) {
     return api.delete<{ message: string }>(`/examenes/${examId}/estudiantes/${estudianteId}`)
   },
+    completarDatos(payload: CompletarDatosEstudiantePayload) {
+  return api.patch<PerfilEstudianteResponse>(
+    '/estudiante/completar-datos',
+    payload,
+  )
+},
+  subirFoto(foto: File) {
+  const formData = new FormData()
+  formData.append('foto', foto)
 
-  completarDatos(
-    estudianteId: string,
-    payload: CompletarDatosEstudiantePayload,
-  ) {
-    return api.patch<PerfilEstudianteResponse>(
-      `/estudiantes/${estudianteId}/completar-datos`,
-      payload,
-    )
-  },
+  return api.post<SubirFotoEstudianteResponse>(
+    '/estudiante/foto',
+    formData,
+  )
+},
+ misExamenes() {
+  return api.get<MisExamenesResponse>(
+    '/estudiante/mis-examenes',
+  )
+},
+ generarTokenQr(examenId: string, fotoVerificacion: File) {
+  const formData = new FormData()
+  formData.append('foto_verificacion', fotoVerificacion)
 
-  subirFoto(estudianteId: string, foto: File) {
-    const formData = new FormData()
-    formData.append('foto', foto)
+  return api.post<TokenQrResponse>(
+    `/estudiante/examenes/${examenId}/qr-token`,
+    formData,
+  )
+},
 
-    return api.post<SubirFotoEstudianteResponse>(
-      `/estudiantes/${estudianteId}/foto`,
-      formData,
-    )
-  },
-
-  misExamenes(estudianteId: string) {
-    return api.get<MisExamenesResponse>(
-      `/estudiantes/${estudianteId}/examenes`,
-    )
-  },
-
-  generarTokenQr(estudianteId: string, examenId: string) {
-    return api.post<TokenQrResponse>(
-      `/estudiantes/${estudianteId}/examenes/${examenId}/qr-token`,
-      {},
-    )
-  },
-
+ cambiarPassword(payload: {
+  current_password: string
+  new_password: string
+  new_password_confirmation: string
+}) {
+  return api.put<{
+    success: boolean
+    message: string
+    error_type?: string
+  }>('/estudiante/cambiar-password', payload)
+},
 }

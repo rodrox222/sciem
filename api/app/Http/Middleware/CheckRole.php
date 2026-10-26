@@ -2,10 +2,6 @@
 
 namespace App\Http\Middleware;
 
-use App\Models\Admin;
-use App\Models\Auxiliar;
-use App\Models\Docente;
-use App\Models\Estudiante;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -16,31 +12,39 @@ class CheckRole
     {
         $user = $request->user();
 
-        // Verificar si existe y está activo
         if (!$user || !$user->activo) {
             return response()->json(['message' => 'Acceso denegado o cuenta inactiva.'], 403);
         }
 
-        // Determinar el rol a partir de la clase del modelo
-        $userRole = match (get_class($user)) {
-            Admin::class      => 'admin',
-            Docente::class    => 'docente',
-            Auxiliar::class   => 'auxiliar',
-            Estudiante::class => 'estudiante',
-            default           => '',
-        };
-
-        // Normalizar los roles permitidos recibidos en la ruta
+        // Normalizar los roles permitidos en la ruta
         $allowedRoles = array_map(function ($rol) {
-            $r = strtolower($rol);
+            $r = strtolower(trim($rol));
             return $r === 'administrador' ? 'admin' : $r;
         }, $roles);
 
-        // Validar si el rol del usuario está permitido
-        if (!in_array($userRole, $allowedRoles, true)) {
+        // Verificar si el Token de Sanctum actual posee alguno de los roles permitidos
+        $hasAccess = false;
+        $rolEnToken = 'desconocido';
+
+        foreach ($allowedRoles as $role) {
+            if ($user->tokenCan("role:{$role}")) {
+                $hasAccess = true;
+                break;
+            }
+        }
+
+        if (!$hasAccess) {
+            // Extraer el rol actual del token solo para el mensaje de error (opcional)
+            $abilities = $user->currentAccessToken()->abilities ?? [];
+            foreach ($abilities as $ability) {
+                if (str_starts_with($ability, 'role:')) {
+                    $rolEnToken = str_replace('role:', '', $ability);
+                }
+            }
+
             return response()->json([
-                'message'    => 'Acceso denegado o cuenta inactiva.',
-                'rol_actual' => $userRole,
+                'message'    => 'Acceso denegado. Su sesión actual no tiene permisos para esta acción.',
+                'rol_actual' => $rolEnToken,
             ], 403);
         }
 
