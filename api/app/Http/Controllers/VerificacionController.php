@@ -549,22 +549,27 @@ class VerificacionController extends Controller
 
         $ahoraIngreso = Carbon::now('America/La_Paz');
 
-        $this->registrarLog(
-            $examen->id,
-            $estudiante->id,
-            $estudiante->codigo_sis,
-            'PERMITIDO',
-            "Ingreso manual autorizado. Motivo: {$motivo}",
-            ['tipo_ingreso' => 'MANUAL', 'motivo' => $motivo]
-        );
+        // Registrar ingreso autorizado y asistencia de forma atomica,
+        // preservando las validaciones de inscripcion y habilitacion de Develop.
+        DB::transaction(function () use ($examen, $estudiante, $motivo, $ahoraIngreso) {
+            $this->registrarLog(
+                $examen->id,
+                $estudiante->id,
+                $estudiante->codigo_sis,
+                'PERMITIDO',
+                "Ingreso manual autorizado. Motivo: {$motivo}",
+                ['tipo_ingreso' => 'MANUAL', 'motivo' => $motivo]
+            );
 
-        DB::table('estudiante_examen')
-            ->where('id_examen', $examen->id)
-            ->where('id_estudiante', $estudiante->id)
-            ->update([
-                'fecha_ingreso' => $ahoraIngreso,
-                'updated_at'    => now(),
-            ]);
+            DB::table('estudiante_examen')
+                ->where('id_examen', $examen->id)
+                ->where('id_estudiante', $estudiante->id)
+                ->update([
+                    'fecha_ingreso' => $ahoraIngreso,
+                    'updated_at'    => now(),
+                ]);
+        });
+
 
         $nombreCompleto = trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}");
 
