@@ -22,6 +22,7 @@ use App\Http\Controllers\EscanerController;
 use App\Http\Controllers\ExpulsionController;
 use App\Http\Controllers\MonitoreoController;
 use App\Http\Controllers\ReporteEstadisticoController;
+use App\Http\Controllers\DashboardController;
 use App\Models\Admin;
 use App\Models\Docente;
 use App\Models\Auxiliar;
@@ -46,6 +47,7 @@ Route::get('/seed-render-now', function () {
 
 // --- RUTAS PROTEGIDAS (Sanctum) ---
 Route::middleware('auth:sanctum')->group(function () {
+    Route::get('dashboard', [DashboardController::class, 'index']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
     // Perfil del usuario autenticado
