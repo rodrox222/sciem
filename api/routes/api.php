@@ -20,6 +20,7 @@ use App\Http\Controllers\ConfiguracionSistemaController;
 use App\Http\Controllers\IntentoNoAutorizadoController;
 use App\Http\Controllers\AuxiliarModuloController;
 use App\Http\Controllers\ExpulsionController;
+use App\Http\Controllers\ReporteEstadisticoController;
 use App\Http\Controllers\AuxiliarOfflineController;
 use App\Models\Admin;
 use App\Models\Docente;
@@ -223,6 +224,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('examenes/{id_examen}/escanear-ingreso', [VerificacionController::class, 'verificarIngreso']);
     });
 
+
+    // HU17 - Reportes estadisticos (solo administradores y docentes).
+    Route::middleware('role:admin,administrador,docente')->group(function () {
+        Route::get('examenes/{idExamen}/reportes/estadisticas', [ReporteEstadisticoController::class, 'resumen']);
+        Route::get('examenes/{idExamen}/reportes/estadisticas/franjas-horarias', [ReporteEstadisticoController::class, 'franjasHorarias']);
+        Route::get('examenes/{idExamen}/reportes/estadisticas/descargar', [ReporteEstadisticoController::class, 'descargar']);
+    });
 
     // HU 18: MODULO DE ESTUDIANTES
     Route::middleware('role:estudiante')->prefix('estudiante')->group(function () {
