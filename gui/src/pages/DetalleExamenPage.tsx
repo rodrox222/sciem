@@ -8,6 +8,7 @@ import {
   PencilLine,
   QrCode,
   ShieldAlert,
+  Activity,
   UserX,
 } from 'lucide-react'
 
@@ -26,6 +27,9 @@ import { DetalleEstudiantesTab } from '@/components/examenes/DetalleEstudiantesT
 import { DetalleEditarTab } from '@/components/examenes/DetalleEditarTab'
 import { DetalleEscanerTab } from '@/components/examenes/DetalleEscanerTab'
 import { DetalleExpulsionesTab } from '@/components/examenes/DetalleExpulsionesTab'
+import { DetalleMonitoreoTab } from '@/components/monitoreo/DetalleMonitoreoTab'
+import { EtapasExamen } from '@/components/monitoreo/EtapasExamen'
+import { permiteMonitoreoFrontend } from '@/components/monitoreo/permisoMonitoreo'
 
 const estadoBadges: Record<ExamenEstado, string> = {
   Programado: 'border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy',
@@ -49,6 +53,10 @@ export default function DetalleExamenPage() {
   const [exam, setExam] = useState<Examen | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  const actualizarEstadoExamen = useCallback((estado: ExamenEstado) => {
+    setExam((actual) => actual && actual.estado !== estado ? { ...actual, estado } : actual)
+  }, [])
 
   const loadExam = useCallback(async () => {
     if (!id) return
@@ -120,6 +128,7 @@ export default function DetalleExamenPage() {
     )
   }
 
+  const canMonitor = permiteMonitoreoFrontend(exam)
   const canEdit = canManage && exam.estado === 'Programado'
 
   return (
@@ -158,8 +167,11 @@ export default function DetalleExamenPage() {
         </div>
       </header>
 
+      {/* Visible en todas las pestañas, no solo en Monitoreo. */}
+      <EtapasExamen exam={exam} />
+
       <Tabs
-        value={activeTab}
+        value={activeTab === 'monitoreo' && !canMonitor ? 'info' : activeTab}
         onValueChange={(val) => setSearchParams({ tab: val })}
         className="space-y-6"
       >
@@ -186,6 +198,16 @@ export default function DetalleExamenPage() {
             >
               <QrCode className="h-3.5 w-3.5 text-sci-cyan" />
               Escanear Acceso
+            </TabsTrigger>
+          )}
+
+          {canMonitor && (
+            <TabsTrigger
+              value="monitoreo"
+              className="min-w-0 flex-none shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-2 py-2 text-center text-[11px] font-medium sm:gap-2 sm:px-3 sm:text-xs"
+            >
+              <Activity className="h-3.5 w-3.5 text-sci-cyan" />
+              Monitoreo
             </TabsTrigger>
           )}
 
@@ -229,6 +251,12 @@ export default function DetalleExamenPage() {
         {canManage && (
           <TabsContent value="escaner">
             <DetalleEscanerTab exam={exam} />
+          </TabsContent>
+        )}
+
+        {canMonitor && (
+          <TabsContent value="monitoreo">
+            <DetalleMonitoreoTab exam={exam} onEstadoChange={actualizarEstadoExamen} />
           </TabsContent>
         )}
 
