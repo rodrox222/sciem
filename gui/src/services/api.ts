@@ -146,3 +146,54 @@ export const api = {
   delete: <T>(path: string, options?: RequestInit) =>
     apiRequest<T>(path, { ...options, method: 'DELETE' }),
 };
+
+/** Descarga binaria autenticada, sin reconstruir el archivo en el navegador. */
+export async function apiDownload(
+  path: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<{ blob: Blob; filename: string | null }> {
+  const pathWithSlash = path.startsWith('/') ? path : `/${path}`
+  const url = `${getBaseUrl()}${pathWithSlash.replace(/^\/api(?=\/)/, '')}`
+  const headers = new Headers({ Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream' })
+  const token = localStorage.getItem('auth_token')
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+
+  let response: Response
+  try {
+    response = await fetch(url, { method: 'GET', headers, signal: options.signal })
+  } catch (error) {
+    if (options.signal?.aborted) throw error
+    throw new ApiError('No se pudo conectar con el servidor para descargar el reporte.', 0)
+  }
+
+  if (!response.ok) {
+    const payload = await parseResponse(response) as { message?: string; errors?: ValidationErrors } | null
+    if (response.status === 401) {
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('auth_user')
+      localStorage.removeItem('user_role')
+    }
+    throw new ApiError(payload?.message || `No se pudo descargar (HTTP ${response.status}).`, response.status, payload?.errors)
+  }
+
+  const type = response.headers.get('content-type') || ''
+  if (type.includes('application/json') || type.includes('text/html')) {
+    throw new ApiError('El servidor no devolvió un archivo descargable.', 502)
+  }
+  const disposition = response.headers.get('content-disposition') || ''
+  const encoded = disposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i)
+  const standard = disposition.match(/filename\s*=\s*"([^"]+)"/i)
+    ?? disposition.match(/filename\s*=\s*([^;]+)/i)
+  let filename: string | null
+  try {
+    filename = encoded ? decodeURIComponent(encoded[1]) : standard?.[1]?.trim() ?? null
+  } catch {
+    filename = standard?.[1]?.trim() ?? null
+  }
+  if (filename) {
+    filename = Array.from(filename, (character) =>
+      character.charCodeAt(0) < 32 || character === '/' || character === '\\' ? '_' : character,
+    ).join('').replace(/^\.+/, '').slice(0, 180) || null
+  }
+  return { blob: await response.blob(), filename }
+}

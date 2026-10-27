@@ -20,6 +20,9 @@ use App\Http\Controllers\ConfiguracionSistemaController;
 use App\Http\Controllers\IntentoNoAutorizadoController;
 use App\Http\Controllers\AuxiliarModuloController;
 use App\Http\Controllers\ExpulsionController;
+use App\Http\Controllers\MonitoreoController;
+use App\Http\Controllers\ReporteEstadisticoController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\AuxiliarOfflineController;
 use App\Models\Admin;
 use App\Models\Docente;
@@ -47,6 +50,7 @@ Route::get('/seed-render-now', function () {
 
 // --- RUTAS PROTEGIDAS (Sanctum) ---
 Route::middleware('auth:sanctum')->group(function () {
+    Route::get('dashboard', [DashboardController::class, 'index']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
     // Perfil del usuario autenticado
@@ -206,8 +210,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('examenes/{id}/verificar-ingreso', [VerificacionController::class, 'verificarIngreso']);
     });
 
-    // --- HU 15: REGISTRO DE EXPULSIONES ---
+    // --- HU 15: REGISTRO Y CONSULTA DE EXPULSIONES ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::get(
+            'examenes/{id}/expulsiones',
+            [ExpulsionController::class, 'index']
+        );
+
         Route::post(
             'examenes/{id}/expulsiones',
             [ExpulsionController::class, 'store']
@@ -222,6 +231,28 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('examenes/{id_examen}/intentos-no-autorizados', [IntentoNoAutorizadoController::class, 'index']);
         Route::post('examenes/{id_examen}/escanear-ingreso', [VerificacionController::class, 'verificarIngreso']);
     });
+    // MONITOREO EN TIEMPO REAL (HU16) 
+    Route::middleware('role:admin,administrador,docente,auxiliar')
+        ->get('examenes/{idExamen}/monitoreo', [MonitoreoController::class, 'resumen']);
+    Route::middleware('role:admin,administrador,docente,auxiliar')
+    ->get('examenes/{idExamen}/monitoreo/estudiantes', [MonitoreoController::class, 'estudiantes']);
+    // HU 17: REPORTES ESTADÍSTICOS
+    Route::middleware('role:admin,administrador,docente')
+    ->get(
+        'examenes/{idExamen}/reportes/estadisticas',
+        [ReporteEstadisticoController::class, 'resumen']
+    );
+
+    Route::middleware('role:admin,administrador,docente')
+    ->get(
+        'examenes/{idExamen}/reportes/estadisticas/franjas-horarias',
+        [ReporteEstadisticoController::class, 'franjasHorarias']
+    );
+    Route::middleware('role:admin,administrador,docente')
+    ->get(
+        'examenes/{idExamen}/reportes/estadisticas/descargar',
+        [ReporteEstadisticoController::class, 'descargar']
+    );
 
 
     // HU 18: MODULO DE ESTUDIANTES

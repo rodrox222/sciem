@@ -160,7 +160,7 @@ class VerificacionController extends Controller
         $ahora = Carbon::now('America/La_Paz');
         $estadoExamen = strtolower(trim($examen->estado ?? ''));
         $esEstadoConcluido = in_array($estadoExamen, ['terminado', 'finalizado', 'concluido']);
-        
+
         $horaFinExamen = null;
         if (!empty($examen->fecha) && !empty($examen->hora_fin)) {
             $soloFecha = substr(trim((string) $examen->fecha), 0, 10);
@@ -549,22 +549,25 @@ class VerificacionController extends Controller
 
         $ahoraIngreso = Carbon::now('America/La_Paz');
 
-        $this->registrarLog(
-            $examen->id,
-            $estudiante->id,
-            $estudiante->codigo_sis,
-            'PERMITIDO',
-            "Ingreso manual autorizado. Motivo: {$motivo}",
-            ['tipo_ingreso' => 'MANUAL', 'motivo' => $motivo]
-        );
+        // Registrar el log y el ingreso en una sola transacción.
+        DB::transaction(function () use ($examen, $estudiante, $motivo, $ahoraIngreso) {
+            $this->registrarLog(
+                $examen->id,
+                $estudiante->id,
+                $estudiante->codigo_sis,
+                'PERMITIDO',
+                "Ingreso manual autorizado. Motivo: {$motivo}",
+                ['tipo_ingreso' => 'MANUAL', 'motivo' => $motivo]
+            );
 
-        DB::table('estudiante_examen')
-            ->where('id_examen', $examen->id)
-            ->where('id_estudiante', $estudiante->id)
-            ->update([
-                'fecha_ingreso' => $ahoraIngreso,
-                'updated_at'    => now(),
-            ]);
+            DB::table('estudiante_examen')
+                ->where('id_examen', $examen->id)
+                ->where('id_estudiante', $estudiante->id)
+                ->update([
+                    'fecha_ingreso' => $ahoraIngreso,
+                    'updated_at'    => now(),
+                ]);
+        });
 
         $nombreCompleto = trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}");
 

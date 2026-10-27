@@ -20,6 +20,7 @@ const NAV_ITEMS_BY_ROLE: Record<string, NavItem[]> = {
     { name: 'Normativas', href: '/normas' },
     { name: 'Materias', href: '/materias' },
     { name: 'Exámenes', href: '/examenes' },
+    { name: 'Reportes', href: '/reportes' },
     { name: 'Estudiantes', href: '/estudiantes' },
     { name: 'Auditoría', href: '/dashboard/auditoria' },
     { name: 'Configuración', href: '/configuracion' },
@@ -28,6 +29,7 @@ const NAV_ITEMS_BY_ROLE: Record<string, NavItem[]> = {
   docente: [
     { name: 'Inicio', href: '/dashboard' },
     { name: 'Mis exámenes', href: '/examenes' },
+    { name: 'Reportes', href: '/reportes' },
     { name: 'Estudiantes', href: '/estudiantes' },
     { name: 'Noticias', href: '/noticias' },
   ],
@@ -38,6 +40,7 @@ const NAV_ITEMS_BY_ROLE: Record<string, NavItem[]> = {
     { name: 'Noticias', href: '/noticias' },
   ],
   estudiante: [
+    { name: 'Inicio', href: '/dashboard' },
     { name: 'Mi módulo', href: '/estudiante' },
     { name: 'Noticias', href: '/noticias' },
   ],

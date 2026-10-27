@@ -49,6 +49,15 @@ class Examen extends Model
     {
         return $this->belongsTo(Docente::class, 'id_docente');
     }
+    public function auxiliares(): BelongsToMany
+    {
+    return $this->belongsToMany(
+        Auxiliar::class,
+        'auxiliar_examen',
+        'id_examen',
+        'id_auxiliar'
+    )->withTimestamps();
+    }
 
     public function normas(): BelongsToMany
     {
