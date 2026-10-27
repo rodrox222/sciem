@@ -27,7 +27,7 @@ export const useIdleTimer = () => {
     }
 
     try {
-      const rawUrl = (import.meta.env.VITE_API_URL?.trim() || 'http://192.168.1.17:8200')
+      const rawUrl = (import.meta.env.VITE_API_URL?.trim() || 'http://localhost:8200/api') //http://192.168.1.17:8200
         .replace(/\/api\/?$/, '')
         .replace(/\/$/, '')
 
