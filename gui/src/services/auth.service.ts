@@ -25,13 +25,20 @@ export const authService = {
   login: async (email: string, password: string): Promise<LoginResponse> => {
     const data = await api.post<LoginResponse>('/login', { email, password });
 
-    // Solo se conservan el token de autenticación y la marca de tiempo de inactividad
     localStorage.setItem('auth_token', data.token);
     localStorage.setItem('sci_last_activity', Date.now().toString());
 
-    // Se eliminan rastros de rol y datos personales en texto plano del navegador
-    localStorage.removeItem('user_role');
-    localStorage.removeItem('user_data');
+    // Solo guardamos datos de presentación para el Header (sin CI ni datos sensibles)
+    if (data.user) {
+      localStorage.setItem('user_role', data.user.rol || '');
+      localStorage.setItem(
+        'user_data',
+        JSON.stringify({
+          nombre: data.user.nombre,
+          apellido: data.user.apellido,
+        })
+      );
+    }
 
     return data;
   },
@@ -47,6 +54,27 @@ export const authService = {
       localStorage.removeItem('user_data');
       localStorage.removeItem('sci_last_activity');
     }
+  },
+
+  getCurrentUser: () => {
+    const role = localStorage.getItem('user_role') || '';
+    let name = role || 'Usuario';
+
+    try {
+      const raw = localStorage.getItem('user_data');
+      const data = raw ? JSON.parse(raw) : null;
+      if (data?.nombre) {
+        name = `${data.nombre} ${data.apellido || ''}`.trim();
+      }
+    } catch {
+      // Respaldo silencioso
+    }
+
+    return {
+      role,
+      name,
+      isAuthenticated: Boolean(localStorage.getItem('auth_token')),
+    };
   },
 
   getMe: async (): Promise<User> => {
