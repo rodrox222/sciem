@@ -19,17 +19,14 @@ class CompletarDatosEstudianteRequest extends FormRequest
         $idEstudiante = $this->route('id') ?? $this->user()?->id;
 
         return [
+            // Numérico, longitud válida y estrictamente único
             'ci' => [
                 'required',
                 'string',
-                'max:20',
-                Rule::unique('estudiantes', 'ci')
-                    ->where(function ($query) {
-                        return $query->where('ci_extension', $this->input('ci_extension'));
-                    })
-                    ->ignore($idEstudiante),
+                'regex:/^[0-9]{5,10}$/',
+                Rule::unique('estudiantes', 'ci')->ignore($idEstudiante),
             ],
-            // 'nullable' permite dejarlo vacío o no mandarlo en el JSON
+            // Extensiones departamentales estándar de Bolivia
             'ci_extension' => [
                 'nullable',
                 'string',
@@ -43,7 +40,8 @@ class CompletarDatosEstudianteRequest extends FormRequest
     {
         return [
             'ci.required'     => 'El número de Carnet de Identidad (CI) es obligatorio.',
-            'ci.unique'       => 'Ya existe un estudiante registrado con este número y extensión de carnet.',
+            'ci.regex'        => 'El formato del CI es inválido (debe contener entre 5 y 10 dígitos numéricos sin letras ni símbolos).',
+            'ci.unique'       => 'El CI ingresado ya pertenece a otro estudiante registrado en el sistema.',
             'ci_extension.in' => 'La extensión debe ser válida (ej. CB, LP, SC, OR, PT, TJ, CH, BE, PD).',
         ];
     }

@@ -21,6 +21,7 @@ import {
 const PER_PAGE = 15
 
 const formatDate = (value: string) => {
+  if (!value) return '—'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleString('es-BO', {
@@ -33,21 +34,78 @@ const formatStudentName = (intento: IntentoNoAutorizado) => {
   const estudiante = intento.estudiante
 
   if (!estudiante) {
-    return intento.identificador_presentado
+    return intento.identificador_presentado || intento.codigo_sis
       ? 'Estudiante sin datos asociados'
       : 'Estudiante no identificado'
   }
 
-  const name = [
-    estudiante.nombre,
-    estudiante.apellido_paterno,
-    estudiante.apellido_materno,
-  ].filter(Boolean).join(' ')
-
-  return name || 'Estudiante sin datos asociados'
+  return estudiante.nombre_completo || 'Estudiante sin datos asociados'
 }
 
-export default function IntentosNoAutorizadosPage() {
+const renderTipoIntentoBadge = (tipo: string) => {
+  const normalizado = String(tipo || '').trim().toUpperCase()
+
+  switch (normalizado) {
+    case 'REINGRESO_DUPLICADO':
+    case 'REINGRESO_DUPLICADO_MANUAL':
+    case 'RECHAZADO_YA_INGRESO':
+      return (
+        <span className="inline-flex rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-bold text-red-600">
+          Reingreso duplicado
+        </span>
+      )
+    case 'INHABILITADO':
+    case 'RECHAZADO_INHABILITADO':
+      return (
+        <span className="inline-flex rounded-full border border-sci-red/30 bg-sci-red/10 px-2 py-1 text-[10px] font-bold text-sci-red">
+          Inhabilitado
+        </span>
+      )
+    case 'EXAMEN_DISTINTO':
+    case 'RECHAZADO_EXAMEN_DISTINTO':
+      return (
+        <span className="inline-flex rounded-full border border-purple-500/30 bg-purple-500/10 px-2 py-1 text-[10px] font-bold text-purple-600">
+          Examen distinto
+        </span>
+      )
+    case 'NO_REGISTRADO':
+    case 'RECHAZADO_NO_REGISTRADO':
+      return (
+        <span className="inline-flex rounded-full border border-slate-500/30 bg-slate-500/10 px-2 py-1 text-[10px] font-bold text-slate-600">
+          No registrado
+        </span>
+      )
+    case 'QR_INVALIDO':
+    case 'ERROR_DATOS_INVALIDOS':
+      return (
+        <span className="inline-flex rounded-full border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] font-bold text-rose-600">
+          QR inválido
+        </span>
+      )
+    case 'EXAMEN_FINALIZADO':
+    case 'HORARIO_EXPIRADO':
+    case 'RECHAZADO_EXAMEN_CONCLUIDO':
+      return (
+        <span className="inline-flex rounded-full border border-gray-500/30 bg-gray-500/10 px-2 py-1 text-[10px] font-bold text-gray-700">
+          Examen concluido
+        </span>
+      )
+    case 'NO_INSCRITO':
+    case 'RECHAZADO_NO_INSCRITO':
+    default:
+      return (
+        <span className="inline-flex rounded-full border border-sci-amber/30 bg-sci-amber/10 px-2 py-1 text-[10px] font-bold text-sci-amber">
+          No inscrito
+        </span>
+      )
+  }
+}
+
+export default function IntentosNoAutorizadosPage({
+  embedded = false,
+}: {
+  embedded?: boolean
+}) {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
 
@@ -96,16 +154,20 @@ export default function IntentosNoAutorizadosPage() {
   return (
     <div className="space-y-6">
       <header className="space-y-3">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate(id ? `/examenes/${id}?tab=info` : '/examenes')}
-          className="h-auto cursor-pointer gap-1 p-0 text-xs font-semibold text-sci-blue"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Volver al examen
-        </Button>
+        {!embedded && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              navigate(id ? `/examenes/${id}?tab=info` : '/examenes')
+            }
+            className="h-auto cursor-pointer gap-1 p-0 text-xs font-semibold text-sci-blue"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Volver al examen
+          </Button>
+        )}
 
         <div>
           <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-sci-cyan">
@@ -115,7 +177,7 @@ export default function IntentosNoAutorizadosPage() {
             Intentos no autorizados
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Registro de estudiantes que intentaron ingresar sin estar inscritos o estando inhabilitados.
+            Registro de auditoría de credenciales denegadas por el sistema.
           </p>
         </div>
       </header>
@@ -173,7 +235,6 @@ export default function IntentosNoAutorizadosPage() {
                     <tr>
                       <th className="px-4 py-3 font-semibold">Estudiante</th>
                       <th className="px-4 py-3 font-semibold">Código SIS</th>
-                      <th className="px-4 py-3 font-semibold">Identificador presentado</th>
                       <th className="px-4 py-3 font-semibold">Tipo de intento</th>
                       <th className="px-4 py-3 font-semibold">Fecha y hora</th>
                     </tr>
@@ -184,28 +245,12 @@ export default function IntentosNoAutorizadosPage() {
                         <td className="px-4 py-3 font-medium text-foreground">
                           {formatStudentName(intento)}
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {intento.estudiante?.codigo_sis || '—'}
+                        <td className="px-4 py-3 font-mono text-muted-foreground">
+                          {intento.codigo_sis || intento.estudiante?.codigo_sis || intento.identificador_presentado || '—'}
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                         {intento.identificador_presentado || '—'}
+                        <td className="px-4 py-3">
+                          {renderTipoIntentoBadge(intento.tipo_intento)}
                         </td>
-                        
-
-
-<td className="px-4 py-3">
-  <span
-    className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold ${
-      intento.tipo_intento === 'INHABILITADO'
-        ? 'border-sci-red/30 bg-sci-red/10 text-sci-red'
-        : 'border-sci-amber/30 bg-sci-amber/10 text-sci-amber'
-    }`}
-  >
-    {intento.tipo_intento === 'INHABILITADO'
-      ? 'Inhabilitado'
-      : 'No inscrito'}
-  </span>
-</td>
                         <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                           {formatDate(intento.fecha_hora)}
                         </td>

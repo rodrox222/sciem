@@ -30,7 +30,7 @@ import { DetalleExpulsionesTab } from '@/components/examenes/DetalleExpulsionesT
 import { DetalleMonitoreoTab } from '@/components/monitoreo/DetalleMonitoreoTab'
 import { EtapasExamen } from '@/components/monitoreo/EtapasExamen'
 import { permiteMonitoreoFrontend } from '@/components/monitoreo/permisoMonitoreo'
-
+import IntentosNoAutorizadosPage from '@/pages/IntentosNoAutorizadosPage'
 const estadoBadges: Record<ExamenEstado, string> = {
   Programado: 'border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy',
   'En proceso': 'border-sci-amber/30 bg-sci-amber/10 text-sci-amber',
@@ -134,15 +134,16 @@ export default function DetalleExamenPage() {
   return (
     <div className="space-y-6">
       <header className="space-y-3">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate('/examenes')}
-          className="h-auto cursor-pointer gap-1 p-0 text-xs font-semibold text-sci-blue hover:text-sci-navy"
-        >
-          <ArrowLeft className="h-4 w-4" /> Volver a exámenes
-        </Button>
+    <Button
+  type="button"
+  variant="ghost"
+  size="sm"
+  onClick={() => navigate('/examenes')}
+  className="h-auto cursor-pointer gap-1 p-0 text-xs font-semibold text-sci-blue hover:text-sci-navy"
+>
+  <ArrowLeft className="h-4 w-4" />
+  Volver a exámenes
+</Button>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -271,26 +272,9 @@ export default function DetalleExamenPage() {
             <DetalleEditarTab exam={exam} onUpdated={loadExam} />
           </TabsContent>
         )}
-                {canManage && (
+          {canManage && (
           <TabsContent value="intentos">
-            <div className="rounded-2xl border border-border bg-card p-6">
-              <h2 className="text-base font-bold text-sci-navy">
-                Intentos no autorizados
-              </h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Consulta el historial de intentos no autorizados de este examen.
-              </p>
-              <Button
-                type="button"
-                className="mt-4 cursor-pointer gap-2 bg-sci-blue text-white hover:opacity-90"
-                onClick={() =>
-                  navigate(`/examenes/${id}/intentos-no-autorizados`)
-                }
-              >
-                <ShieldAlert className="h-4 w-4" />
-                Ver historial de intentos
-              </Button>
-            </div>
+            <IntentosNoAutorizadosPage embedded />
           </TabsContent>
         )}
       </Tabs>
