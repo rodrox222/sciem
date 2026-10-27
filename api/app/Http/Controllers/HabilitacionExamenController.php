@@ -15,16 +15,26 @@ class HabilitacionExamenController extends Controller
     public function index(string $examenId): JsonResponse
     {
         $examen = Examen::with(['estudiantes' => function ($query) {
-            $query->select('estudiantes.id', 'codigo_sis', 'ci', 'ci_extension', 'nombre', 'apellido_paterno', 'apellido_materno', 'email_institucional');
+            $query->select(
+                'estudiantes.id', 
+                'codigo_sis', 
+                'ci', 
+                'ci_extension', 
+                'nombre', 
+                'apellido_paterno', 
+                'apellido_materno', 
+                'email_institucional'
+            )->withPivot('id_auxiliar', 'estado', 'motivo_estado', 'ajuste_manual', 'fecha_ajuste_manual'); // <--- AGREGAR ESTA LÍNEA
         }])->findOrFail($examenId);
 
         $estudiantes = $examen->estudiantes->map(function ($estudiante) {
             return [
                 'id'                  => $estudiante->id,
+                'id_auxiliar'         => $estudiante->pivot->id_auxiliar,
                 'codigo_sis'          => $estudiante->codigo_sis,
                 'ci'                  => $estudiante->ci,
                 'ci_extension'        => $estudiante->ci_extension,
-                'nombre_completo'     => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} " . ($estudiante->apellido_materno ?? '')),
+                'nombre_completo'     => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
                 'email_institucional' => $estudiante->email_institucional,
                 'estado'              => $estudiante->pivot->estado,
                 'motivo_estado'       => $estudiante->pivot->motivo_estado,

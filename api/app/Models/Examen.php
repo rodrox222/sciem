@@ -67,7 +67,15 @@ class Examen extends Model
     public function estudiantes(): BelongsToMany
     {
         return $this->belongsToMany(Estudiante::class, 'estudiante_examen', 'id_examen', 'id_estudiante')
-            ->withPivot('estado', 'motivo_estado', 'ajuste_manual', 'modificado_por_docente_id', 'fecha_ajuste_manual', 'fecha_ingreso')
+            ->withPivot(
+                'id_auxiliar',
+                'estado',
+                'motivo_estado',
+                'ajuste_manual',
+                'modificado_por_docente_id',
+                'fecha_ajuste_manual',
+                'fecha_ingreso'
+            )
             ->withTimestamps();
     }
 

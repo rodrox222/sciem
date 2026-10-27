@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { validarQrOffline } from '../db/offlineStorage';
 
-const rawUrl = (import.meta.env.VITE_API_URL?.trim() || 'http://192.168.1.17:8200')
+//http://192.168.1.17:8200
+const rawUrl = (import.meta.env.VITE_API_URL?.trim() || 'http://localhost:8200/api')
   .replace(/\/api\/?$/, '')
   .replace(/\/$/, '');
 
