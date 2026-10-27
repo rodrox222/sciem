@@ -28,12 +28,12 @@ export const authService = {
     localStorage.setItem('auth_token', data.token);
     localStorage.setItem('sci_last_activity', Date.now().toString());
 
-    // Solo guardamos datos de presentación para el Header (sin CI ni datos sensibles)
     if (data.user) {
       localStorage.setItem('user_role', data.user.rol || '');
       localStorage.setItem(
         'user_data',
         JSON.stringify({
+          id: data.user.id,
           nombre: data.user.nombre,
           apellido: data.user.apellido,
         })
@@ -59,18 +59,25 @@ export const authService = {
   getCurrentUser: () => {
     const role = localStorage.getItem('user_role') || '';
     let name = role || 'Usuario';
+    let id: string | number | undefined = undefined;
 
     try {
       const raw = localStorage.getItem('user_data');
       const data = raw ? JSON.parse(raw) : null;
-      if (data?.nombre) {
-        name = `${data.nombre} ${data.apellido || ''}`.trim();
+      if (data) {
+        if (data.nombre) {
+          name = `${data.nombre} ${data.apellido || ''}`.trim();
+        }
+        if (data.id) {
+          id = data.id;
+        }
       }
     } catch {
       // Respaldo silencioso
     }
 
     return {
+      id,
       role,
       name,
       isAuthenticated: Boolean(localStorage.getItem('auth_token')),

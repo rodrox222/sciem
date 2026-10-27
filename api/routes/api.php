@@ -268,7 +268,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // --- HU 14: NOTICIAS OPERATIVAS ---
-    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+    Route::middleware('role:admin,administrador,docente,auxiliar,estudiante')->group(function () {
         Route::get('noticias/internas', [NoticiaController::class, 'index']); 
     });
 

@@ -85,21 +85,28 @@ class NoticiaController extends Controller
                     });
                 } 
                 elseif ($user instanceof Estudiante) {
+                    // FIX 1: Ajustados los nombres de las columnas a 'id_estudiante' e 'id_examen'
+                    // FIX 2: Uso de toArray() para asegurar el correcto funcionamiento en el whereIn
                     $misExamenesIds = DB::table('estudiante_examen')
-                                        ->where('estudiante_id', $user->id)
-                                        ->pluck('examen_id');
+                                        ->where('id_estudiante', $user->id)
+                                        ->pluck('id_examen')
+                                        ->toArray();
 
                     $query->where(function ($q) use ($misExamenesIds) {
                         $q->where('publico_objetivo', 'Todos')
                           ->orWhere(function ($q2) {
                               $q2->where('publico_objetivo', 'Estudiantes')
                                  ->whereNull('id_examen'); 
-                          })
-                          ->orWhereIn('id_examen', $misExamenesIds); 
+                          });
+                        
+                        // FIX 3: Solo intentamos filtrar por los IDs si el estudiante realmente tiene exámenes
+                        if (!empty($misExamenesIds)) {
+                            $q->orWhereIn('id_examen', $misExamenesIds); 
+                        }
                     });
                 }
             })
-            ->with(['autor:id,nombre,apellido_paterno', 'examen:id,id_materia'])
+            ->with(['autor:id,nombre,apellido_paterno', 'examen:id,id_materia']) 
             ->orderBy('created_at', 'desc')
             ->paginate(10);
 
