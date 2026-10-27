@@ -243,15 +243,14 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     //HU 19: GESTIÓN DE AUXILIARES
-    Route::middleware('role:admin,administrador,docente')->group(function () {
-        Route::post('examenes/{id_examen}/invitar-auxiliar', [AuxiliarModuloController::class, 'invitarAuxiliar']);
-        Route::get('examenes/{id_examen}/auxiliares', [AuxiliarModuloController::class, 'listarAuxiliaresExamen']);
+    Route::middleware('role:auxiliar')->prefix('auxiliar')->group(function () {
+        Route::get('/mis-examenes', [AuxiliarModuloController::class, 'misExamenesAsignados']);
     });
 
-    Route::middleware('role:auxiliar')->prefix('auxiliar')->group(function () {
-        Route::get('/invitaciones', [AuxiliarModuloController::class, 'misInvitaciones']);
-        Route::patch('/invitaciones/{id_invitacion}/responder', [AuxiliarModuloController::class, 'responderInvitacion']);
-        Route::get('/mis-examenes', [AuxiliarModuloController::class, 'misExamenesAsignados']);
+    Route::middleware('role:admin,administrador,docente')->group(function () {
+        Route::post('examenes/{id_examen}/auxiliares', [AuxiliarModuloController::class, 'invitarAuxiliar']);
+        Route::get('examenes/{id_examen}/auxiliares', [AuxiliarModuloController::class, 'listarAuxiliaresExamen']);
+        Route::delete('examenes/{id_examen}/auxiliares/{id_auxiliar}', [AuxiliarModuloController::class, 'desvincularAuxiliar']);
     });
 
     // todos tienen acceso a ver la foto del estudiante, pero solo el propio estudiante puede subirla

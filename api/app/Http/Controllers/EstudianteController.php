@@ -2,35 +2,40 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\CompletarDatosEstudianteRequest;
 use App\Http\Requests\InscribirEstudianteExamenRequest;
 use App\Http\Requests\StoreEstudianteRequest;
+use App\Http\Requests\SubirFotoEstudianteRequest;
 use App\Models\Admin;
 use App\Models\Auxiliar;
 use App\Models\Docente;
 use App\Models\Estudiante;
 use App\Models\Examen;
 use App\Models\LogAuditoria;
+use App\Traits\DistribuyeAuxiliares;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
-
-use App\Http\Requests\CompletarDatosEstudianteRequest;
-use App\Http\Requests\SubirFotoEstudianteRequest;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rules\Password;
 
 class EstudianteController extends Controller
 {
+    use DistribuyeAuxiliares;
+
     /**
-     * Listar todos los estudiantes registrados.
+     * Listar todos los estudiantes registrados (excluyendo auxiliares si aplica o paginando normal).
      */
     public function index(Request $request): JsonResponse
     {
         $query = Estudiante::query();
+
+        if ($request->boolean('solo_alumnos', false)) {
+            $query->where('es_auxiliar', false);
+        }
 
         if ($search = $request->query('search')) {
             $query->where(function ($q) use ($search) {
@@ -45,6 +50,7 @@ class EstudianteController extends Controller
         $perPage = (int) $request->query('per_page', 10);
         return response()->json($query->orderBy('apellido_paterno', 'asc')->paginate($perPage));
     }
+
     /**
      * Buscar estudiantes por nombre, código SIS, CI o QR (HU15).
      */
@@ -140,7 +146,7 @@ class EstudianteController extends Controller
     }
 
     /**
-     * Listar los estudiantes asignados a un examen específico.
+     * Listar los estudiantes asignados a un examen específico con su auxiliar encargado.
      */
     public function estudiantesPorExamen(Request $request, string $idExamen): JsonResponse
     {
@@ -150,18 +156,21 @@ class EstudianteController extends Controller
             return response()->json(['message' => 'Examen no encontrado.'], 404);
         }
 
-        $query = $examen->estudiantes();
+        $query = $examen->estudiantes()->withPivot('id_auxiliar', 'estado', 'motivo_estado', 'fecha_ingreso');
 
         if ($estado = $request->query('estado')) {
             $query->wherePivot('estado', $estado);
+        }
+
+        if ($idAuxiliar = $request->query('id_auxiliar')) {
+            $query->wherePivot('id_auxiliar', $idAuxiliar);
         }
 
         return response()->json($query->paginate(15));
     }
 
     /**
-     * Inscribir estudiante al examen:
-     * Si no existe en la BD, lo crea. Si ya existe, actualiza sus datos básicos y lo vincula al examen.
+     * Inscribir estudiante al examen directamente y redistribuir carga entre auxiliares.
      */
     public function inscribirAExamen(InscribirEstudianteExamenRequest $request, string $idExamen): JsonResponse
     {
@@ -179,15 +188,16 @@ class EstudianteController extends Controller
 
         $estudianteExistente = Estudiante::where('codigo_sis', $data['codigo_sis'])->first();
         if ($estudianteExistente) {
+            // Evitar que un auxiliar asignado al examen se inscriba a rendir la misma prueba
             $esAuxiliar = DB::table('examen_auxiliar')
                 ->where('id_examen', $examen->id)
                 ->where('id_auxiliar', $estudianteExistente->id) 
                 ->exists();
 
-            if ($esAuxiliar) {
+            if ($esAuxiliar || $estudianteExistente->es_auxiliar) {
                 return response()->json([
                     'success'    => false,
-                    'message'    => 'Conflicto de roles: este estudiante ya está designado como auxiliar para este examen.',
+                    'message'    => 'Conflicto de roles: este usuario está designado como auxiliar y no puede inscribirse como estudiante examinando.',
                     'error_type' => 'ROL_DUPLICADO_AUXILIAR',
                 ], 422);
             }
@@ -217,6 +227,7 @@ class EstudianteController extends Controller
                     'email_institucional' => $data['email_institucional'],
                     'password'            => $defaultPassword,
                     'activo'              => true,
+                    'es_auxiliar'         => false,
                 ]);
             } else {
                 $estudiante->update([
@@ -234,11 +245,15 @@ class EstudianteController extends Controller
                     'estado'        => $estado,
                     'motivo_estado' => null,
                     'ajuste_manual' => false,
+                    'created_at'    => now(),
                 ],
             ]);
 
             return $estudiante;
         });
+
+        // Balanceo equitativo automático entre auxiliares asignados
+        $this->redistribuirEstudiantesExamen($examen->id);
 
         $this->registrarAuditoria($request, 'ESTUDIANTE_INSCRITO_EXAMEN', [
             'examen_id'     => $examen->id,
@@ -248,7 +263,7 @@ class EstudianteController extends Controller
         ]);
 
         return response()->json([
-            'message'    => 'Estudiante vinculado al examen exitosamente.',
+            'message'    => 'Estudiante vinculado al examen exitosamente y distribuido a su auxiliar.',
             'estudiante' => $estudiante->load(['examenes' => function ($q) use ($idExamen) {
                 $q->where('examenes.id', $idExamen);
             }]),
@@ -256,7 +271,7 @@ class EstudianteController extends Controller
     }
 
     /**
-     * Desvincular estudiante de un examen.
+     * Desvincular estudiante de un examen y rebalancear la carga restante.
      */
     public function desvincularDeExamen(Request $request, string $idExamen, string $idEstudiante): JsonResponse
     {
@@ -268,12 +283,15 @@ class EstudianteController extends Controller
 
         $examen->estudiantes()->detach($idEstudiante);
 
+        // Rebalancear estudiantes restantes entre los auxiliares asignados
+        $this->redistribuirEstudiantesExamen($examen->id);
+
         $this->registrarAuditoria($request, 'ESTUDIANTE_DESVINCULADO_EXAMEN', [
             'examen_id'     => $examen->id,
             'estudiante_id' => $idEstudiante,
         ]);
 
-        return response()->json(['message' => 'Estudiante desvinculado del examen correctamente.']);
+        return response()->json(['message' => 'Estudiante desvinculado del examen correctamente y carga rebalanceada.']);
     }
 
     /**
@@ -310,7 +328,7 @@ class EstudianteController extends Controller
     }
 
     /**
-     * Completar datos de perfil inicial del estudiante (Ajustado para pruebas).
+     * Completar datos de perfil inicial del estudiante.
      */
     public function completarDatos(CompletarDatosEstudianteRequest $request): JsonResponse
     {
@@ -455,7 +473,7 @@ class EstudianteController extends Controller
     }
 
     /**
-     * HU18 Consultar exámenes inscritos y estado de habilitación
+     * HU18 Consultar exámenes inscritos y estado de habilitación.
      */
     public function misExamenes(Request $request): JsonResponse
     {
@@ -504,7 +522,7 @@ class EstudianteController extends Controller
     }
 
     /**
-     * HU18 Generar token firmado para el código QR dinámico
+     * HU18 Generar token firmado para el código QR dinámico.
      */
     public function generarTokenQr(Request $request, string $idExamen): JsonResponse
     {
@@ -535,7 +553,6 @@ class EstudianteController extends Controller
             ], 404);
         }
 
-        // Validar estado del examen
         if (in_array(strtolower($examen->estado), ['terminado', 'finalizado', 'concluido'])) {
             return response()->json([
                 'success'    => false,
@@ -544,7 +561,6 @@ class EstudianteController extends Controller
             ], 403);
         }
 
-        // Validar ventana horaria con fecha y hora_fin
         if ($examen->fecha && $examen->hora_fin) {
             $soloFecha = $examen->fecha instanceof \Carbon\Carbon 
                 ? $examen->fecha->format('Y-m-d') 
@@ -573,7 +589,6 @@ class EstudianteController extends Controller
             $timestampExpiracion = now()->addHours(2)->timestamp;
         }
 
-        // [MODO PRUEBAS] Solo requerir que exista el Carnet de Identidad registrado
         if (empty($estudiante->ci)) {
             return response()->json([
                 'success'    => false,
@@ -582,9 +597,6 @@ class EstudianteController extends Controller
             ], 403);
         }
 
-        
-
-        // Verificar inscripción
         $inscripcion = DB::table('estudiante_examen')
             ->where('id_estudiante', $estudiante->id)
             ->where('id_examen', $idExamen)
@@ -598,7 +610,6 @@ class EstudianteController extends Controller
             ], 404);
         }
 
-        // Si ya ingresó, el QR ya no debe generarse
         if (!empty($inscripcion->fecha_ingreso)) {
             return response()->json([
                 'success'    => false,
@@ -607,7 +618,6 @@ class EstudianteController extends Controller
             ], 403);
         }
 
-        // Verificar si está inhabilitado
         if (strtolower($inscripcion->estado ?? '') !== 'habilitado') {
             return response()->json([
                 'success'       => false,
@@ -617,7 +627,6 @@ class EstudianteController extends Controller
             ], 403);
         }
 
-        // [MODO PRUEBAS] Foto opcional: no bloquea si el frontend no la envía
         if ($request->hasFile('foto_verificacion')) {
             $archivo = $request->file('foto_verificacion');
             $nombreFotoQr = 'qr_token_' . $estudiante->id . '_' . $idExamen . '_' . time() . '.' . $archivo->getClientOriginalExtension();
