@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { db, guardarPadronLocal, type AsistenciaOffline } from '../db/offlineStorage';
 
+//http://localhost:8200/api
 const rawUrl = (import.meta.env.VITE_API_URL?.trim() || 'http://192.168.1.17:8200')
   .replace(/\/api\/?$/, '')
   .replace(/\/$/, '');
@@ -15,7 +16,7 @@ function obtenerTokenValido(paramToken?: string): string {
 }
 
 /**
- * Descarga la nómina y metadatos del examen para guardarlos en Dexie
+ * Descarga la nómina completa, prerrequisitos, normas y metadatos del examen para guardarlos en Dexie
  */
 export async function sincronizarDescargaExamen(idExamen: string, token: string) {
   const authToken = obtenerTokenValido(token);
@@ -27,12 +28,21 @@ export async function sincronizarDescargaExamen(idExamen: string, token: string)
     },
   });
 
-  const { estudiantes, examen } = response.data;
-  
-  // Se pasa la información temporal del examen para permitir validar la hora_fin sin internet
-  await guardarPadronLocal(idExamen, estudiantes || [], examen);
+  const { estudiantes, examen, prerrequisitos, normas, rango_asignado } = response.data;
 
-  return response.data;
+  // Persistir en Dexie: estudiantes, examen, prerrequisitos y normas
+  await guardarPadronLocal(
+    idExamen,
+    estudiantes || [],
+    examen,
+    prerrequisitos || [],
+    normas || []
+  );
+
+  return {
+    ...response.data,
+    rango_asignado,
+  };
 }
 
 /**

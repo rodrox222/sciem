@@ -17,9 +17,9 @@ export const useIdleTimer = () => {
   const [secondsRemaining, setSecondsRemaining] = useState(COUNTDOWN_SECONDS)
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const isOfflineRef = useRef<boolean>(false)
+  const isOfflineRef = useRef<boolean>(!navigator.onLine)
 
-  // Comprueba activamente si el backend está accesible
+  // Verifica activamente al backend solo cuando se necesita tomar una decisión crítica
   const verificarConexionReal = useCallback(async (): Promise<boolean> => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       isOfflineRef.current = true
@@ -27,14 +27,14 @@ export const useIdleTimer = () => {
     }
 
     try {
-      const rawUrl = (import.meta.env.VITE_API_URL?.trim() || 'http://192.168.1.17:8200')
+      //http://localhost:8200/api
+      const rawUrl = (import.meta.env.VITE_API_URL?.trim() || 'http://192.168.1.17:8200/api')
         .replace(/\/api\/?$/, '')
         .replace(/\/$/, '')
 
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 1000)
+      const timeoutId = setTimeout(() => controller.abort(), 1200)
 
-      // Ping ligero al backend
       await fetch(`${rawUrl}/api/health`, {
         method: 'HEAD',
         mode: 'no-cors',
@@ -46,7 +46,6 @@ export const useIdleTimer = () => {
       isOfflineRef.current = false
       return true
     } catch {
-      // Si falla la petición (sin red o timeout), estamos offline
       isOfflineRef.current = true
       return false
     }
@@ -60,16 +59,8 @@ export const useIdleTimer = () => {
   }, [])
 
   const handleLogout = useCallback(async () => {
-    // Si estamos en modo offline, se cancela rotundamente el logout
-    if (isOfflineRef.current) {
-      setShowModal(false)
-      localStorage.setItem(STORAGE_KEY, Date.now().toString())
-      return
-    }
-
-    // Comprobación de respaldo antes de cerrar
-    const hayRed = await verificarConexionReal()
-    if (!hayRed) {
+    // Si estamos offline o el servidor no responde, no cerramos sesión localmente
+    if (isOfflineRef.current || !(await verificarConexionReal())) {
       setShowModal(false)
       localStorage.setItem(STORAGE_KEY, Date.now().toString())
       return
@@ -85,7 +76,6 @@ export const useIdleTimer = () => {
     const token = localStorage.getItem('auth_token')
     if (!token) return false
 
-    // Si no hay red, reseteamos el contador para proteger la sesión
     if (isOfflineRef.current) {
       localStorage.setItem(STORAGE_KEY, Date.now().toString())
       setShowModal(false)
@@ -155,22 +145,29 @@ export const useIdleTimer = () => {
   }
 
   useEffect(() => {
-    // Sondeo de conectividad periódico cada 3 segundos
-    const pollRed = setInterval(() => {
-      void verificarConexionReal().then((hayRed) => {
-        if (!hayRed) {
-          // Renueva la actividad mientras no haya conexión
-          localStorage.setItem(STORAGE_KEY, Date.now().toString())
-          setShowModal(false)
-          limpiarTemporizador()
-        }
+    // 1. Listeners de eventos nativos de red (0 consumo de peticiones HTTP en reposo)
+    const handleOnline = () => {
+      void verificarConexionReal().then((online) => {
+        if (online) resetTimer()
       })
-    }, 3000)
+    }
 
+    const handleOffline = () => {
+      isOfflineRef.current = true
+      setShowModal(false)
+      limpiarTemporizador()
+      localStorage.setItem(STORAGE_KEY, Date.now().toString())
+    }
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    // 2. Comprobación inicial de sesión
     void checkSession().then((ok) => {
       if (ok) resetTimer()
     })
 
+    // 3. Actividad de usuario
     const events = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart', 'touchend']
     const handler = () => {
       if (!isOfflineRef.current) {
@@ -191,7 +188,8 @@ export const useIdleTimer = () => {
     document.addEventListener('visibilitychange', handleVisibility)
 
     return () => {
-      clearInterval(pollRed)
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
       events.forEach((ev) => window.removeEventListener(ev, handler))
       window.removeEventListener('sci_config_updated', handler)
       document.removeEventListener('visibilitychange', handleVisibility)
@@ -199,6 +197,7 @@ export const useIdleTimer = () => {
     }
   }, [checkSession, resetTimer, verificarConexionReal, limpiarTemporizador])
 
+  // Intervalo de cuenta regresiva: solo corre mientras el modal esté visible
   useEffect(() => {
     if (!showModal) return
 
