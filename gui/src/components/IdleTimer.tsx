@@ -1,64 +1,11 @@
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 import { Button } from '@/components/ui/button'
 import { useIdleTimer } from '../hooks/useIdleTimer'
 
 export const IdleTimer: React.FC = () => {
   const { showModal, secondsRemaining, handleLogout, handleStayActive } = useIdleTimer()
-  const [offlineReal, setOfflineReal] = useState<boolean>(false)
 
-  // Verificación constante y real de conexión
-  useEffect(() => {
-    let montado = true
-
-    const verificarConexionReal = async () => {
-      // 1. Si el navegador ya dice que no hay red, es seguro que es offline
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        if (montado) setOfflineReal(true)
-        return
-      }
-
-      // 2. Si dice online, comprobamos si realmente alcanza el backend o internet
-      try {
-        const rawUrl = (import.meta.env.VITE_API_URL?.trim() || 'http://localhost:8200/api') //http://192.168.1.17:8200
-          .replace(/\/api\/?$/, '')
-          .replace(/\/$/, '')
-
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 1200)
-
-        // Petición rápida tipo ping
-        await fetch(`${rawUrl}/api/health`, {
-          method: 'HEAD',
-          mode: 'no-cors',
-          signal: controller.signal,
-          cache: 'no-store',
-        })
-
-        clearTimeout(timeoutId)
-        if (montado) setOfflineReal(false)
-      } catch {
-        // Si falló el fetch o dio timeout, no hay red real con el servidor
-        if (montado) setOfflineReal(true)
-      }
-    }
-
-    void verificarConexionReal()
-
-    // Comprobar cada 2.5 segundos y escuchar eventos
-    const intervalo = setInterval(verificarConexionReal, 2500)
-    window.addEventListener('offline', () => setOfflineReal(true))
-    window.addEventListener('online', verificarConexionReal)
-
-    return () => {
-      montado = false
-      clearInterval(intervalo)
-      window.removeEventListener('offline', () => setOfflineReal(true))
-      window.removeEventListener('online', verificarConexionReal)
-    }
-  }, [])
-
-  // Si no está activo el modal o estamos offline (sin red real), NO se dibuja nada
-  if (!showModal || offlineReal) return null
+  if (!showModal) return null
 
   const formattedSeconds = String(secondsRemaining).padStart(2, '0')
   const progressPercent = (secondsRemaining / 60) * 100
