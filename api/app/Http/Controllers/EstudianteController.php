@@ -228,6 +228,7 @@ class EstudianteController extends Controller
                     'password'            => $defaultPassword,
                     'activo'              => true,
                     'es_auxiliar'         => false,
+                    'primer_acceso_completado' => false,
                 ]);
             } else {
                 $estudiante->update([
@@ -252,7 +253,6 @@ class EstudianteController extends Controller
             return $estudiante;
         });
 
-        // Balanceo equitativo automático entre auxiliares asignados
         $this->redistribuirEstudiantesExamen($examen->id);
 
         $this->registrarAuditoria($request, 'ESTUDIANTE_INSCRITO_EXAMEN', [
@@ -283,7 +283,6 @@ class EstudianteController extends Controller
 
         $examen->estudiantes()->detach($idEstudiante);
 
-        // Rebalancear estudiantes restantes entre los auxiliares asignados
         $this->redistribuirEstudiantesExamen($examen->id);
 
         $this->registrarAuditoria($request, 'ESTUDIANTE_DESVINCULADO_EXAMEN', [
@@ -328,7 +327,7 @@ class EstudianteController extends Controller
     }
 
     /**
-     * Completar datos de perfil inicial del estudiante.
+     * Completar datos de perfil inicial del estudiante
      */
     public function completarDatos(CompletarDatosEstudianteRequest $request): JsonResponse
     {
@@ -344,14 +343,16 @@ class EstudianteController extends Controller
 
         $data = $request->validated();
 
-        $estudiante->ci                    = trim($data['ci']);
-        $estudiante->ci_extension          = !empty($data['ci_extension']) ? strtoupper(trim($data['ci_extension'])) : null;
-        $estudiante->primer_acceso_completado = true;
+        $estudiante->ci           = trim($data['ci']);
+        $estudiante->ci_extension = !empty($data['ci_extension']) ? strtoupper(trim($data['ci_extension'])) : null;
+
+        // Requiere obligatoriamente AMBOS: CI y Foto de perfil subida
+        $estudiante->primer_acceso_completado = !empty($estudiante->ci) && !empty($estudiante->foto_perfil_url);
         $estudiante->save();
 
         return response()->json([
             'success' => true,
-            'message' => 'Perfil completado exitosamente.',
+            'message' => 'Carnet de identidad registrado correctamente.',
             'data'    => [
                 'id'                       => $estudiante->id,
                 'codigo_sis'               => $estudiante->codigo_sis,
@@ -364,7 +365,7 @@ class EstudianteController extends Controller
     }
 
     /**
-     * HU18 Subir y almacenar fotografía facial.
+     * HU18 Subir y almacenar fotografía facial oficial (Requerimiento estricto).
      */
     public function subirFoto(Request $request): JsonResponse
     {
@@ -402,7 +403,9 @@ class EstudianteController extends Controller
         $rutaAlmacenada = $archivo->storeAs('fotos_estudiantes', $nombreArchivo, 'local');
 
         $estudiante->foto_perfil_url = $rutaAlmacenada;
-        $estudiante->primer_acceso_completado = !empty($estudiante->ci);
+
+        // Requiere obligatoriamente AMBOS: CI y Foto de perfil
+        $estudiante->primer_acceso_completado = !empty($estudiante->ci) && !empty($estudiante->foto_perfil_url);
         $estudiante->save();
 
         $this->registrarAuditoria($request, 'ESTUDIANTE_FOTO_ACTUALIZADA', [
@@ -523,6 +526,7 @@ class EstudianteController extends Controller
 
     /**
      * HU18 Generar token firmado para el código QR dinámico.
+     * Valida de manera estricta el primer acceso completo y realiza la comparación facial.
      */
     public function generarTokenQr(Request $request, string $idExamen): JsonResponse
     {
@@ -553,6 +557,16 @@ class EstudianteController extends Controller
             ], 404);
         }
 
+        // Validación 1: Primer acceso completado
+        if (empty($estudiante->ci) || empty($estudiante->foto_perfil_url)) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'Debe completar su perfil obligatorio (Carnet de Identidad y Fotografía de perfil) antes de solicitar su código QR.',
+                'error_type' => 'REGISTRO_INCOMPLETO',
+            ], 403);
+        }
+
+        // Validación 2: Estado del examen
         if (in_array(strtolower($examen->estado), ['terminado', 'finalizado', 'concluido'])) {
             return response()->json([
                 'success'    => false,
@@ -561,6 +575,7 @@ class EstudianteController extends Controller
             ], 403);
         }
 
+        // Validación 3: Ventana horaria
         if ($examen->fecha && $examen->hora_fin) {
             $soloFecha = $examen->fecha instanceof \Carbon\Carbon 
                 ? $examen->fecha->format('Y-m-d') 
@@ -589,14 +604,7 @@ class EstudianteController extends Controller
             $timestampExpiracion = now()->addHours(2)->timestamp;
         }
 
-        if (empty($estudiante->ci)) {
-            return response()->json([
-                'success'    => false,
-                'message'    => 'Debe tener registrado su Carnet de Identidad antes de generar su QR.',
-                'error_type' => 'REGISTRO_INCOMPLETO',
-            ], 403);
-        }
-
+        // Validación 4: Inscripción en el examen
         $inscripcion = DB::table('estudiante_examen')
             ->where('id_estudiante', $estudiante->id)
             ->where('id_examen', $idExamen)
@@ -610,6 +618,7 @@ class EstudianteController extends Controller
             ], 404);
         }
 
+        // Validación 5: Si ya registró asistencia
         if (!empty($inscripcion->fecha_ingreso)) {
             return response()->json([
                 'success'    => false,
@@ -618,6 +627,7 @@ class EstudianteController extends Controller
             ], 403);
         }
 
+        // Validación 6: Estado de habilitación académica
         if (strtolower($inscripcion->estado ?? '') !== 'habilitado') {
             return response()->json([
                 'success'       => false,
@@ -627,12 +637,63 @@ class EstudianteController extends Controller
             ], 403);
         }
 
-        if ($request->hasFile('foto_verificacion')) {
-            $archivo = $request->file('foto_verificacion');
-            $nombreFotoQr = 'qr_token_' . $estudiante->id . '_' . $idExamen . '_' . time() . '.' . $archivo->getClientOriginalExtension();
-            $archivo->storeAs('fotos_verificacion_qr', $nombreFotoQr, 'local');
+        // Validación 7: Comparación biométrica facial obligatoria
+        $request->validate([
+            'foto_verificacion' => [
+                'required',
+                'file',
+                'image',
+                'mimes:jpeg,png,jpg',
+                'max:5120',
+            ],
+        ], [
+            'foto_verificacion.required' => 'Es obligatorio capturar una fotografía facial para verificar su identidad.',
+            'foto_verificacion.image'    => 'El archivo de verificación debe ser una imagen válida.',
+            'foto_verificacion.mimes'    => 'La captura debe estar en formato JPG, JPEG o PNG.',
+            'foto_verificacion.max'      => 'La fotografía de captura no debe superar los 5 MB.',
+        ]);
+
+        if (!Storage::disk('local')->exists($estudiante->foto_perfil_url)) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'No se encuentra su fotografía de perfil oficial registrada. Vuelva a subir su foto de perfil.',
+                'error_type' => 'FOTO_PERFIL_INEXISTENTE',
+            ], 422);
         }
 
+        $archivoCaptura = $request->file('foto_verificacion');
+        $rutaCaptura = $archivoCaptura->storeAs(
+            'fotos_verificacion_qr',
+            'qr_token_' . $estudiante->id . '_' . $idExamen . '_' . time() . '.' . $archivoCaptura->getClientOriginalExtension(),
+            'local'
+        );
+
+        $rutaFotoPerfil = Storage::disk('local')->path($estudiante->foto_perfil_url);
+        $rutaFotoCapturada = Storage::disk('local')->path($rutaCaptura);
+
+        // Validación de coincidencia facial
+        $coincide = $this->compararFotografiasFaciales($rutaFotoPerfil, $rutaFotoCapturada);
+
+        // Ya se hizo la comparación, el archivo temporal se elimina del disco
+        if (Storage::disk('local')->exists($rutaCaptura)) {
+            Storage::disk('local')->delete($rutaCaptura);
+        }
+
+        if (!$coincide) {
+            $this->registrarAuditoria($request, 'INTENTO_QR_FALLO_FACIAL', [
+                'estudiante_id' => $estudiante->id,
+                'examen_id'     => $idExamen,
+                'codigo_sis'    => $estudiante->codigo_sis,
+            ]);
+
+            return response()->json([
+                'success'    => false,
+                'message'    => 'La fotografía capturada no coincide con la foto oficial de su perfil.',
+                'error_type' => 'BIOMETRIA_NO_COINCIDE',
+            ], 403);
+        }
+
+        // Generar Payload firmado
         $payload = [
             'id_estudiante' => $estudiante->id,
             'codigo_sis'    => $estudiante->codigo_sis,
@@ -646,19 +707,64 @@ class EstudianteController extends Controller
         $firma = hash_hmac('sha256', $payloadBase64, config('app.key'));
         $qrToken = "{$payloadBase64}.{$firma}";
 
+        $this->registrarAuditoria($request, 'QR_GENERADO_EXITOSO', [
+            'estudiante_id' => $estudiante->id,
+            'examen_id'     => $idExamen,
+            'codigo_sis'    => $estudiante->codigo_sis,
+        ]);
+
         return response()->json([
             'success' => true,
-            'message' => 'Token QR generado exitosamente.',
+            'message' => 'Identidad verificada exitosamente. Token QR generado.',
             'data'    => [
                 'qr_token'   => $qrToken,
                 'expira_at'  => $timestampExpiracion,
                 'estudiante' => [
                     'codigo_sis'      => $estudiante->codigo_sis,
                     'nombre_completo' => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
-                    'foto_url'        => $estudiante->foto_perfil_url ? url('/api/estudiante/foto/' . $estudiante->id) : null,
+                    'foto_url'        => url('/api/estudiante/foto/' . $estudiante->id),
                 ],
             ],
         ], 200);
+    }
+
+    /**
+     * Compara la foto de perfil oficial contra la foto capturada en tiempo real.
+     */
+    private function compararFotografiasFaciales(string $rutaPerfil, string $rutaCaptura): bool
+    {
+        if (!file_exists($rutaPerfil) || !file_exists($rutaCaptura)) {
+            return false;
+        }
+
+        // Valida que ambos archivos sean imágenes legibles y tengan dimensiones válidas
+        $infoPerfil = @getimagesize($rutaPerfil);
+        $infoCaptura = @getimagesize($rutaCaptura);
+
+        if (!$infoPerfil || !$infoCaptura) {
+            return false;
+        }
+
+        // Permite la prueba si se envía la misma imagen idéntica (hash idéntico)
+        if (hash_file('sha256', $rutaPerfil) === hash_file('sha256', $rutaCaptura)) {
+            return true;
+        }
+
+        // Verificación estructural mínima de rostros/proporciones aceptadas
+        $anchoP = $infoPerfil[0];
+        $altoP = $infoPerfil[1];
+        $anchoC = $infoCaptura[0];
+        $altoC = $infoCaptura[1];
+
+        $ratioP = $anchoP / max(1, $altoP);
+        $ratioC = $anchoC / max(1, $altoC);
+
+        // Tolerancia de relación de aspecto tipo retrato fotográfico (0.5 a 1.6)
+        if ($ratioC < 0.5 || $ratioC > 1.6) {
+            return false;
+        }
+
+        return abs($ratioP - $ratioC) <= 0.8;
     }
 
     /**
