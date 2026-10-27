@@ -17,7 +17,7 @@ export class ApiError extends Error {
 // Resuelve la URL: si no existe en .env, usa directamente la IP de tu servidor local
 const getBaseUrl = (): string => {
   const envUrl = import.meta.env.VITE_API_URL?.trim();
-  const url = envUrl || 'http://192.168.1.17:8200'; //http://localhost:8200/api'
+  const url = envUrl || 'http://192.168.1.17:8200';
   return url.replace(/\/api\/?$/, '').replace(/\/$/, '');
 };
 
