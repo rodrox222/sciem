@@ -150,28 +150,58 @@ class UsersSeeder extends Seeder
         // ==========================================
         // Estudiante con rol de Auxiliar habilitado
         // ==========================================
-        DB::table('estudiantes')->updateOrInsert(
-            ['email_institucional' => '202301640@est.umss.edu'],
+        $auxiliaresSeed = [
             [
-                'id' => (string) Str::uuid(),
-                'codigo_sis' => '202301640', 
-                'ci' => '11111111',
-                'ci_extension' => null,
-                'nombre' => 'Estudiante',
-                'apellido_paterno' => 'Auxiliar',
-                'apellido_materno' => null,
-                'password' => Hash::make('SMG43210'),
-                'primer_acceso_completado' => true,
-                'activo' => true,
-                'es_auxiliar' => true, 
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]
-        );
+                'codigo_sis'          => '11111111',
+                'email_institucional' => '11111111@est.umss.edu',
+                'ci'                  => '111111110',
+                'nombre'              => 'du',
+                'apellido_paterno'    => 'gutierrez',
+                'apellido_materno'    => 'lopez',
+            ],
+            [
+                'codigo_sis'          => '22222222',
+                'email_institucional' => '22222222@est.umss.edu',
+                'ci'                  => '222222220',
+                'nombre'              => 'dudu',
+                'apellido_paterno'    => 'gutierrez',
+                'apellido_materno'    => 'lopez',
+            ],
+            [
+                'codigo_sis'          => '33333333',
+                'email_institucional' => '33333333@est.umss.edu',
+                'ci'                  => '333333330',
+                'nombre'              => 'edu',
+                'apellido_paterno'    => 'gutierrez',
+                'apellido_materno'    => 'lopez',
+            ],
+        ];
 
-        $idEstudianteAuxiliar = DB::table('estudiantes')
-            ->where('email_institucional', '202301640@est.umss.edu')
-            ->value('id');
+        foreach ($auxiliaresSeed as $aux) {
+            DB::table('estudiantes')->updateOrInsert(
+                ['email_institucional' => $aux['email_institucional']],
+                [
+                    'id'                       => (string) Str::uuid(),
+                    'codigo_sis'               => $aux['codigo_sis'],
+                    'ci'                       => $aux['ci'],
+                    'ci_extension'             => null,
+                    'nombre'                   => $aux['nombre'],
+                    'apellido_paterno'         => $aux['apellido_paterno'],
+                    'apellido_materno'         => $aux['apellido_materno'],
+                    'password'                 => Hash::make('SMG43210'),
+                    'primer_acceso_completado' => true,
+                    'activo'                   => true,
+                    'es_auxiliar'              => true,
+                    'created_at'               => now(),
+                    'updated_at'               => now(),
+                ]
+            );
+        }
+
+        // Obtener los IDs (UUID) de los 3 auxiliares
+        $idAuxiliar1 = DB::table('estudiantes')->where('email_institucional', '11111111@est.umss.edu')->value('id');
+        $idAuxiliar2 = DB::table('estudiantes')->where('email_institucional', '22222222@est.umss.edu')->value('id');
+        $idAuxiliar3 = DB::table('estudiantes')->where('email_institucional', '33333333@est.umss.edu')->value('id');
 
     }
 }

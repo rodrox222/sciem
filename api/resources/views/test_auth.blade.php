@@ -40,10 +40,10 @@
         </div>
 
         <script>
-            let authToken = localStorage.getItem('token') || '';
+            let authToken = '';
 
             function printLog(data) {
-                document.getElementById('output').innerText = JSON.stringify(data, null, 2);
+                document.getElementById('output').textContent = JSON.stringify(data, null, 2);
             }
 
             async function ejecutarLogin() {
@@ -59,7 +59,6 @@
                     const data = await res.json();
                     if (data.token) {
                         authToken = data.token;
-                        localStorage.setItem('token', authToken);
                     }
                     printLog({ status: res.status, body: data });
                 } catch (err) {
@@ -68,6 +67,10 @@
             }
 
             async function consultarMe() {
+                if (!authToken) {
+                    printLog({ error: 'No hay token en memoria. Inicie sesión primero.' });
+                    return;
+                }
                 try {
                     const res = await fetch('/api/me', {
                         method: 'GET',
@@ -94,7 +97,6 @@
                     });
                     const data = await res.json();
                     authToken = '';
-                    localStorage.removeItem('token');
                     printLog({ status: res.status, body: data });
                 } catch (err) {
                     printLog({ error: err.message });

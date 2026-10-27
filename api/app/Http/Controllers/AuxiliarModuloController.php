@@ -2,12 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Auxiliar;
 use App\Models\Docente;
 use App\Models\Estudiante;
 use App\Models\Examen;
-use App\Models\ExamenAuxiliar;
 use App\Models\LogAuditoria;
+use App\Traits\DistribuyeAuxiliares;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,8 +15,11 @@ use Illuminate\Support\Str;
 
 class AuxiliarModuloController extends Controller
 {
+    use DistribuyeAuxiliares;
+
     /**
-     * HU19 - T5: Docente invita a un auxiliar por correo institucional (#159)
+     * HU19: Docente asigna a un auxiliar directamente al examen.
+     * POST /api/examenes/{id_examen}/auxiliares
      */
     public function invitarAuxiliar(Request $request, string $idExamen): JsonResponse
     {
@@ -33,29 +35,27 @@ class AuxiliarModuloController extends Controller
         $examen = Examen::find($idExamen);
         if (!$examen) {
             return response()->json([
-                'success' => false,
-                'message' => 'Examen no encontrado.',
+                'success'    => false,
+                'message'    => 'Examen no encontrado.',
                 'error_type' => 'EXAMEN_NO_ENCONTRADO',
             ], 404);
         }
 
-        // Docente intenta invitar a un examen que no es suyo
         if ($docente instanceof Docente && $examen->id_docente !== $docente->id) {
             return response()->json([
-                'success' => false,
-                'message' => 'No tiene permisos para gestionar este examen.',
+                'success'    => false,
+                'message'    => 'No tiene permisos para gestionar este examen.',
                 'error_type' => 'ACCESO_DENEGADO',
             ], 403);
         }
 
         $email = trim(strtolower($request->input('email')));
 
-        // Correo que no corresponde a un estudiante/auxiliar válido
         $estudianteAuxiliar = Estudiante::where(DB::raw('LOWER(email_institucional)'), $email)->first();
         if (!$estudianteAuxiliar) {
             return response()->json([
-                'success' => false,
-                'message' => 'El correo no corresponde a ningún estudiante registrado en el sistema.',
+                'success'    => false,
+                'message'    => 'El correo no corresponde a ningún estudiante registrado en el sistema.',
                 'error_type' => 'AUXILIAR_NO_ENCONTRADO',
             ], 404);
         }
@@ -73,35 +73,54 @@ class AuxiliarModuloController extends Controller
             ], 422);
         }
 
-        // Auxiliar ya invitado al mismo examen
-        $invitacionExistente = ExamenAuxiliar::where('id_examen', $examen->id)
-            ->where('id_auxiliar', $estudianteAuxiliar->id)
-            ->first();
-
-        if ($invitacionExistente) {
-            return response()->json([
-                'success' => false,
-                'message' => "El auxiliar ya tiene una invitación para este examen con estado: {$invitacionExistente->estado}.",
-                'error_type' => 'INVITACION_YA_EXISTE',
-                'estado'     => $invitacionExistente->estado,
-            ], 422);
-        }
-
         if (!$estudianteAuxiliar->es_auxiliar) {
             $estudianteAuxiliar->es_auxiliar = true;
             $estudianteAuxiliar->save();
         }
-    
-        // Crear invitación en estado Pendiente
-        $invitacion = ExamenAuxiliar::create([
-            'id_examen'        => $examen->id,
-            'id_auxiliar'      => $estudianteAuxiliar->id,
-            'estado'           => 'Pendiente',
-            'fecha_invitacion' => Carbon::now('America/La_Paz'),
-        ]);
 
-        // Registro en auditoría
-        $this->registrarAuditoria($request, 'INVITACION_AUXILIAR_CREADA', [
+        $ahora = Carbon::now('America/La_Paz');
+
+        // Si ya existía el registro, lo reactivamos
+        $asignacionExistente = DB::table('examen_auxiliar')
+            ->where('id_examen', $examen->id)
+            ->where('id_auxiliar', $estudianteAuxiliar->id)
+            ->first();
+
+        if ($asignacionExistente) {
+            if ($asignacionExistente->estado === 'Activo') {
+                return response()->json([
+                    'success'    => false,
+                    'message'    => 'El auxiliar ya se encuentra activo en este examen.',
+                    'error_type' => 'AUXILIAR_YA_ASIGNADO',
+                ], 422);
+            }
+
+            DB::table('examen_auxiliar')
+                ->where('id', $asignacionExistente->id)
+                ->update([
+                    'estado'           => 'Activo',
+                    'fecha_asignacion' => $ahora,
+                    'updated_at'       => $ahora,
+                ]);
+
+            $idAsignacion = $asignacionExistente->id;
+        } else {
+            $idAsignacion = (string) Str::uuid();
+            DB::table('examen_auxiliar')->insert([
+                'id'               => $idAsignacion,
+                'id_examen'        => $examen->id,
+                'id_auxiliar'      => $estudianteAuxiliar->id,
+                'estado'           => 'Activo',
+                'fecha_asignacion' => $ahora,
+                'created_at'       => $ahora,
+                'updated_at'       => $ahora,
+            ]);
+        }
+
+        // Rebalancear a los estudiantes
+        $this->redistribuirEstudiantesExamen($examen->id);
+
+        $this->registrarAuditoria($request, 'AUXILIAR_ASIGNADO_DIRECTO', [
             'examen_id'   => $examen->id,
             'auxiliar_id' => $estudianteAuxiliar->id,
             'email'       => $email,
@@ -109,12 +128,70 @@ class AuxiliarModuloController extends Controller
 
         return response()->json([
             'success'    => true,
-            'message'    => 'Invitación enviada exitosamente al auxiliar.',
-            'invitacion' => $invitacion->load('auxiliar:id,nombre,apellido_paterno,apellido_materno,email_institucional'),
+            'message'    => 'Auxiliar asignado exitosamente y padrón de estudiantes distribuido.',
+            'asignacion' => [
+                'id'               => $idAsignacion,
+                'id_examen'        => $examen->id,
+                'id_auxiliar'      => $estudianteAuxiliar->id,
+                'estado'           => 'Activo',
+                'fecha_asignacion' => $ahora->toIso8601String(),
+                'auxiliar'         => [
+                    'id'                  => $estudianteAuxiliar->id,
+                    'nombre'              => $estudianteAuxiliar->nombre,
+                    'apellido_paterno'    => $estudianteAuxiliar->apellido_paterno,
+                    'apellido_materno'    => $estudianteAuxiliar->apellido_materno,
+                    'email_institucional' => $estudianteAuxiliar->email_institucional,
+                ],
+            ],
         ], 201);
     }
+
     /**
-     * Listar auxiliares asignados a un examen (Vista docente)
+     * HU19: Docente desactiva (remueve) a un auxiliar del examen sin borrar el registro.
+     * DELETE /api/examenes/{id_examen}/auxiliares/{id_auxiliar}
+     */
+    public function desvincularAuxiliar(Request $request, string $idExamen, string $idAuxiliar): JsonResponse
+    {
+        $docente = $request->user();
+        $examen = Examen::find($idExamen);
+
+        if (!$examen) {
+            return response()->json(['message' => 'Examen no encontrado.'], 404);
+        }
+
+        if ($docente instanceof Docente && $examen->id_docente !== $docente->id) {
+            return response()->json(['message' => 'No autorizado.'], 403);
+        }
+
+        // Cambiamos el estado a Inactivo en lugar de borrar la fila
+        $actualizado = DB::table('examen_auxiliar')
+            ->where('id_examen', $idExamen)
+            ->where('id_auxiliar', $idAuxiliar)
+            ->update([
+                'estado'     => 'Inactivo',
+                'updated_at' => Carbon::now('America/La_Paz'),
+            ]);
+
+        if (!$actualizado) {
+            return response()->json(['message' => 'El auxiliar no estaba asignado a este examen.'], 404);
+        }
+
+        // Rebalancear estudiantes entre los que sigan 'Activo'
+        $this->redistribuirEstudiantesExamen($idExamen);
+
+        $this->registrarAuditoria($request, 'AUXILIAR_DESACTIVADO', [
+            'examen_id'   => $idExamen,
+            'auxiliar_id' => $idAuxiliar,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Auxiliar desactivado y carga de estudiantes rebalanceada.',
+        ], 200);
+    }
+
+    /**
+     * Listar auxiliares asignados a un examen (Vista docente).
      * GET /api/examenes/{id_examen}/auxiliares
      */
     public function listarAuxiliaresExamen(Request $request, string $idExamen): JsonResponse
@@ -126,8 +203,24 @@ class AuxiliarModuloController extends Controller
             return response()->json(['message' => 'No autorizado.'], 403);
         }
 
-        $asignaciones = ExamenAuxiliar::where('id_examen', $examen->id)
-            ->with('auxiliar:id,nombre,apellido_paterno,apellido_materno,email_institucional,ci')
+        $asignaciones = DB::table('examen_auxiliar as ea')
+            ->join('estudiantes as e', 'ea.id_auxiliar', '=', 'e.id')
+            ->where('ea.id_examen', $examen->id)
+            ->where('ea.estado', 'Activo')
+            ->orderBy('ea.created_at', 'asc')
+            ->select([
+                'ea.id',
+                'ea.id_examen',
+                'ea.id_auxiliar',
+                'ea.estado',
+                'ea.fecha_asignacion',
+                'e.nombre',
+                'e.apellido_paterno',
+                'e.apellido_materno',
+                'e.email_institucional',
+                'e.codigo_sis',
+                'e.ci',
+            ])
             ->get();
 
         return response()->json([
@@ -137,151 +230,48 @@ class AuxiliarModuloController extends Controller
     }
 
     /**
-     * HU19 - T6: Auxiliar ve sus invitaciones pendientes
-     * 
-     */
-    public function misInvitaciones(Request $request): JsonResponse
-    {
-        $auxiliar = $request->user();
-
-        // Examen, docente que lo invita y fecha
-        $invitaciones = ExamenAuxiliar::where('id_auxiliar', $auxiliar->id)
-            ->where('estado', 'Pendiente')
-            ->with([
-                'examen' => function ($q) {
-                    $q->select('id', 'nombre', 'fecha', 'hora_ini', 'hora_fin', 'id_docente', 'id_materia', 'id_aula')
-                      ->with([
-                          'docente:id,nombre,apellido_paterno,apellido_materno,email',
-                          'materia:id,nombre',
-                          'aula:id,nombre',
-                      ]);
-                }
-            ])
-            ->orderBy('fecha_invitacion', 'desc')
-            ->get()
-            ->map(function ($inv) {
-                $doc = $inv->examen?->docente;
-                $docenteNombre = $doc ? trim("{$doc->nombre} {$doc->apellido_paterno} {$doc->apellido_materno}") : 'Docente titular';
-
-                return [
-                    'id_invitacion'    => $inv->id,
-                    'estado'           => $inv->estado,
-                    'fecha_invitacion' => $inv->fecha_invitacion,
-                    'examen'           => [
-                        'id'         => $inv->examen?->id,
-                        'nombre'     => $inv->examen?->nombre,
-                        'materia'    => $inv->examen?->materia?->nombre,
-                        'aula'       => $inv->examen?->aula?->nombre ?? $inv->examen?->aula,
-                        'fecha'      => $inv->examen?->fecha,
-                        'hora'       => trim("{$inv->examen?->hora_ini} - {$inv->examen?->hora_fin}"),
-                        'docente'    => $docenteNombre,
-                    ],
-                ];
-            });
-
-        return response()->json([
-            'success' => true,
-            'data'    => $invitaciones,
-        ], 200);
-    }
-
-    /**
-     * HU19 - T6: Auxiliar acepta o rechaza una invitación 
-     *
-     */
-    public function responderInvitacion(Request $request, string $idInvitacion): JsonResponse
-    {
-        $auxiliar = $request->user();
-
-        $request->validate([
-            'accion' => ['required', 'in:Aceptar,Rechazar'],
-        ]);
-
-        $invitacion = ExamenAuxiliar::with('examen')->find($idInvitacion);
-        if (!$invitacion) {
-            return response()->json([
-                'success'    => false,
-                'message'    => 'Invitación no encontrada.',
-                'error_type' => 'INVITACION_NO_ENCONTRADA',
-            ], 404);
-        }
-
-        // Auxiliar intenta responder una invitación ajena
-        if ($invitacion->id_auxiliar !== $auxiliar->id) {
-            return response()->json([
-                'success'    => false,
-                'message'    => 'No tiene autorización sobre esta invitación.',
-                'error_type' => 'ACCESO_DENEGADO',
-            ], 403);
-        }
-
-        // La invitación ya fue respondida previamente
-        if ($invitacion->estado !== 'Pendiente') {
-            return response()->json([
-                'success'    => false,
-                'message'    => "Esta invitación ya fue respondida anteriormente con estado: {$invitacion->estado}.",
-                'error_type' => 'INVITACION_YA_RESPONDIDA',
-            ], 422);
-        }
-
-        $nuevoEstado = $request->input('accion') === 'Aceptar' ? 'Aceptada' : 'Rechazada';
-
-        $invitacion->estado = $nuevoEstado;
-        $invitacion->fecha_respuesta = Carbon::now('America/La_Paz');
-        $invitacion->save();
-
-        // Auditoría de respuesta
-        $this->registrarAuditoria($request, 'INVITACION_AUXILIAR_RESPONDIDA', [
-            'invitacion_id' => $invitacion->id,
-            'examen_id'     => $invitacion->id_examen,
-            'auxiliar_id'   => $auxiliar->id,
-            'nuevo_estado'  => $nuevoEstado,
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => $nuevoEstado === 'Aceptada' 
-                ? 'Invitación aceptada. El examen ha sido añadido a tu lista.' 
-                : 'Invitación rechazada.',
-            'estado'  => $nuevoEstado,
-        ], 200);
-    }
-
-    /**
-     * HU19 - T6: Auxiliar consulta sus exámenes asignados (#160)
+     * Auxiliar consulta sus exámenes asignados.
      * GET /api/auxiliar/mis-examenes
      */
     public function misExamenesAsignados(Request $request): JsonResponse
     {
         $auxiliar = $request->user();
 
-        // Solo exámenes con asignación Aceptada
-        $examenes = ExamenAuxiliar::where('id_auxiliar', $auxiliar->id)
-            ->where('estado', 'Aceptada')
-            ->with([
-                'examen' => function ($q) {
-                    $q->with([
-                        'docente:id,nombre,apellido_paterno,apellido_materno',
-                        'materia:id,nombre',
-                        'aula:id,nombre',
-                    ]);
-                }
+        $examenes = DB::table('examen_auxiliar as ea')
+            ->join('examenes as ex', 'ea.id_examen', '=', 'ex.id')
+            ->leftJoin('materias as m', 'ex.id_materia', '=', 'm.id')
+            ->leftJoin('aulas as a', 'ex.id_aula', '=', 'a.id')
+            ->leftJoin('docente as d', 'ex.id_docente', '=', 'd.id')
+            ->where('ea.id_auxiliar', $auxiliar->id)
+            ->where('ea.estado', 'Activo')
+            ->orderBy('ex.fecha', 'asc')
+            ->select([
+                'ex.id as id_examen',
+                'ex.nombre',
+                'm.nombre as materia',
+                'a.nombre as aula',
+                'ex.fecha',
+                'ex.hora_ini',
+                'ex.hora_fin',
+                'd.nombre as docente_nombre',
+                'd.apellido_paterno as docente_paterno',
+                'd.apellido_materno as docente_materno',
+                'ea.estado as estado_asignacion',
             ])
             ->get()
-            ->map(function ($asig) {
-                $ex = $asig->examen;
-                $doc = $ex?->docente;
+            ->map(function ($ex) {
+                $docenteNombre = trim("{$ex->docente_nombre} {$ex->docente_paterno} {$ex->docente_materno}");
 
                 return [
-                    'id_examen' => $ex?->id,
-                    'nombre'    => $ex?->nombre,
-                    'materia'   => $ex?->materia?->nombre,
-                    'aula'      => $ex?->aula?->nombre ?? $ex?->aula,
-                    'fecha'     => $ex?->fecha,
-                    'hora_ini'  => $ex?->hora_ini,
-                    'hora_fin'  => $ex?->hora_fin,
-                    'docente'   => $doc ? trim("{$doc->nombre} {$doc->apellido_paterno} {$doc->apellido_materno}") : null,
-                    'estado_asignacion' => $asig->estado,
+                    'id_examen'         => $ex->id_examen,
+                    'nombre'            => $ex->nombre,
+                    'materia'           => $ex->materia,
+                    'aula'              => $ex->aula,
+                    'fecha'             => $ex->fecha,
+                    'hora_ini'          => $ex->hora_ini,
+                    'hora_fin'          => $ex->hora_fin,
+                    'docente'           => $docenteNombre !== '' ? $docenteNombre : null,
+                    'estado_asignacion' => $ex->estado_asignacion,
                 ];
             });
 
@@ -304,7 +294,7 @@ class AuxiliarModuloController extends Controller
             'user_id'           => $user->id,
             'rol_en_el_momento' => strtolower($rol),
             'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : $user->nombre,
-            'usuario_email'     => $user->email ?? null,
+            'usuario_email'     => $user->email ?? $user->email_institucional ?? null,
             'modulo'            => 'MODULO_AUXILIAR',
             'accion'            => $accion,
             'ip_origen'         => $request->ip() ?? '127.0.0.1',
