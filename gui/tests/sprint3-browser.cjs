@@ -57,6 +57,21 @@ async function apiJson(context, route, token = fixture.tokens.docente) {
         await page.goto(`${origin}/dashboard`);
         await page.getByRole('heading', { name: `Dashboard de ${title}`, exact: true }).waitFor();
         await screenshot(page, `HU20-${role}-${width}`);
+        if (role === 'auxiliar') {
+          if (width === 390) await page.getByRole('button', { name: 'Alternar menú de navegación' }).click();
+          const misExamenes = page.getByRole('button', { name: 'Mis exámenes', exact: true });
+          await misExamenes.waitFor();
+          assert.equal(await page.getByRole('button', { name: 'Control de ingreso', exact: true }).count(), 0, 'HU20: menú auxiliar mantiene ruta /control inexistente');
+          assert.equal(await page.getByRole('button', { name: 'Aulas', exact: true }).count(), 0, 'HU20: menú auxiliar ofrece /aulas restringida');
+          await misExamenes.click();
+          await page.waitForURL('**/examenes');
+          await page.getByRole('heading', { name: 'Exámenes', exact: true }).waitFor();
+          await page.goto(`${origin}/examenes/${fixture.exam}?tab=editar`);
+          await page.getByRole('tab', { name: 'Ficha Técnica', exact: true }).waitFor();
+          await page.getByText('Ficha Técnica de la Evaluación', { exact: true }).waitFor();
+          assert.equal(await page.getByRole('tab', { name: 'Modificar Examen', exact: true }).count(), 0, 'HU20: auxiliar ve edición de examen');
+          await screenshot(page, `HU20-auxiliar-detalle-${width}`);
+        }
         if (role === 'estudiante') await page.getByText('No hay exámenes asociados a tu usuario.').waitFor();
         await context.close();
       }
