@@ -12,8 +12,9 @@ use Illuminate\Support\Facades\DB;
 
 class HabilitacionExamenController extends Controller
 {
-    public function index(string $examenId): JsonResponse
+    public function index(Request $request, string $examenId): JsonResponse
     {
+        \App\Services\AccesoExamen::autorizar($request, \App\Services\AccesoExamen::buscar($examenId));
         $examen = Examen::with(['estudiantes' => function ($query) {
             $query->select(
                 'estudiantes.id', 

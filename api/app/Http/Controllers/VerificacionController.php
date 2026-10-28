@@ -41,36 +41,12 @@ class VerificacionController extends Controller
         }
 
         $usuario = $request->user();
-        $rol = $usuario ? ($usuario->rol ?? class_basename($usuario)) : 'docente';
+        $rol = \App\Services\RolOperativo::actual($request);
         $userId = $usuario?->id;
-        $esAuxiliar = false;
-
-        // Validar permisos del verificador (Docente o Auxiliar)
-        if ($usuario && method_exists($usuario, 'tokenCan')) {
-            if ($usuario->tokenCan('role:auxiliar') || strtolower($rol) === 'auxiliar') {
-                $esAuxiliar = true;
-                $asignacion = DB::table('examen_auxiliar')
-                    ->where('id_examen', $examen->id)
-                    ->where('id_auxiliar', $usuario->id)
-                    ->whereIn('estado', ['Activo', 'Aceptada'])
-                    ->exists();
-
-                if (!$asignacion) {
-                    return response()->json([
-                        'success'   => false,
-                        'resultado' => 'AUXILIAR_NO_ASIGNADO',
-                        'message'   => 'Acceso denegado: no cuenta con asignación activa para este examen.',
-                    ], 403);
-                }
-            } elseif ($usuario->tokenCan('role:docente') || strtolower($rol) === 'docente') {
-                if ($examen->id_docente !== $usuario->id) {
-                    return response()->json([
-                        'success'   => false,
-                        'resultado' => 'DOCENTE_NO_AUTORIZADO',
-                        'message'   => 'Acceso denegado: no puede gestionar el escáner de un examen ajeno.',
-                    ], 403);
-                }
-            }
+        $esAuxiliar = $rol === 'auxiliar';
+        \App\Services\AccesoExamen::autorizar($request, $examen);
+        if (str_contains($trimmedQr, '.') && !str_starts_with($trimmedQr, '{')) {
+            \App\Services\IdentificadorQr::leer($trimmedQr, $idExamen);
         }
 
         // EXTRACCIÓN Y PARSEO DEL QR
@@ -154,6 +130,11 @@ class VerificacionController extends Controller
             $estudiante = Estudiante::where('codigo_sis', trim($codigoSis))->first();
         }
 
+        if ($estudiante && \App\Models\Expulsion::where('id_examen', $examen->id)->where('id_estudiante', $estudiante->id)->exists()) {
+            $this->registrarIntentoYAuditoria($request, $examen->id, $estudiante->id, 'EXPULSADO', $rol, $usuario?->id, $estudiante->codigo_sis);
+            return response()->json(['success' => false, 'resultado' => 'EXPULSADO', 'message' => 'El estudiante tiene una expulsión vigente.', 'error_type' => 'EXPULSADO'], 403);
+        }
+
         // EXAMEN QUE YA ACABÓ
         $ahora = Carbon::now('America/La_Paz');
         $estadoExamen = strtolower(trim($examen->estado ?? ''));
@@ -186,7 +167,7 @@ class VerificacionController extends Controller
                 $examen->id,
                 $estudiante?->id,
                 $codigoSis ?? 'DESCONOCIDO',
-                'RECHAZADO_NO_INSCRITO',
+                'ERROR_DATOS_INVALIDOS',
                 'El examen ya ha finalizado. No se permiten más accesos.',
                 ['raw_content' => substr($rawQr, 0, 100)]
             );
@@ -317,7 +298,7 @@ class VerificacionController extends Controller
         }
 
         // CONTROL DE ASIGNACIÓN: EL DOCENTE REVISA CUALQUIERA, EL AUXILIAR SOLO SU MÓDULO
-        if ($esAuxiliar && $inscripcion->id_auxiliar !== $userId) {
+        if ($esAuxiliar && isset($inscripcion->id_auxiliar) && $inscripcion->id_auxiliar !== $userId) {
             $this->registrarIntentoYAuditoria(
                 $request,
                 $examen->id,
@@ -332,7 +313,7 @@ class VerificacionController extends Controller
                 $examen->id,
                 $estudiante->id,
                 $estudiante->codigo_sis,
-                'RECHAZADO_NO_INSCRITO',
+                'ERROR_DATOS_INVALIDOS',
                 'El estudiante no está asignado al módulo de este auxiliar.',
                 $qrData
             );
@@ -368,7 +349,7 @@ class VerificacionController extends Controller
                 $examen->id,
                 $estudiante->id,
                 $estudiante->codigo_sis,
-                'RECHAZADO_NO_INSCRITO',
+                'ERROR_DATOS_INVALIDOS',
                 'El estudiante presentó un QR generado para otro examen o materia.',
                 $qrData
             );
@@ -449,6 +430,7 @@ class VerificacionController extends Controller
             });
         } catch (QueryException $e) {
             if ($e->getCode() === '23505') {
+                $this->registrarLog($examen->id, $estudiante->id, $estudiante->codigo_sis, 'RECHAZADO_YA_INGRESO', 'Ingreso concurrente duplicado.', null, true);
                 $this->registrarIntentoYAuditoria(
                     $request,
                     $examen->id,
@@ -512,12 +494,18 @@ class VerificacionController extends Controller
         }
 
         $usuario = $request->user();
-        $rol = $usuario ? ($usuario->rol ?? class_basename($usuario)) : 'docente';
-        $esAuxiliar = ($usuario && ($usuario->tokenCan('role:auxiliar') || strtolower($rol) === 'auxiliar'));
+        $rol = \App\Services\RolOperativo::actual($request);
+        \App\Services\AccesoExamen::autorizar($request, $examen);
+        $esAuxiliar = $rol === 'auxiliar';
 
         $estudiante = Estudiante::find($idEstudiante);
         if (!$estudiante) {
             return response()->json(['message' => 'Estudiante no encontrado.'], 404);
+        }
+
+        if ($estudiante && \App\Models\Expulsion::where('id_examen', $examen->id)->where('id_estudiante', $estudiante->id)->exists()) {
+            $this->registrarIntentoYAuditoria($request, $examen->id, $estudiante->id, 'EXPULSADO', $rol, $usuario?->id, $estudiante->codigo_sis);
+            return response()->json(['success' => false, 'resultado' => 'EXPULSADO', 'message' => 'El estudiante tiene una expulsión vigente.', 'error_type' => 'EXPULSADO'], 403);
         }
 
         $ingresoPrevio = LogAsistencia::where('id_examen', $examen->id)
@@ -526,6 +514,7 @@ class VerificacionController extends Controller
             ->first();
 
         if ($ingresoPrevio) {
+            $this->registrarLog($examen->id, $estudiante->id, $estudiante->codigo_sis, 'RECHAZADO_YA_INGRESO', 'Reingreso manual rechazado.', ['tipo_ingreso' => 'MANUAL'], true);
             $this->registrarIntentoYAuditoria(
                 $request,
                 $examen->id,
@@ -550,6 +539,7 @@ class VerificacionController extends Controller
             ->first();
 
         if (!$inscripcion) {
+            $this->registrarLog($examen->id, $estudiante->id, $estudiante->codigo_sis, 'RECHAZADO_NO_INSCRITO', 'Estudiante no inscrito.', ['tipo_ingreso' => 'MANUAL'], true);
             $this->registrarIntentoYAuditoria(
                 $request,
                 $examen->id,
@@ -564,13 +554,14 @@ class VerificacionController extends Controller
         }
 
         // Auxiliar solo puede autorizar manualmente a los suyos; docente a cualquiera
-        if ($esAuxiliar && $inscripcion->id_auxiliar !== $usuario->id) {
+        if ($esAuxiliar && isset($inscripcion->id_auxiliar) && $inscripcion->id_auxiliar !== $usuario->id) {
             return response()->json([
                 'message' => 'Estudiante no asignado a su módulo para ingreso manual.'
             ], 403);
         }
 
         if (strcasecmp(trim($inscripcion->estado ?? ''), 'Habilitado') !== 0) {
+            $this->registrarLog($examen->id, $estudiante->id, $estudiante->codigo_sis, 'RECHAZADO_INHABILITADO', 'Estudiante inhabilitado.', ['tipo_ingreso' => 'MANUAL'], true);
             $this->registrarIntentoYAuditoria(
                 $request,
                 $examen->id,

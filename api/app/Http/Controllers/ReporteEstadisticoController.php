@@ -31,7 +31,7 @@ class ReporteEstadisticoController extends Controller
             ], 403);
         }
 
-        $examen = Examen::find($idExamen);
+        $examen = \App\Services\AccesoExamen::buscar($idExamen);
 
         if (!$examen) {
             return response()->json([
@@ -57,7 +57,7 @@ $examenDentroDelRango =
     && (!isset($filtros['fecha_hasta']) || $fechaExamen <= $filtros['fecha_hasta']);
 
         // Asistencia y ausencia se calculan desde la nómina del examen.
-        $asistencia = DB::table('estudiante_examen')
+        $asistencia = \App\Services\AsistenciaExamen::nomina($examen->id)
             ->where('id_examen', $examen->id)
             ->when(!$examenDentroDelRango, fn ($query) => $query->whereRaw('1 = 0'))
             ->selectRaw('COUNT(*) AS total_inscritos')
@@ -113,7 +113,7 @@ $examenDentroDelRango =
         ], 403);
     }
 
-    $examen = Examen::find($idExamen);
+    $examen = \App\Services\AccesoExamen::buscar($idExamen);
 
     if (!$examen) {
         return response()->json([
@@ -146,7 +146,7 @@ if (!in_array($formato, ['xlsx', 'pdf'], true)) {
         && (!isset($filtros['fecha_hasta']) || $fechaExamen <= $filtros['fecha_hasta']);
 
     // Resumen de asistencia.
-    $asistencia = DB::table('estudiante_examen')
+    $asistencia = \App\Services\AsistenciaExamen::nomina($examen->id)
         ->where('id_examen', $examen->id)
         ->when(!$examenDentroDelRango, fn ($query) => $query->whereRaw('1 = 0'))
         ->selectRaw('COUNT(*) AS total_inscritos')
@@ -173,7 +173,7 @@ if (!in_array($formato, ['xlsx', 'pdf'], true)) {
         ->first();
 
     // Detalle de estudiantes inscritos y su asistencia.
-    $estudiantes = DB::table('estudiante_examen as ee')
+    $estudiantes = \App\Services\AsistenciaExamen::nomina($examen->id)
         ->join('estudiantes as e', 'e.id', '=', 'ee.id_estudiante')
         ->where('ee.id_examen', $examen->id)
         ->when(!$examenDentroDelRango, fn ($query) => $query->whereRaw('1 = 0'))
@@ -214,7 +214,7 @@ if (!in_array($formato, ['xlsx', 'pdf'], true)) {
         ->get();
 
     // Agrupar los ingresos por hora y completar las 24 franjas.
-    $resultadosFranjas = DB::table('estudiante_examen')
+    $resultadosFranjas = \App\Services\AsistenciaExamen::nomina($examen->id)
         ->where('id_examen', $examen->id)
         ->whereNotNull('fecha_ingreso')
         ->when(!$examenDentroDelRango, fn ($query) => $query->whereRaw('1 = 0'))
@@ -605,7 +605,7 @@ if (!in_array($formato, ['xlsx', 'pdf'], true)) {
             ], 403);
         }
 
-        $examen = Examen::find($idExamen);
+        $examen = \App\Services\AccesoExamen::buscar($idExamen);
 
         if (!$examen) {
             return response()->json([
@@ -631,7 +631,7 @@ if (!in_array($formato, ['xlsx', 'pdf'], true)) {
             && (!isset($filtros['fecha_hasta']) || $fechaExamen <= $filtros['fecha_hasta']);
 
         // Agrupar los ingresos efectivos por hora local de Bolivia.
-        $resultados = DB::table('estudiante_examen')
+        $resultados = \App\Services\AsistenciaExamen::nomina($examen->id)
             ->where('id_examen', $examen->id)
             ->when(!$examenDentroDelRango, fn ($query) => $query->whereRaw('1 = 0'))
             ->whereNotNull('fecha_ingreso')
