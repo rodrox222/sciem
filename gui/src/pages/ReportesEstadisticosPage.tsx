@@ -183,9 +183,11 @@ export default function ReportesEstadisticosPage() {
     if (!reporte || descargando || !examenId || !examenElegido || filtrosSinAplicar || formatoDescarga !== 'xlsx') return
     setDescargando(true)
     setAvisoDescarga(null)
+    const controlador = new AbortController()
+    const limite = window.setTimeout(() => controlador.abort(), 60_000)
 
     try {
-      const respuesta = await reportesService.descargar(examenId, filtros)
+      const respuesta = await reportesService.descargar(examenId, filtros, controlador.signal)
       if (respuesta.blob.size < 4) {
         throw new Error('El servidor devolvió un archivo vacío o incompleto.')
       }
@@ -218,8 +220,14 @@ export default function ReportesEstadisticosPage() {
         window.setTimeout(() => URL.revokeObjectURL(archivoUrl), 60_000)
       }
     } catch (error) {
-      setAvisoDescarga({ tipo: 'error', mensaje: describirError(error) })
+      setAvisoDescarga({
+        tipo: 'error',
+        mensaje: controlador.signal.aborted
+          ? 'La generación del archivo superó el tiempo máximo de espera. Intenta nuevamente.'
+          : describirError(error),
+      })
     } finally {
+      window.clearTimeout(limite)
       setDescargando(false)
     }
   }
@@ -408,6 +416,15 @@ export default function ReportesEstadisticosPage() {
           </section>
 
           {sinRegistros && <p className="rounded-xl border border-dashed border-border bg-card p-4 text-sm text-muted-foreground">No hay registros estadísticos para el examen y las fechas seleccionadas. Los valores oficiales reportados son cero.</p>}
+          {resumen.total_asistentes + resumen.total_ausentes !== resumen.total_inscritos && (
+            <Alert variant="destructive" role="alert">
+              <AlertTriangle aria-hidden="true" />
+              <AlertTitle>Los totales de asistencia no coinciden</AlertTitle>
+              <AlertDescription>
+                Asistentes ({resumen.total_asistentes}) + ausentes ({resumen.total_ausentes}) no es igual al total inscrito ({resumen.total_inscritos}). Verifica la información del servidor antes de entregar este reporte.
+              </AlertDescription>
+            </Alert>
+          )}
 
           <section className="space-y-4" aria-labelledby="titulo-indicadores">
             <div className="flex flex-wrap items-end justify-between gap-2">
