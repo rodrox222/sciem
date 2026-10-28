@@ -72,6 +72,8 @@ jobs:
           const qr = JSON.parse(fs.readFileSync(process.env.SCIEM_BROWSER_FIXTURE)).qr;
           require(path.join(folder, 'node_modules/qrcode')).toFile(path.join(folder, 'qr.png'), qr, { width: 288, margin: 4 });
           JS
+          # ffmpeg is not guaranteed on GitHub-hosted Ubuntu runners; fail before camera QA if unavailable.
+          if ! command -v ffmpeg > /dev/null; then sudo apt-get update -qq && sudo apt-get install -y ffmpeg; fi
           ffmpeg -hide_banner -loglevel error -loop 1 -i "$RUNNER_TEMP/sciem-browser/qr.png" -vf 'pad=640:480:(ow-iw)/2:(oh-ih)/2:color=white,format=yuv420p' -t 3 -r 10 "$SCIEM_QR_VIDEO"
           npm --prefix gui ci
           VITE_API_URL=http://127.0.0.1:8200 npm --prefix gui run build 2>&1 | tee qa-evidence/frontend-build.txt
