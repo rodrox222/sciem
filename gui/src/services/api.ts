@@ -1,3 +1,5 @@
+import { apiUrl } from './apiUrl';
+
 export type ValidationErrors = Record<string, string[]>;
 
 export class ApiError extends Error {
@@ -13,18 +15,6 @@ export class ApiError extends Error {
     this.data = data;
   }
 }
-
-// Resuelve la URL: si no existe en .env, usa directamente la IP de tu servidor local
-const getBaseUrl = (): string => {
-  const envUrl = import.meta.env.VITE_API_URL?.trim();
-  const url = envUrl || 'http://192.168.1.17:8200';
-  return url.replace(/\/api\/?$/, '').replace(/\/$/, '');
-};
-
-//const getBaseUrl = (): string => {
-//  const envUrl = import.meta.env.VITE_API_URL?.trim();
-//  return (envUrl || '/api').replace(/\/$/, '');
-//};
 
 const parseResponse = async (response: Response): Promise<unknown> => {
   if (response.status === 204) return null;
@@ -59,15 +49,7 @@ export async function apiRequest<T>(
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  //const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  //const url = `${getBaseUrl()}${cleanPath}`;
-  //const method = (options.method ?? 'GET').toUpperCase();
-
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  
-  // Garantiza que SIEMPRE viaje hacia /api/... sin duplicar /api/api
-  const apiPath = cleanPath.startsWith('/api/') ? cleanPath : `/api${cleanPath}`;
-  const url = `${getBaseUrl()}${apiPath}`;
+  const url = apiUrl(path);
   const method = (options.method ?? 'GET').toUpperCase();
 
   let response: Response;
@@ -152,8 +134,7 @@ export async function apiDownload(
   path: string,
   options: { signal?: AbortSignal } = {},
 ): Promise<{ blob: Blob; filename: string | null }> {
-  const pathWithSlash = path.startsWith('/') ? path : `/${path}`
-  const url = `${getBaseUrl()}${pathWithSlash.replace(/^\/api(?=\/)/, '')}`
+  const url = apiUrl(path)
   const headers = new Headers({ Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream' })
   const token = localStorage.getItem('auth_token')
   if (token) headers.set('Authorization', `Bearer ${token}`)
