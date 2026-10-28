@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Admin;
-use App\Models\Auxiliar;
 use App\Models\Docente;
 use App\Models\Examen;
 use Illuminate\Http\JsonResponse;
@@ -16,11 +15,10 @@ class MonitoreoController extends Controller
     {
         $usuario = $request->user();
 
-        if (!$usuario || !in_array(get_class($usuario), [
-            Admin::class,
-            Docente::class,
-            Auxiliar::class,
-        ], true)) {
+        if (
+            !$usuario ||
+            !in_array(get_class($usuario), [Admin::class, Docente::class], true)
+        ) {
             return response()->json([
                 'message' => 'No tienes permiso para consultar el monitoreo.',
             ], 403);
@@ -34,18 +32,25 @@ class MonitoreoController extends Controller
             ], 404);
         }
 
-        if ($usuario instanceof Docente && $examen->id_docente !== $usuario->id) {
+        if (
+            $usuario instanceof Docente &&
+            $examen->id_docente !== $usuario->id
+        ) {
             return response()->json([
                 'message' => 'No tienes permiso para consultar este examen.',
             ], 403);
         }
 
-        $totales = DB::table('estudiante_examen')
+        $totalEstudiantes = DB::table('estudiante_examen')
             ->where('id_examen', $examen->id)
-            ->selectRaw('COUNT(*) AS total_estudiantes')
-            ->selectRaw('COUNT(fecha_ingreso) AS total_ingresados')
-            ->selectRaw('COUNT(*) - COUNT(fecha_ingreso) AS total_ausentes')
-            ->first();
+            ->count();
+
+        $totalIngresados = DB::table('logs_asistencias')
+            ->where('id_examen', $examen->id)
+            ->where('resultado', 'PERMITIDO')
+            ->whereNotNull('id_estudiante')
+            ->distinct()
+            ->count('id_estudiante');
 
         return response()->json([
             'examen' => [
@@ -54,21 +59,21 @@ class MonitoreoController extends Controller
                 'fecha' => $examen->fecha?->format('Y-m-d'),
             ],
             'resumen' => [
-                'total_estudiantes' => (int) $totales->total_estudiantes,
-                'total_ingresados' => (int) $totales->total_ingresados,
-                'total_ausentes' => (int) $totales->total_ausentes,
+                'total_estudiantes' => (int) $totalEstudiantes,
+                'total_ingresados' => (int) $totalIngresados,
+                'total_ausentes' => max(0, (int) $totalEstudiantes - (int) $totalIngresados),
             ],
         ]);
     }
+
     public function estudiantes(Request $request, string $idExamen): JsonResponse
     {
         $usuario = $request->user();
 
-        if (!$usuario || !in_array(get_class($usuario), [
-            Admin::class,
-            Docente::class,
-            Auxiliar::class,
-        ], true)) {
+        if (
+            !$usuario ||
+            !in_array(get_class($usuario), [Admin::class, Docente::class], true)
+        ) {
             return response()->json([
                 'message' => 'No tienes permiso para consultar el monitoreo.',
             ], 403);
@@ -82,7 +87,10 @@ class MonitoreoController extends Controller
             ], 404);
         }
 
-        if ($usuario instanceof Docente && $examen->id_docente !== $usuario->id) {
+        if (
+            $usuario instanceof Docente &&
+            $examen->id_docente !== $usuario->id
+        ) {
             return response()->json([
                 'message' => 'No tienes permiso para consultar este examen.',
             ], 403);
@@ -92,38 +100,41 @@ class MonitoreoController extends Controller
             'estado' => ['required', 'in:ingresados,ausentes'],
         ]);
 
-        $consulta = $examen->estudiantes()
+        $ingresos = DB::table('logs_asistencias')
+            ->select('id_estudiante')
+            ->selectRaw('MIN(fecha_escaneo) AS fecha_ingreso')
+            ->where('id_examen', $examen->id)
+            ->where('resultado', 'PERMITIDO')
+            ->whereNotNull('id_estudiante')
+            ->groupBy('id_estudiante');
+
+        $consulta = DB::table('estudiante_examen as ee')
+            ->join('estudiantes as e', 'e.id', '=', 'ee.id_estudiante')
+            ->leftJoinSub($ingresos, 'ingresos', function ($join) {
+                $join->on('ingresos.id_estudiante', '=', 'ee.id_estudiante');
+            })
+            ->where('ee.id_examen', $examen->id)
             ->select([
-                'estudiantes.id',
-                'estudiantes.codigo_sis',
-                'estudiantes.ci',
-                'estudiantes.nombre',
-                'estudiantes.apellido_paterno',
-                'estudiantes.apellido_materno',
+                'e.id',
+                'e.codigo_sis',
+                'e.ci',
+                'e.nombre',
+                'e.apellido_paterno',
+                'e.apellido_materno',
+                'ingresos.fecha_ingreso',
             ]);
 
         if ($datos['estado'] === 'ingresados') {
-            $consulta->wherePivotNotNull('fecha_ingreso');
+            $consulta->whereNotNull('ingresos.fecha_ingreso');
         } else {
-            $consulta->wherePivotNull('fecha_ingreso');
+            $consulta->whereNull('ingresos.fecha_ingreso');
         }
 
         $estudiantes = $consulta
-            ->orderBy('estudiantes.apellido_paterno')
-            ->orderBy('estudiantes.apellido_materno')
-            ->orderBy('estudiantes.nombre')
-            ->get()
-            ->map(function ($estudiante) {
-                return [
-                    'id' => $estudiante->id,
-                    'codigo_sis' => $estudiante->codigo_sis,
-                    'ci' => $estudiante->ci,
-                    'nombre' => $estudiante->nombre,
-                    'apellido_paterno' => $estudiante->apellido_paterno,
-                    'apellido_materno' => $estudiante->apellido_materno,
-                    'fecha_ingreso' => $estudiante->pivot->fecha_ingreso,
-                ];
-            });
+            ->orderBy('e.apellido_paterno')
+            ->orderBy('e.apellido_materno')
+            ->orderBy('e.nombre')
+            ->get();
 
         return response()->json([
             'examen' => [
