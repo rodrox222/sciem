@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { authService } from '@/services/auth.service'
 import { configService } from '@/services/config.service'
+import { apiUrl } from '@/services/apiUrl'
 
 const COUNTDOWN_SECONDS = 60
 const STORAGE_KEY = 'sci_last_activity'
@@ -27,15 +28,11 @@ export const useIdleTimer = () => {
     }
 
     try {
-      const rawUrl = (import.meta.env.VITE_API_URL?.trim() || 'http://localhost:8200/api') //http://192.168.1.17:8200
-        .replace(/\/api\/?$/, '')
-        .replace(/\/$/, '')
-
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 1000)
 
       // Ping ligero al backend
-      await fetch(`${rawUrl}/api/health`, {
+      await fetch(apiUrl('/health'), {
         method: 'HEAD',
         mode: 'no-cors',
         signal: controller.signal,
