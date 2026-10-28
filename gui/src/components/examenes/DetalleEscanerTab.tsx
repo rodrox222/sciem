@@ -153,6 +153,75 @@ const mapVerificationError = (error: unknown): ResultadoValidacionAcceso => {
   }
 }
 
+const mapOfflineResultToDialog = (resOffline: {
+  codigo?: string
+  mensaje: string
+  estudiante?: any
+  detalles?: any
+}): ResultadoValidacionAcceso => {
+  switch (resOffline.codigo) {
+    case 'RECHAZADO_YA_INGRESO':
+    case 'YA_INGRESO':
+      return {
+        estado: 'rechazado',
+        codigo: 'YA_INGRESO',
+        motivo: resOffline.mensaje,
+        primerIngreso: resOffline.detalles?.primer_ingreso,
+      }
+    case 'RECHAZADO_INHABILITADO':
+    case 'INHABILITADO':
+      return {
+        estado: 'rechazado',
+        codigo: 'INHABILITADO',
+        motivo: resOffline.detalles?.motivo_inhabilitacion ?? resOffline.mensaje,
+      }
+    case 'RECHAZADO_NO_INSCRITO':
+    case 'NO_INSCRITO':
+      return {
+        estado: 'rechazado',
+        codigo: 'NO_INSCRITO',
+        motivo: resOffline.mensaje,
+      }
+    case 'RECHAZADO_NO_REGISTRADO':
+    case 'NO_REGISTRADO':
+      return {
+        estado: 'rechazado',
+        codigo: 'NO_INSCRITO',
+        motivo: resOffline.mensaje,
+      }
+    case 'RECHAZADO_EXAMEN_DISTINTO':
+    case 'EXAMEN_DISTINTO':
+      return {
+        estado: 'rechazado',
+        codigo: 'MATERIA_INCORRECTA',
+        motivo: resOffline.mensaje,
+      }
+    case 'RECHAZADO_NO_ASIGNADO':
+    case 'NO_ASIGNADO':
+      return {
+        estado: 'rechazado',
+        codigo: 'ERROR_VALIDACION',
+        motivo: resOffline.mensaje,
+      }
+    case 'RECHAZADO_EXAMEN_CONCLUIDO':
+    case 'EXAMEN_FINALIZADO':
+    case 'HORARIO_EXPIRADO':
+    case 'ERROR_DATOS_INVALIDOS':
+    case 'QR_INVALIDO':
+      return {
+        estado: 'rechazado',
+        codigo: 'QR_INVALIDO',
+        motivo: resOffline.mensaje,
+      }
+    default:
+      return {
+        estado: 'rechazado',
+        codigo: 'ERROR_VALIDACION',
+        motivo: resOffline.mensaje,
+      }
+  }
+}
+
 export function DetalleEscanerTab({ exam }: { exam: Examen }) {
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
@@ -231,7 +300,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
     setIsValidating(true)
 
     try {
-      // 1. Intentar validar directamente contra la API de Laravel
+      // Intentar validar directamente contra la API de Laravel
       const res = await api.post<VerificationResponse>(
         `/examenes/${exam.id}/verificar-ingreso`,
         { qr_data: decodedText }
@@ -249,7 +318,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
       void loadAsistencias()
       setShowModal(true)
     } catch (error: any) {
-      // 2. Solo cortamos si el servidor SÍ respondió con un código HTTP real (400, 403, 409)
+      // Solo cortamos si el servidor SÍ respondió con un código HTTP real (400, 403, 409)
       const tieneRespuestaDelServidor = Boolean(error?.status && error.status >= 400)
 
       if (tieneRespuestaDelServidor && error instanceof ApiError) {
@@ -258,7 +327,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
         return
       }
 
-      // 3. Respaldo Offline: Si no hubo respuesta del servidor (sin Wi-Fi / red caída)
+      // Si no hubo respuesta del servidor (sin Wi-Fi / red caída)
       console.warn('Sin conexión al servidor. Procesando escaneo en modo offline...')
 
       try {
@@ -275,31 +344,21 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
           })
           void loadAsistencias()
         } else {
-          const esDuplicado =
-            resOffline.mensaje?.toLowerCase().includes('ya ingresó') ||
-            resOffline.mensaje?.toLowerCase().includes('duplicado') ||
-            resOffline.detalles?.resultado === 'RECHAZADO_YA_INGRESO'
+          // Extrae el código ya sea de primer nivel o de detalles
+          const codigoError = resOffline.codigo || resOffline.detalles?.codigo
 
-          const esInhabilitado =
-            resOffline.mensaje?.toLowerCase().includes('inhabilitado') ||
-            resOffline.mensaje?.toLowerCase().includes('sin cumplir') ||
-            resOffline.detalles?.resultado === 'RECHAZADO_INHABILITADO'
-
-          setValidationResult({
-            estado: 'rechazado',
-            codigo: esDuplicado
-              ? 'YA_INGRESO'
-              : esInhabilitado
-                ? 'INHABILITADO'
-                : 'ERROR_VALIDACION',
-            motivo: resOffline.mensaje,
-            primerIngreso: resOffline.detalles?.primer_ingreso,
-          })
+          setValidationResult(
+            mapOfflineResultToDialog({
+              codigo: codigoError,
+              mensaje: resOffline.mensaje,
+              estudiante: resOffline.estudiante,
+              detalles: resOffline.detalles,
+            })
+          )
         }
       } catch (offlineErr) {
         setValidationResult(mapVerificationError(offlineErr))
       }
-
       setShowModal(true)
     } finally {
       setIsValidating(false)

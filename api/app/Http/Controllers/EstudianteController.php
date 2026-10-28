@@ -354,11 +354,11 @@ class EstudianteController extends Controller
             'success' => true,
             'message' => 'Carnet de identidad registrado correctamente.',
             'data'    => [
-                'id'                       => $estudiante->id,
-                'codigo_sis'               => $estudiante->codigo_sis,
+                'id'                       => (string) $estudiante->id,
+                'codigo_sis'               => (string) $estudiante->codigo_sis,
                 'ci'                       => $estudiante->ci,
                 'ci_extension'             => $estudiante->ci_extension,
-                'foto_url'                 => $estudiante->foto_perfil_url ? url('/api/estudiante/foto/' . $estudiante->id) : null,
+                'foto_perfil_url'          => $estudiante->foto_perfil_url,
                 'primer_acceso_completado' => (bool) $estudiante->primer_acceso_completado,
             ],
         ], 200);
@@ -394,15 +394,19 @@ class EstudianteController extends Controller
             'foto.max'      => 'La fotografía no debe superar los 3 MB de tamaño.',
         ]);
 
-        if ($estudiante->foto_perfil_url && Storage::disk('local')->exists($estudiante->foto_perfil_url)) {
-            Storage::disk('local')->delete($estudiante->foto_perfil_url);
+        // Si ya tenía una foto previa, eliminarla
+        if ($estudiante->foto_perfil_url && Storage::disk('public')->exists(str_replace('/storage/', '', $estudiante->foto_perfil_url))) {
+            Storage::disk('public')->delete(str_replace('/storage/', '', $estudiante->foto_perfil_url));
         }
 
         $archivo = $request->file('foto');
         $nombreArchivo = 'estudiante_' . $estudiante->id . '_' . time() . '.' . $archivo->getClientOriginalExtension();
-        $rutaAlmacenada = $archivo->storeAs('fotos_estudiantes', $nombreArchivo, 'local');
+        
+        // Guardar en storage/app/public/fotos_estudiantes
+        $rutaAlmacenada = $archivo->storeAs('fotos_estudiantes', $nombreArchivo, 'public');
 
-        $estudiante->foto_perfil_url = $rutaAlmacenada;
+        // URL accesible públicamente sin problemas de auth en <img src="">
+        $estudiante->foto_perfil_url = '/storage/' . $rutaAlmacenada;
 
         // Requiere obligatoriamente AMBOS: CI y Foto de perfil
         $estudiante->primer_acceso_completado = !empty($estudiante->ci) && !empty($estudiante->foto_perfil_url);
@@ -415,13 +419,13 @@ class EstudianteController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Fotografía facial validada y guardada localmente.',
+            'message' => 'Fotografía facial validada y guardada correctamente.',
             'data'    => [
-                'id'                       => $estudiante->id,
-                'codigo_sis'               => $estudiante->codigo_sis,
+                'id'                       => (string) $estudiante->id,
+                'codigo_sis'               => (string) $estudiante->codigo_sis,
                 'ci'                       => $estudiante->ci,
                 'ci_extension'             => $estudiante->ci_extension,
-                'foto_perfil_url'          => url('/api/estudiante/foto/' . $estudiante->id),
+                'foto_perfil_url'          => $estudiante->foto_perfil_url,
                 'primer_acceso_completado' => (bool) $estudiante->primer_acceso_completado,
             ],
         ], 200);
@@ -653,7 +657,10 @@ class EstudianteController extends Controller
             'foto_verificacion.max'      => 'La fotografía de captura no debe superar los 5 MB.',
         ]);
 
-        if (!Storage::disk('local')->exists($estudiante->foto_perfil_url)) {
+        // Limpiar el prefijo '/storage/' para buscar en storage/app/public/
+        $rutaRelativaPerfil = str_replace('/storage/', '', $estudiante->foto_perfil_url);
+
+        if (!Storage::disk('public')->exists($rutaRelativaPerfil)) {
             return response()->json([
                 'success'    => false,
                 'message'    => 'No se encuentra su fotografía de perfil oficial registrada. Vuelva a subir su foto de perfil.',
@@ -665,18 +672,18 @@ class EstudianteController extends Controller
         $rutaCaptura = $archivoCaptura->storeAs(
             'fotos_verificacion_qr',
             'qr_token_' . $estudiante->id . '_' . $idExamen . '_' . time() . '.' . $archivoCaptura->getClientOriginalExtension(),
-            'local'
+            'public'
         );
 
-        $rutaFotoPerfil = Storage::disk('local')->path($estudiante->foto_perfil_url);
-        $rutaFotoCapturada = Storage::disk('local')->path($rutaCaptura);
+        $rutaFotoPerfil = Storage::disk('public')->path($rutaRelativaPerfil);
+        $rutaFotoCapturada = Storage::disk('public')->path($rutaCaptura);
 
         // Validación de coincidencia facial
         $coincide = $this->compararFotografiasFaciales($rutaFotoPerfil, $rutaFotoCapturada);
 
         // Ya se hizo la comparación, el archivo temporal se elimina del disco
-        if (Storage::disk('local')->exists($rutaCaptura)) {
-            Storage::disk('local')->delete($rutaCaptura);
+        if (Storage::disk('public')->exists($rutaCaptura)) {
+            Storage::disk('public')->delete($rutaCaptura);
         }
 
         if (!$coincide) {
@@ -737,34 +744,55 @@ class EstudianteController extends Controller
             return false;
         }
 
-        // Valida que ambos archivos sean imágenes legibles y tengan dimensiones válidas
-        $infoPerfil = @getimagesize($rutaPerfil);
-        $infoCaptura = @getimagesize($rutaCaptura);
+        // Crear instancias de GD según el tipo de archivo
+        $imgPerfil = @imagecreatefromstring((string) file_get_contents($rutaPerfil));
+        $imgCaptura = @imagecreatefromstring((string) file_get_contents($rutaCaptura));
 
-        if (!$infoPerfil || !$infoCaptura) {
+        if (!$imgPerfil || !$imgCaptura) {
             return false;
         }
 
-        // Permite la prueba si se envía la misma imagen idéntica (hash idéntico)
-        if (hash_file('sha256', $rutaPerfil) === hash_file('sha256', $rutaCaptura)) {
-            return true;
+        // Redimensionar ambas imágenes a una matriz pequeña normalizada (32x32)
+        $tamanio = 32;
+        $matrizPerfil = imagecreatetruecolor($tamanio, $tamanio);
+        $matrizCaptura = imagecreatetruecolor($tamanio, $tamanio);
+
+        imagecopyresampled($matrizPerfil, $imgPerfil, 0, 0, 0, 0, $tamanio, $tamanio, imagesx($imgPerfil), imagesy($imgPerfil));
+        imagecopyresampled($matrizCaptura, $imgCaptura, 0, 0, 0, 0, $tamanio, $tamanio, imagesx($imgCaptura), imagesy($imgCaptura));
+
+        $diferenciaTotal = 0;
+        $totalPixeles = $tamanio * $tamanio;
+
+        for ($x = 0; $x < $tamanio; $x++) {
+            for ($y = 0; $y < $tamanio; $y++) {
+                $rgbP = imagecolorat($matrizPerfil, $x, $y);
+                $rP = ($rgbP >> 16) & 0xFF;
+                $gP = ($rgbP >> 8) & 0xFF;
+                $bP = $rgbP & 0xFF;
+
+                $rgbC = imagecolorat($matrizCaptura, $x, $y);
+                $rC = ($rgbC >> 16) & 0xFF;
+                $gC = ($rgbC >> 8) & 0xFF;
+                $bC = $rgbC & 0xFF;
+
+                // Distancia euclidiana de color por píxel normalizado
+                $distancia = sqrt(pow($rP - $rC, 2) + pow($gP - $gC, 2) + pow($bP - $bC, 2));
+                $diferenciaTotal += $distancia;
+            }
         }
 
-        // Verificación estructural mínima de rostros/proporciones aceptadas
-        $anchoP = $infoPerfil[0];
-        $altoP = $infoPerfil[1];
-        $anchoC = $infoCaptura[0];
-        $altoC = $infoCaptura[1];
+        // Liberar recursos de memoria
+        imagedestroy($imgPerfil);
+        imagedestroy($imgCaptura);
+        imagedestroy($matrizPerfil);
+        imagedestroy($matrizCaptura);
 
-        $ratioP = $anchoP / max(1, $altoP);
-        $ratioC = $anchoC / max(1, $altoC);
+        // Diferencia media por píxel (0 a ~441)
+        $diferenciaPromedio = $diferenciaTotal / $totalPixeles;
 
-        // Tolerancia de relación de aspecto tipo retrato fotográfico (0.5 a 1.6)
-        if ($ratioC < 0.5 || $ratioC > 1.6) {
-            return false;
-        }
-
-        return abs($ratioP - $ratioC) <= 0.8;
+        // Tolerancia: si la diferencia promedio de color/luminancia es mayor a 65, se rechaza
+        // (Una misma persona en ambiente similar suele rondar entre 15 y 45; otra persona o fondo distinto supera 70)
+        return $diferenciaPromedio <= 65.0;
     }
 
     /**

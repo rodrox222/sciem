@@ -11,8 +11,10 @@ function obtenerTokenValido(paramToken?: string): string {
 
 export interface ResultadoEscaneo {
   success: boolean;
+  acceso?: boolean; 
   metodo: 'ONLINE' | 'OFFLINE';
   mensaje: string;
+  codigo?: string;
   estudiante?: {
     nombre_completo?: string;
     codigo_sis?: string;
@@ -52,11 +54,11 @@ function extraerDatosQr(qrRaw: string): {
         expiraAt: parsed.expira_at,
       };
     } catch {
-      // Ignorar fallo de decodificación
+      // Si falla la decodificación Base64/JSON, no es un token válido
     }
   }
 
-  // Caso 2: JSON directo
+  // Caso 2: JSON institucional directo
   if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
     try {
       const parsed: QrPayload = JSON.parse(trimmed);
@@ -71,20 +73,26 @@ function extraerDatosQr(qrRaw: string): {
     }
   }
 
-  // Caso 3: SIS en texto plano
-  return { codigoSis: trimmed };
+  // Caso 3: Código SIS en texto plano (en la UMSS son estrictamente numéricos de 8 a 10 dígitos)
+  const esNumeroSis = /^\d{8,10}$/.test(trimmed);
+  if (esNumeroSis) {
+    return { codigoSis: trimmed };
+  }
+
+  // Caso 4: Si es una URL, datos bancarios o cualquier otro formato ajeno
+  return { codigoSis: '' };
 }
 
 export async function procesarIngresoEscaneado(
   qrData: string,
   idExamen: string,
-  token: string
+  token: string,
+  idAuxiliarActual?: string // Parámetro para delimitar el módulo
 ): Promise<ResultadoEscaneo> {
   const { codigoSis, idExamenToken, expiraAt, idEstudianteToken } = extraerDatosQr(qrData);
 
   const hayConexion = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
-  // Si hay conexión a la red, intentamos validar directamente en Laravel
   if (hayConexion) {
     try {
       const authToken = obtenerTokenValido(token);
@@ -109,7 +117,6 @@ export async function procesarIngresoEscaneado(
         detalles: res.data.detalles,
       };
     } catch (error: any) {
-      // Si el servidor respondió un error 400/403/409, Laravel YA registró el intento no autorizado
       if (error.response) {
         return {
           success: false,
@@ -119,13 +126,13 @@ export async function procesarIngresoEscaneado(
         };
       }
 
-      // Si no hubo respuesta del servidor (timeout o red caída), recurrimos a offline
-      return resolverOffline(idExamen, codigoSis, idExamenToken, expiraAt, idEstudianteToken);
+      // Si se agota el tiempo de espera o se cae el servidor, resuelve offline
+      return resolverOffline(idExamen, codigoSis, idExamenToken, expiraAt, idEstudianteToken, idAuxiliarActual);
     }
   }
 
   // Modo offline sin internet
-  return resolverOffline(idExamen, codigoSis, idExamenToken, expiraAt, idEstudianteToken);
+  return resolverOffline(idExamen, codigoSis, idExamenToken, expiraAt, idEstudianteToken, idAuxiliarActual);
 }
 
 async function resolverOffline(
@@ -133,19 +140,35 @@ async function resolverOffline(
   codigoSis: string,
   idExamenToken?: string,
   expiraAt?: number,
-  idEstudianteToken?: string
+  idEstudianteToken?: string,
+  idAuxiliarActual?: string
 ): Promise<ResultadoEscaneo> {
-  const resOffline = await validarQrOffline(idExamen, codigoSis, idExamenToken, expiraAt, idEstudianteToken);
+  const resOffline = await validarQrOffline(
+    idExamen,
+    codigoSis,
+    idExamenToken,
+    expiraAt,
+    idEstudianteToken,
+    idAuxiliarActual
+  );
 
   return {
     success: resOffline.acceso,
+    acceso: resOffline.acceso,
     metodo: 'OFFLINE',
     mensaje: resOffline.mensaje,
+    codigo: resOffline.codigo,
     estudiante: resOffline.estudiante
-      ? { nombre_completo: resOffline.estudiante, codigo_sis: codigoSis }
+      ? {
+          nombre_completo: typeof resOffline.estudiante === 'string' ? resOffline.estudiante : resOffline.estudiante.nombre_completo,
+          codigo_sis: codigoSis,
+          ci: typeof resOffline.estudiante === 'object' ? resOffline.estudiante.ci : undefined,
+          foto_url: typeof resOffline.estudiante === 'object' ? resOffline.estudiante.foto_url : undefined,
+        }
       : undefined,
     detalles: {
       codigo: resOffline.codigo,
+      ...(resOffline.detalles || {}),
     },
   };
 }
