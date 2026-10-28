@@ -7,6 +7,9 @@ import {
   Users,
   PencilLine,
   QrCode,
+  ShieldAlert,
+  Activity,
+  UserX,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -23,7 +26,11 @@ import { DetalleInfoTab } from '@/components/examenes/DetalleInfoTab'
 import { DetalleEstudiantesTab } from '@/components/examenes/DetalleEstudiantesTab'
 import { DetalleEditarTab } from '@/components/examenes/DetalleEditarTab'
 import { DetalleEscanerTab } from '@/components/examenes/DetalleEscanerTab'
-
+import { DetalleExpulsionesTab } from '@/components/examenes/DetalleExpulsionesTab'
+import { DetalleMonitoreoTab } from '@/components/monitoreo/DetalleMonitoreoTab'
+import { EtapasExamen } from '@/components/monitoreo/EtapasExamen'
+import { permiteMonitoreoFrontend } from '@/components/monitoreo/permisoMonitoreo'
+import IntentosNoAutorizadosPage from '@/pages/IntentosNoAutorizadosPage'
 const estadoBadges: Record<ExamenEstado, string> = {
   Programado: 'border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy',
   'En proceso': 'border-sci-amber/30 bg-sci-amber/10 text-sci-amber',
@@ -34,14 +41,22 @@ export default function DetalleExamenPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const activeTab = searchParams.get('tab') || 'info'
 
   const role = (localStorage.getItem('user_role') ?? '').toLowerCase()
   const canManage = ['admin', 'administrador', 'docente', 'auxiliar'].includes(role)
+  const canExpel = canManage
+
+  const requestedTab = searchParams.get('tab') || 'info'
+  const activeTab =
+    requestedTab === 'expulsiones' && !canExpel ? 'info' : requestedTab
 
   const [exam, setExam] = useState<Examen | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  const actualizarEstadoExamen = useCallback((estado: ExamenEstado) => {
+    setExam((actual) => actual && actual.estado !== estado ? { ...actual, estado } : actual)
+  }, [])
 
   const loadExam = useCallback(async () => {
     if (!id) return
@@ -113,21 +128,22 @@ export default function DetalleExamenPage() {
     )
   }
 
+  const canMonitor = permiteMonitoreoFrontend(exam)
   const canEdit = canManage && exam.estado === 'Programado'
 
   return (
     <div className="space-y-6">
-      {/* Encabezado contextual */}
       <header className="space-y-3">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate('/examenes')}
-          className="h-auto cursor-pointer gap-1 p-0 text-xs font-semibold text-sci-blue hover:text-sci-navy"
-        >
-          <ArrowLeft className="h-4 w-4" /> Volver a exámenes
-        </Button>
+    <Button
+  type="button"
+  variant="ghost"
+  size="sm"
+  onClick={() => navigate('/examenes')}
+  className="h-auto cursor-pointer gap-1 p-0 text-xs font-semibold text-sci-blue hover:text-sci-navy"
+>
+  <ArrowLeft className="h-4 w-4" />
+  Volver a exámenes
+</Button>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -152,49 +168,76 @@ export default function DetalleExamenPage() {
         </div>
       </header>
 
-      {/* Navegación por pestañas */}
+      {/* Visible en todas las pestañas, no solo en Monitoreo. */}
+      <EtapasExamen exam={exam} />
+
       <Tabs
-        value={activeTab}
+        value={activeTab === 'monitoreo' && !canMonitor ? 'info' : activeTab}
         onValueChange={(val) => setSearchParams({ tab: val })}
         className="space-y-6"
       >
-
-<TabsList className="flex h-auto w-full flex-wrap items-stretch justify-start gap-1 rounded-xl border border-border bg-card p-1 sm:flex-nowrap sm:items-center">
-
-          
-<TabsTrigger
-  value="info"
-  className="min-w-0 flex-1 cursor-pointer justify-center gap-1.5 whitespace-normal px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
->
-  <BookOpen className="h-3.5 w-3.5" /> Ficha Técnica
-</TabsTrigger>
+        <TabsList className="flex h-auto w-full min-w-0 flex-nowrap items-stretch justify-start gap-1 overflow-x-auto overscroll-x-contain rounded-xl border border-border bg-card p-1 touch-pan-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch] lg:overflow-visible sm:items-center">
+          <TabsTrigger
+            value="info"
+            className="min-w-0 flex-none shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
+          >
+            <BookOpen className="h-3.5 w-3.5" /> Ficha Técnica
+          </TabsTrigger>
 
           <TabsTrigger
-  value="estudiantes"
-  className="min-w-0 flex-1 cursor-pointer justify-center gap-1.5 whitespace-normal px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
->
-  <Users className="h-3.5 w-3.5" />
-  Padrón de Estudiantes
-</TabsTrigger>
+            value="estudiantes"
+            className="min-w-0 flex-none shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
+          >
+            <Users className="h-3.5 w-3.5" />
+            Padrón de Estudiantes
+          </TabsTrigger>
 
           {canManage && (
             <TabsTrigger
-  value="escaner"
-  className="min-w-0 flex-1 cursor-pointer justify-center gap-1.5 whitespace-normal px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
->
-  <QrCode className="h-3.5 w-3.5 text-sci-cyan" />
-  Escanear Acceso
-</TabsTrigger>
+              value="escaner"
+              className="min-w-0 flex-none shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
+            >
+              <QrCode className="h-3.5 w-3.5 text-sci-cyan" />
+              Escanear Acceso
+            </TabsTrigger>
           )}
 
+          {canMonitor && (
+            <TabsTrigger
+              value="monitoreo"
+              className="min-w-0 flex-none shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-2 py-2 text-center text-[11px] font-medium sm:gap-2 sm:px-3 sm:text-xs"
+            >
+              <Activity className="h-3.5 w-3.5 text-sci-cyan" />
+              Monitoreo
+            </TabsTrigger>
+          )}
+
+          {canExpel && (
+            <TabsTrigger
+              value="expulsiones"
+              className="min-w-0 flex-none shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
+            >
+              <UserX className="h-3.5 w-3.5 text-sci-red" />
+              Expulsiones
+            </TabsTrigger>
+          )}
+          {canManage && (
+            <TabsTrigger
+              value="intentos"
+              className="min-w-0 flex-none shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
+            >
+              <ShieldAlert className="h-3.5 w-3.5 text-sci-amber" />
+              Intentos no autorizados
+            </TabsTrigger>
+          )}
           {canEdit && (
-           <TabsTrigger
-  value="editar"
-  className="min-w-0 flex-1 cursor-pointer justify-center gap-1.5 whitespace-normal px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
->
-  <PencilLine className="h-3.5 w-3.5" />
-  Modificar Examen
-</TabsTrigger>
+            <TabsTrigger
+              value="editar"
+              className="min-w-0 flex-none shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
+            >
+              <PencilLine className="h-3.5 w-3.5" />
+              Modificar Examen
+            </TabsTrigger>
           )}
         </TabsList>
 
@@ -212,9 +255,26 @@ export default function DetalleExamenPage() {
           </TabsContent>
         )}
 
+        {canMonitor && (
+          <TabsContent value="monitoreo">
+            <DetalleMonitoreoTab exam={exam} onEstadoChange={actualizarEstadoExamen} />
+          </TabsContent>
+        )}
+
+        {canExpel && (
+          <TabsContent value="expulsiones">
+            <DetalleExpulsionesTab exam={exam} />
+          </TabsContent>
+        )}
+
         {canEdit && (
           <TabsContent value="editar">
             <DetalleEditarTab exam={exam} onUpdated={loadExam} />
+          </TabsContent>
+        )}
+          {canManage && (
+          <TabsContent value="intentos">
+            <IntentosNoAutorizadosPage embedded />
           </TabsContent>
         )}
       </Tabs>

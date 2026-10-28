@@ -17,7 +17,12 @@ return new class extends Migration
             $table->string('apellido_paterno', 100);
             $table->string('apellido_materno', 100)->nullable();
             $table->string('email_institucional', 150)->unique();
+            $table->string('password')->nullable(); 
+            $table->string('foto_perfil_url')->nullable();
+            $table->boolean('primer_acceso_completado')->default(false);
             $table->boolean('activo')->default(true);
+            $table->boolean('es_auxiliar')->default(false);
+            $table->rememberToken();
             $table->timestamps();
         });
     }

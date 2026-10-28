@@ -190,8 +190,12 @@ const handleBulkSubmit = async () => {
     !saving && !bulkSaving && !open && onClose()
   }
 >
-<DialogContent className="max-w-2xl p-0 overflow-hidden border-border bg-card text-card-foreground shadow-2xl rounded-2xl">
-        <form onSubmit={handleSubmit} noValidate>
+<DialogContent className="flex max-h-[90dvh] w-[calc(100%-1rem)] max-w-xl flex-col overflow-hidden rounded-2xl border-border bg-card p-0 text-card-foreground shadow-2xl">
+        <form
+  onSubmit={handleSubmit}
+  noValidate
+  className="flex min-h-0 flex-col overflow-hidden"
+>
           <DialogHeader className="border-b border-border px-6 py-5 text-left">
             <span className="text-[11px] font-bold uppercase tracking-wider text-sci-cyan">
               Gestión de estudiantes
@@ -243,7 +247,7 @@ setBulkFile(null)
 )}
           </DialogHeader>
 {!bulkMode ? (
-          <div className="space-y-4 px-6 py-6 max-h-[65vh] overflow-y-auto">
+          <div className="max-h-[calc(90dvh-190px)] space-y-3 overflow-y-auto px-5 py-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5 text-left">
                 <Label htmlFor="std-nombre" className="text-xs font-semibold">
@@ -378,98 +382,115 @@ setBulkFile(null)
               </div>
           )}
 </div>
+
 ) : (
-  <div className="space-y-5">
-    <div className="rounded-2xl border border-dashed border-sci-blue/40 bg-sci-blue/5 p-8 text-center">
-      <FileSpreadsheet className="mx-auto h-12 w-12 text-sci-blue" />
+  <div className="max-h-[calc(90dvh-190px)] space-y-4 overflow-y-auto px-5 py-4">
+    {!bulkFile ? (
+      <div className="rounded-2xl border border-dashed border-sci-blue/40 bg-sci-blue/5 p-5 text-center">
+        <FileSpreadsheet className="mx-auto h-10 w-10 text-sci-blue" />
 
-      <h3 className="mt-4 text-base font-bold text-sci-navy">
-        Carga masiva de estudiantes
-      </h3>
+        <h3 className="mt-3 text-sm font-bold text-sci-navy">
+          Carga masiva de estudiantes
+        </h3>
 
-      <p className="mx-auto mt-2 max-w-md text-xs text-muted-foreground">
-  Selecciona un archivo CSV o (.xlsx) con los datos de los estudiantes
-  que deseas registrar en el examen.
-</p>
-
-      <label
-        htmlFor="bulk-student-file"
-        className="mt-5 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-sci-blue px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-      >
-        <Upload className="h-4 w-4" />
-        Seleccionar archivo
-      </label>
-
-      <input
-        id="bulk-student-file"
-        type="file"
-        accept=".csv,.txt,.xlsx"
-        className="hidden"
-        onChange={(event) => {
-          const file = event.target.files?.[0] ?? null
-
-          setBulkError('')
-          setBulkRowErrors([])
-          setBulkFile(null)
-
-          if (!file) return
-
-          if (file.size > 5 * 1024 * 1024) {
-            setBulkError('El archivo no debe exceder los 5 MB.')
-            event.target.value = ''
-            return
-          }
-
-          setBulkFile(file)
-        }}
-      />
-
-      <p className="mt-3 text-[11px] text-muted-foreground">
-  Formatos permitidos: CSV y Excel (.xlsx) · Tamaño máximo: 5 MB
-</p>
-    </div>
-
-    {bulkFile && (
-      <div className="rounded-xl border border-sci-cyan/30 bg-sci-cyan/10 p-4">
-        <p className="text-sm font-semibold text-sci-navy">
-          Archivo seleccionado
+        <p className="mx-auto mt-2 max-w-md text-xs text-muted-foreground">
+          Selecciona un archivo CSV o Excel (.xlsx) con los datos de los
+          estudiantes que deseas registrar en el examen.
         </p>
 
-        <p className="mt-1 break-all text-xs text-muted-foreground">
-          {bulkFile.name}
-        </p>
+        <label
+          htmlFor="bulk-student-file"
+          className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-sci-blue px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+        >
+          <Upload className="h-4 w-4" />
+          Seleccionar archivo
+        </label>
 
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          {(bulkFile.size / 1024 / 1024).toFixed(2)} MB
+        <input
+          id="bulk-student-file"
+          type="file"
+          accept=".csv,.xlsx"
+          className="hidden"
+          onChange={(event) => {
+            const input = event.currentTarget
+            const file = input.files?.[0] ?? null
+
+            input.value = ''
+            setBulkError('')
+            setBulkRowErrors([])
+
+            if (!file) return
+
+            if (!/\.(csv|xlsx)$/i.test(file.name)) {
+              setBulkError('Selecciona un archivo CSV o Excel (.xlsx).')
+              return
+            }
+
+            if (file.size > 5 * 1024 * 1024) {
+              setBulkError('El archivo no debe exceder los 5 MB.')
+              return
+            }
+
+            setBulkFile(file)
+          }}
+        />
+
+        <p className="mt-3 text-[11px] text-muted-foreground">
+          Formatos permitidos: CSV y Excel (.xlsx) · Tamaño máximo: 5 MB
         </p>
+      </div>
+    ) : (
+      <div className="flex items-center gap-3 rounded-xl border border-sci-cyan/30 bg-sci-cyan/10 p-3">
+        <FileSpreadsheet className="h-8 w-8 shrink-0 text-sci-blue" />
+
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-sci-navy">
+            Archivo seleccionado
+          </p>
+          <p className="mt-1 break-all text-xs text-muted-foreground">
+            {bulkFile.name}
+          </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {(bulkFile.size / 1024 / 1024).toFixed(2)} MB
+          </p>
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={bulkSaving}
+          onClick={() => {
+            setBulkFile(null)
+            setBulkError('')
+            setBulkRowErrors([])
+          }}
+        >
+          Quitar
+        </Button>
       </div>
     )}
 
-  {bulkError && (
-  <div className="rounded-xl border border-sci-red/20 bg-sci-red/10 px-4 py-3">
-    <p className="text-xs font-semibold text-sci-red">
-      {bulkError}
-    </p>
+    {bulkError && (
+      <div className="rounded-xl border border-sci-red/20 bg-sci-red/10 px-4 py-3">
+        <p className="text-xs font-semibold text-sci-red">{bulkError}</p>
 
-    {bulkRowErrors.length > 0 && (
-      <button
-        type="button"
-        onClick={() => setShowBulkErrorDialog(true)}
-        className="mt-2 text-xs font-bold text-sci-blue underline"
-      >
-        Ver detalle de errores
-      </button>
+        {bulkRowErrors.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowBulkErrorDialog(true)}
+            className="mt-2 text-xs font-bold text-sci-blue underline"
+          >
+            Ver detalle de errores
+          </button>
+        )}
+      </div>
     )}
-  </div>
-)}
 
-    <div className="rounded-xl border border-border bg-muted/40 p-4 text-xs text-muted-foreground">
-      <p className="font-semibold text-sci-navy">
-        Columnas esperadas
-      </p>
-
+    <div className="rounded-xl border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+      <p className="font-semibold text-sci-navy">Columnas esperadas</p>
       <p className="mt-1">
-        código SIS, CI, extensión del CI, nombre, apellido paterno,
+        Código SIS, CI, extensión del CI, nombre, apellido paterno,
         apellido materno y correo institucional.
       </p>
     </div>
@@ -487,7 +508,7 @@ setBulkFile(null)
             </div>
           
 
-          <div className="flex flex-col-reverse gap-2 border-t border-border bg-muted/40 px-6 py-4 sm:flex-row sm:justify-end">
+          <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-border bg-muted/40 px-5 py-3 sm:flex-row sm:justify-end">
             <Button
   type="button"
   variant="outline"

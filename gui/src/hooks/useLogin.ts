@@ -82,13 +82,20 @@ export const useLogin = ({ onSuccess }: UseLoginOptions) => {
         throw new Error('Error interno del servidor institucional. Intente más tarde.')
       }
 
-      // Guardar token y rol
       const token = data.token || data.access_token
       const userRole = data.user?.rol || backendRole
 
+      // Guardar tokens de sesión y rol operativo
       localStorage.setItem('auth_token', token)
       localStorage.setItem('user_role', userRole)
-      localStorage.setItem('user_data', JSON.stringify(data.user || {}))
+      localStorage.setItem('sci_last_activity', Date.now().toString())
+
+      // 2. Guardar únicamente datos de presentación visual (sin CI ni identificadores sensibles)
+      const usuarioSeguro = {
+        nombre: data.user?.nombre || '',
+        apellido: data.user?.apellido_paterno || data.user?.apellido || '',
+      }
+      localStorage.setItem('user_data', JSON.stringify(usuarioSeguro))
 
       onSuccess(userRole, token)
     } catch (err: unknown) {

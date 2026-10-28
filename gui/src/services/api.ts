@@ -1,5 +1,3 @@
-// gui/src/services/api.ts
-
 export type ValidationErrors = Record<string, string[]>;
 
 export class ApiError extends Error {
@@ -16,12 +14,17 @@ export class ApiError extends Error {
   }
 }
 
-// Resuelve la URL desde el .env del frontend. 
-// Si no existe, usa la ruta relativa /api para cuando se usa proxy o mismo host.
+// Resuelve la URL: si no existe en .env, usa directamente la IP de tu servidor local
 const getBaseUrl = (): string => {
   const envUrl = import.meta.env.VITE_API_URL?.trim();
-  return (envUrl || '/api').replace(/\/$/, '');
+  const url = envUrl || 'http://192.168.1.17:8200';
+  return url.replace(/\/api\/?$/, '').replace(/\/$/, '');
 };
+
+//const getBaseUrl = (): string => {
+//  const envUrl = import.meta.env.VITE_API_URL?.trim();
+//  return (envUrl || '/api').replace(/\/$/, '');
+//};
 
 const parseResponse = async (response: Response): Promise<unknown> => {
   if (response.status === 204) return null;
@@ -36,7 +39,7 @@ const parseResponse = async (response: Response): Promise<unknown> => {
 };
 
 /**
- * Cliente principal para peticiones HTTP a la API de Laravel con reintento ante 503
+ * Cliente principal para peticiones HTTP a la API de Laravel
  */
 export async function apiRequest<T>(
   path: string,
@@ -48,7 +51,6 @@ export async function apiRequest<T>(
 
   headers.set('Accept', 'application/json');
 
-  // Solo añade Content-Type JSON si no es FormData (evita romper subida de archivos)
   if (options.body && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
@@ -57,9 +59,15 @@ export async function apiRequest<T>(
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  // Normaliza el path para asegurar que empiece con slash
+  //const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  //const url = `${getBaseUrl()}${cleanPath}`;
+  //const method = (options.method ?? 'GET').toUpperCase();
+
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  const url = `${getBaseUrl()}${cleanPath}`;
+  
+  // Garantiza que SIEMPRE viaje hacia /api/... sin duplicar /api/api
+  const apiPath = cleanPath.startsWith('/api/') ? cleanPath : `/api${cleanPath}`;
+  const url = `${getBaseUrl()}${apiPath}`;
   const method = (options.method ?? 'GET').toUpperCase();
 
   let response: Response;
@@ -70,7 +78,6 @@ export async function apiRequest<T>(
       headers,
     });
   } catch {
-    // Solo reintentar peticiones de lectura si hay fallo de conexión
     if (retries > 0 && method === 'GET') {
       await new Promise((resolve) => setTimeout(resolve, 300));
       return apiRequest<T>(path, options, retries - 1);
@@ -81,8 +88,6 @@ export async function apiRequest<T>(
     );
   }
 
-  // Si Supabase devuelve 503 por colisión momentánea en el pooler,
-  // reintenta únicamente si el método es GET (lectura idempotente)
   if (response.status === 503 && retries > 0 && method === 'GET') {
     await new Promise((resolve) => setTimeout(resolve, 250));
     return apiRequest<T>(path, options, retries - 1);
@@ -113,7 +118,6 @@ export async function apiRequest<T>(
   return payload as T;
 }
 
-// Métodos auxiliares rápidos
 export const api = {
   get: <T>(path: string, options?: RequestInit) =>
     apiRequest<T>(path, { ...options, method: 'GET' }),
@@ -142,3 +146,54 @@ export const api = {
   delete: <T>(path: string, options?: RequestInit) =>
     apiRequest<T>(path, { ...options, method: 'DELETE' }),
 };
+
+/** Descarga binaria autenticada, sin reconstruir el archivo en el navegador. */
+export async function apiDownload(
+  path: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<{ blob: Blob; filename: string | null }> {
+  const pathWithSlash = path.startsWith('/') ? path : `/${path}`
+  const url = `${getBaseUrl()}${pathWithSlash.replace(/^\/api(?=\/)/, '')}`
+  const headers = new Headers({ Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream' })
+  const token = localStorage.getItem('auth_token')
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+
+  let response: Response
+  try {
+    response = await fetch(url, { method: 'GET', headers, signal: options.signal })
+  } catch (error) {
+    if (options.signal?.aborted) throw error
+    throw new ApiError('No se pudo conectar con el servidor para descargar el reporte.', 0)
+  }
+
+  if (!response.ok) {
+    const payload = await parseResponse(response) as { message?: string; errors?: ValidationErrors } | null
+    if (response.status === 401) {
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('auth_user')
+      localStorage.removeItem('user_role')
+    }
+    throw new ApiError(payload?.message || `No se pudo descargar (HTTP ${response.status}).`, response.status, payload?.errors)
+  }
+
+  const type = response.headers.get('content-type') || ''
+  if (type.includes('application/json') || type.includes('text/html')) {
+    throw new ApiError('El servidor no devolvió un archivo descargable.', 502)
+  }
+  const disposition = response.headers.get('content-disposition') || ''
+  const encoded = disposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i)
+  const standard = disposition.match(/filename\s*=\s*"([^"]+)"/i)
+    ?? disposition.match(/filename\s*=\s*([^;]+)/i)
+  let filename: string | null
+  try {
+    filename = encoded ? decodeURIComponent(encoded[1]) : standard?.[1]?.trim() ?? null
+  } catch {
+    filename = standard?.[1]?.trim() ?? null
+  }
+  if (filename) {
+    filename = Array.from(filename, (character) =>
+      character.charCodeAt(0) < 32 || character === '/' || character === '\\' ? '_' : character,
+    ).join('').replace(/^\.+/, '').slice(0, 180) || null
+  }
+  return { blob: await response.blob(), filename }
+}

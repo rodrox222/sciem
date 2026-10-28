@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Auxiliar extends Authenticatable
 {
@@ -47,5 +48,14 @@ class Auxiliar extends Authenticatable
     public function logs(): MorphMany
     {
         return $this->morphMany(LogAuditoria::class, 'user');
+    }
+    public function examenes(): BelongsToMany
+    {
+    return $this->belongsToMany(
+        Examen::class,
+        'auxiliar_examen',
+        'id_auxiliar',
+        'id_examen'
+    )->withTimestamps();
     }
 }

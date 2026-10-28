@@ -50,7 +50,7 @@ export default function ExamenesPage() {
     setLoading(true)
     setError('')
     try {
-      const response = await examenesService.list({
+      const response = await examenesService.misExamenes({
         search: searchTerm,
         estado: status === 'all' ? '' : status,
         fecha: date,

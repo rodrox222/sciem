@@ -5,10 +5,11 @@ import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute'
 import PublicLayout from './layouts/PublicLayout'
 import MainLayout from './layouts/MainLayout'
 import AuthLayout from './layouts/AuthLayout'
-
+import EstudianteDashboardPage from './pages/EstudianteDashboardPage'
 // Páginas públicas
 import { HomePage } from './pages/HomePage'
 import CronogramaPublicPage from './pages/CronogramaPublicPage'
+import { NoticiasPage } from './pages/NoticiasPage'
 
 // Páginas de autenticación
 import { LoginPage } from './pages/LoginPage'
@@ -19,6 +20,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import ExamenesPage from './pages/ExamenesPage'
 import EstudiantesPage from './pages/EstudiantesPage'
 import DetalleExamenPage from './pages/DetalleExamenPage'
+import IntentosNoAutorizadosPage from './pages/IntentosNoAutorizadosPage'
 import MateriasPage from './pages/MateriasPage'
 // Páginas protegidas por Rol
 import UsuariosPage from './pages/UsuariosPage'
@@ -27,6 +29,7 @@ import NormasPage from './pages/NormasPage'
 import { AuditoriaPage } from './pages/AuditoriaPage'
 import ProgramarExamenPage from './pages/ProgramarExamenPage'
 import ConfiguracionPage from './pages/ConfiguracionPage'
+import ReportesEstadisticosPage from './pages/ReportesEstadisticosPage'
 
 
 export default function App() {
@@ -37,6 +40,7 @@ export default function App() {
         <Route element={<PublicLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/cronograma" element={<CronogramaPublicPage />} />
+          <Route path="/noticias" element={<NoticiasPage />} />
         </Route>
 
         {/* 2. Rutas de acceso (Login y recuperación) con AuthLayout */}
@@ -51,10 +55,29 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<MainLayout />}>
             <Route path="/dashboard" element={<DashboardPage />} />
+            <Route element={<ProtectedRoute allowedRoles={['estudiante']} />}>
+  <Route
+    path="/estudiante"
+    element={<EstudianteDashboardPage />}
+  />
+</Route>
             <Route path="/examenes" element={<ExamenesPage />} />
             <Route path="/estudiantes" element={<EstudiantesPage />} />
             <Route path="/examenes" element={<ExamenesPage />} />
             <Route path="/examenes/:id" element={<DetalleExamenPage />} />
+            <Route
+  path="/examenes/:id/intentos-no-autorizados"
+  element={
+    <ProtectedRoute
+      allowedRoles={['admin', 'administrador', 'docente', 'auxiliar']}
+    />
+  }
+>
+  <Route
+    index
+    element={<IntentosNoAutorizadosPage />}
+  />
+</Route>
 
             {/* Exclusivo Administrador */}
             <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
@@ -67,8 +90,9 @@ export default function App() {
             </Route>
 
             {/* Administrador y Docente */}
-            <Route element={<ProtectedRoute allowedRoles={['admin', 'docente']} />}>
+            <Route element={<ProtectedRoute allowedRoles={['admin', 'administrador', 'docente']} />}>
               <Route path="/programar-examen" element={<ProgramarExamenPage />} />
+              <Route path="/reportes" element={<ReportesEstadisticosPage />} />
             </Route>
           </Route>
         </Route>
