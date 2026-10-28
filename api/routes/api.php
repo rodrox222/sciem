@@ -191,13 +191,20 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('examenes/{idExamen}/estudiantes/carga-masiva', [CargaMasivaEstudianteController::class, 'storePorExamen']);
     });
 
-    // --- HU 9: PRERREQUISITOS Y HABILITACIÓN ---
+       // --- HU 9: PRERREQUISITOS Y HABILITACIÓN ---
+
+    // Consultas de estudiantes del examen y motivos de inhabilitación
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('examenes/{examen}/estudiantes', [HabilitacionExamenController::class, 'index']);
-        Route::get('examenes/{examen}/prerrequisitos', [PrerrequisitoController::class, 'index']);
         Route::get('examenes/{examen}/estudiantes/{estudiante}/motivo', [HabilitacionExamenController::class, 'motivoInhabilitacion']);
     });
 
+    // Consulta de prerrequisitos: también permite el acceso al estudiante
+    Route::middleware('role:admin,administrador,docente,auxiliar,estudiante')->group(function () {
+        Route::get('examenes/{examen}/prerrequisitos', [PrerrequisitoController::class, 'index']);
+    });
+
+    // Gestión de prerrequisitos y habilitación
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::post('examenes/{examen}/prerrequisitos', [PrerrequisitoController::class, 'store']);
         Route::patch('prerrequisitos/{prerrequisito}/estudiantes/{estudiante}', [PrerrequisitoController::class, 'toggleCumplimiento']);

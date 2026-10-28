@@ -28,6 +28,7 @@ import AulasPage from './pages/AulasPage'
 import NormasPage from './pages/NormasPage'
 import { AuditoriaPage } from './pages/AuditoriaPage'
 import ProgramarExamenPage from './pages/ProgramarExamenPage'
+import EstudianteDetalleExamenPage from './pages/EstudianteDetalleExamenPage'
 import ConfiguracionPage from './pages/ConfiguracionPage'
 import ReportesEstadisticosPage from './pages/ReportesEstadisticosPage'
 
@@ -55,13 +56,21 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<MainLayout />}>
             <Route path="/dashboard" element={<DashboardPage />} />
-            <Route element={<ProtectedRoute allowedRoles={['estudiante']} />}>
+          {/* Exclusivo Estudiante */}
+<Route element={<ProtectedRoute allowedRoles={['estudiante']} />}>
   <Route
     path="/estudiante"
     element={<EstudianteDashboardPage />}
   />
+
+  {/* Detalle del examen del estudiante */}
+  <Route
+    path="/estudiante/examenes/:id"
+    element={<EstudianteDetalleExamenPage />}
+  />
 </Route>
-            <Route path="/examenes" element={<ExamenesPage />} />
+
+<Route path="/examenes" element={<ExamenesPage />} />
             <Route path="/estudiantes" element={<EstudiantesPage />} />
             <Route path="/examenes" element={<ExamenesPage />} />
             <Route path="/examenes/:id" element={<DetalleExamenPage />} />
