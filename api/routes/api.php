@@ -221,6 +221,10 @@ Route::middleware('auth:sanctum')->group(function () {
             'examenes/{id}/expulsiones',
             [ExpulsionController::class, 'store']
         );
+        Route::patch(
+            'examenes/{id}/expulsiones/{expulsionId}',
+            [ExpulsionController::class, 'updateMotivo']
+        );
     });
 
     Route::post('/examenes/{id}/registro-manual', [VerificacionController::class, 'registrarIngresoManual']);

@@ -11,6 +11,7 @@ use App\Models\Expulsion;
 use App\Models\LogAuditoria;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class ExpulsionController extends Controller
@@ -219,5 +220,163 @@ class ExpulsionController extends Controller
             'expulsiones' => $expulsiones->values(),
         ]);
     }
+    public function updateMotivo(
+    Request $request,
+    string $id,
+    string $expulsionId
+    ): JsonResponse {
+    $request->merge([
+        'motivo' => is_string($request->input('motivo'))
+            ? trim($request->input('motivo'))
+            : $request->input('motivo'),
+    ]);
+
+    $datos = $request->validate([
+        'motivo' => ['required', 'string', 'min:3', 'max:2000'],
+    ]);
+
+    $examen = Examen::find($id);
+
+    if (!$examen) {
+        return response()->json([
+            'message' => 'Examen no encontrado.',
+        ], 404);
+    }
+
+    $usuario = $request->user();
+
+    if (
+        !$usuario instanceof Admin &&
+        !$usuario instanceof Docente &&
+        !$usuario instanceof Auxiliar
+    ) {
+        return response()->json([
+            'message' => 'No tienes permiso para editar el motivo de expulsión.',
+        ], 403);
+    }
+
+    if (
+        $usuario instanceof Docente &&
+        $examen->id_docente !== $usuario->id
+    ) {
+        return response()->json([
+            'message' => 'No tienes permiso para modificar expulsiones de este examen.',
+        ], 403);
+    }
+
+    if (
+        $usuario instanceof Auxiliar &&
+        !$examen->auxiliares()
+            ->where('auxiliares.id', $usuario->id)
+            ->exists()
+    ) {
+        return response()->json([
+            'message' => 'No tienes permiso para modificar expulsiones de este examen.',
+        ], 403);
+    }
+
+    return DB::transaction(function () use (
+        $request,
+        $examen,
+        $expulsionId,
+        $datos,
+        $usuario
+    ): JsonResponse {
+        $expulsion = Expulsion::query()
+            ->where('id', $expulsionId)
+            ->where('id_examen', $examen->id)
+            ->lockForUpdate()
+            ->first();
+
+        if (!$expulsion) {
+            return response()->json([
+                'message' => 'La expulsión no existe o no pertenece a este examen.',
+            ], 404);
+        }
+        $zonaHoraria = 'America/La_Paz';
+        $ahora = Carbon::now($zonaHoraria);
+
+         if (!$examen->fecha || !$examen->hora_ini || !$examen->hora_fin) {
+        return response()->json([
+            'message' => 'El examen no tiene un horario completo configurado.',
+        ], 422);
+    }
+
+    $fecha = $examen->fecha->format('Y-m-d');
+    $inicio = Carbon::parse(
+        "{$fecha} " . substr((string) $examen->hora_ini, 0, 8),
+        $zonaHoraria
+    );
+    $fin = Carbon::parse(
+        "{$fecha} " . substr((string) $examen->hora_fin, 0, 8),
+        $zonaHoraria
+    );
+
+    if (!$ahora->betweenIncluded($inicio, $fin)) {
+        return response()->json([
+            'message' => 'El motivo solo puede editarse durante el horario del examen.',
+        ], 422);
+    }
+
+        $motivoAnterior = $expulsion->motivo;
+        $motivoNuevo = $datos['motivo'];
+
+        if ($motivoAnterior === $motivoNuevo) {
+            return response()->json([
+                'message' => 'El motivo no presenta cambios.',
+                'expulsion' => [
+                    'id' => $expulsion->id,
+                    'motivo' => $expulsion->motivo,
+                ],
+            ]);
+        }
+
+        $expulsion->motivo = $motivoNuevo;
+        $expulsion->save();
+
+        $rol = match (true) {
+            $usuario instanceof Admin => 'admin',
+            $usuario instanceof Docente => 'docente',
+            $usuario instanceof Auxiliar => 'auxiliar',
+            default => 'desconocido',
+        };
+
+        $nombreCompleto = trim(
+            "{$usuario->nombre} {$usuario->apellido_paterno} {$usuario->apellido_materno}"
+        );
+
+        LogAuditoria::create([
+            'user_type' => get_class($usuario),
+            'user_id' => $usuario->getKey(),
+            'rol_en_el_momento' => $rol,
+            'usuario_nombre' => $nombreCompleto !== ''
+                ? $nombreCompleto
+                : $usuario->nombre,
+            'usuario_email' => $usuario->email ?? null,
+            'modulo' => 'EXPULSIONES',
+            'accion' => 'MOTIVO_EXPULSION_ACTUALIZADO',
+            'ip_origen' => $request->ip() ?? '127.0.0.1',
+            'user_agent' => $request->userAgent(),
+            'detalles' => [
+                'expulsion_id' => $expulsion->id,
+                'examen_id' => $examen->id,
+                'estudiante_id' => $expulsion->id_estudiante,
+                'motivo_anterior' => $motivoAnterior,
+                'motivo_nuevo' => $motivoNuevo,
+            ],
+        ]);
+
+        return response()->json([
+            'message' => 'Motivo de expulsión actualizado exitosamente.',
+            'expulsion' => [
+                'id' => $expulsion->id,
+                'id_examen' => $expulsion->id_examen,
+                'id_estudiante' => $expulsion->id_estudiante,
+                'motivo' => $expulsion->motivo,
+                'fecha_hora' => $expulsion->fecha_hora,
+            ],
+        ]);
+    });
+}
 
 }
