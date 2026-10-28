@@ -36,6 +36,10 @@ Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLink
 Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword']);
 Route::get('noticias', [NoticiaController::class, 'index']);
 
+// Comprobación ligera de conectividad para el temporizador de sesión.
+// No revela información interna ni requiere autenticación.
+Route::get('health', fn () => response()->noContent());
+
 Route::get('examenes', [ExamenController::class, 'index']);
 
 
