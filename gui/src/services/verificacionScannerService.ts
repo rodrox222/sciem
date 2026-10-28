@@ -1,12 +1,6 @@
 import axios from 'axios';
+import { apiUrl } from './apiUrl';
 import { validarQrOffline } from '../db/offlineStorage';
-
-//http://192.168.1.17:8200
-const rawUrl = (import.meta.env.VITE_API_URL?.trim() || 'http://localhost:8200/api')
-  .replace(/\/api\/?$/, '')
-  .replace(/\/$/, '');
-
-const API_URL = `${rawUrl}/api`;
 
 function obtenerTokenValido(paramToken?: string): string {
   if (paramToken && paramToken.trim() !== '' && paramToken !== 'undefined' && paramToken !== 'null') {
@@ -96,7 +90,7 @@ export async function procesarIngresoEscaneado(
       const authToken = obtenerTokenValido(token);
 
       const res = await axios.post(
-        `${API_URL}/examenes/${idExamen}/verificar-ingreso`,
+        apiUrl(`/examenes/${idExamen}/verificar-ingreso`),
         { qr_data: qrData },
         { 
           headers: { 
