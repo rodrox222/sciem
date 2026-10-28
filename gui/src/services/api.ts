@@ -135,7 +135,7 @@ export async function apiDownload(
   options: { signal?: AbortSignal } = {},
 ): Promise<{ blob: Blob; filename: string | null }> {
   const url = apiUrl(path)
-  const headers = new Headers({ Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream' })
+  const headers = new Headers({ Accept: 'application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream' })
   const token = localStorage.getItem('auth_token')
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
