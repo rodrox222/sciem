@@ -1,13 +1,14 @@
 <?php
 
-// Únicamente para el contenedor PostgreSQL desechable definido en docker-compose.sprint3-qa.yml.
-require __DIR__.'/../vendor/autoload.php';
-$app = require __DIR__.'/../bootstrap/app.php';
-$app->make(Kernel::class)->bootstrap();
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+
+// Únicamente para el contenedor PostgreSQL desechable definido en docker-compose.sprint3-qa.yml.
+require __DIR__.'/../vendor/autoload.php';
+$app = require __DIR__.'/../bootstrap/app.php';
+$app->make(Kernel::class)->bootstrap();
 
 if (getenv('SCIEM_QA_ALLOW_WRITE') !== '1' || ! app()->environment('testing')
     || DB::getDriverName() !== 'pgsql' || DB::connection()->getDatabaseName() !== 'sciem_sprint3_test'

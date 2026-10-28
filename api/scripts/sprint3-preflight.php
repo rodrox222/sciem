@@ -1,12 +1,13 @@
 <?php
 
+use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
 // Solo lectura, útil antes de planificar migraciones en la BD existente. No imprime PII.
 require __DIR__.'/../vendor/autoload.php';
 $app = require __DIR__.'/../bootstrap/app.php';
 $app->make(Kernel::class)->bootstrap();
-use Illuminate\Contracts\Console\Kernel;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 if (DB::getDriverName() !== 'pgsql') {
     fwrite(STDERR, "Se requiere PostgreSQL.\n");
