@@ -46,7 +46,7 @@ class ExamenSeeder2 extends Seeder
                 'apellido_materno'  => 'mamani',
                 'email_verified_at' => now(),
                 'password'          => Hash::make('docente123'),
-                'activo'            => true,
+                'activo'            => DB::raw('true'),
             ]
         );
 
@@ -92,9 +92,9 @@ class ExamenSeeder2 extends Seeder
                     'apellido_paterno'         => $aux['apellido_paterno'],
                     'apellido_materno'         => $aux['apellido_materno'],
                     'password'                 => Hash::make('SMG43210'),
-                    'primer_acceso_completado' => true,
-                    'activo'                   => true,
-                    'es_auxiliar'              => true,
+                    'primer_acceso_completado' => DB::raw('true'),
+                    'activo'                   => DB::raw('true'),
+                    'es_auxiliar'              => DB::raw('true'),
                     'created_at'               => now(),
                     'updated_at'               => now(),
                 ]
@@ -163,8 +163,8 @@ class ExamenSeeder2 extends Seeder
             }
         }
 
-        // Todos los estudiantes al examen activo
-        $todosEstudiantes = Estudiante::where('es_auxiliar', false)->get();
+        // Todos los estudiantes al examen activo usando sintaxis SQL nativa para booleanos
+        $todosEstudiantes = Estudiante::whereRaw('es_auxiliar is false')->get();
         if ($todosEstudiantes->isNotEmpty()) {
             $syncTodos = [];
             foreach ($todosEstudiantes as $estudiante) {
