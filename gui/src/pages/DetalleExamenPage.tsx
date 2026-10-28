@@ -44,11 +44,13 @@ export default function DetalleExamenPage() {
 
   const role = (localStorage.getItem('user_role') ?? '').toLowerCase()
   const canManage = ['admin', 'administrador', 'docente', 'auxiliar'].includes(role)
+  const canEditExam = ['admin', 'administrador', 'docente'].includes(role)
   const canExpel = canManage
 
   const requestedTab = searchParams.get('tab') || 'info'
   const activeTab =
-    requestedTab === 'expulsiones' && !canExpel ? 'info' : requestedTab
+    (requestedTab === 'expulsiones' && !canExpel) ||
+    (requestedTab === 'editar' && !canEditExam) ? 'info' : requestedTab
 
   const [exam, setExam] = useState<Examen | null>(null)
   const [loading, setLoading] = useState(true)
@@ -129,7 +131,7 @@ export default function DetalleExamenPage() {
   }
 
   const canMonitor = permiteMonitoreoFrontend(exam)
-  const canEdit = canManage && exam.estado === 'Programado'
+  const canEdit = canEditExam && exam.estado === 'Programado'
 
   return (
     <div className="space-y-6">
@@ -172,7 +174,8 @@ export default function DetalleExamenPage() {
       <EtapasExamen exam={exam} />
 
       <Tabs
-        value={activeTab === 'monitoreo' && !canMonitor ? 'info' : activeTab}
+        value={(activeTab === 'monitoreo' && !canMonitor) ||
+          (activeTab === 'editar' && !canEdit) ? 'info' : activeTab}
         onValueChange={(val) => setSearchParams({ tab: val })}
         className="space-y-6"
       >
