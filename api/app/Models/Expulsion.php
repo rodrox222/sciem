@@ -43,6 +43,6 @@ class Expulsion extends Model
 
     public function expulsadoPor(): MorphTo
     {
-        return $this->morphTo('expulsado_por');
+        return $this->morphTo(__FUNCTION__, 'expulsado_por_type', 'expulsado_por_id');
     }
 }

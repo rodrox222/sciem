@@ -192,7 +192,7 @@ try {
     $exam->update(['estado' => 'En proceso', 'fecha' => $examData['fecha']]);
     http('PATCH', $base.'expulsiones/'.$expulsion->id, $t, ['motivo' => 'Corrección auditada']);
     $history = http('GET', $base.'expulsiones', $t)['json']['expulsiones'][0];
-    check($history['motivo_original'] === 'Motivo simultáneo' && count($history['ediciones']) === 1 && $history['responsable']['rol'] === 'docente', 'Historial o responsable incorrectos');
+    check($history['motivo_original'] === 'Motivo simultáneo' && count($history['ediciones']) === 1 && ($history['responsable']['rol'] ?? null) === 'docente', 'Historial o responsable incorrectos');
     $results = race($exam->id, [['DELETE', $base.'expulsiones/'.$expulsion->id, $t, ['motivo_eliminacion' => 'QA baja concurrente']], ['POST', $base.'expulsiones', $t, $expel]]);
     check($results[0]['status'] === 200 && in_array($results[1]['status'], [201, 409], true), 'Alta contra baja sin serialización válida');
     $active = Expulsion::where('id_examen', $exam->id)->get();

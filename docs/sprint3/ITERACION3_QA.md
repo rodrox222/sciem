@@ -86,3 +86,19 @@ porque /app es read-only y api/vendor no existe en un checkout limpio.
 Se preparan los directorios de montaje en Actions y PowerShell antes de iniciar
 compose. No se cambia el montaje read-only ni se añaden puertos públicos.
 Este primer run es FAIL de entorno; no alcanzó migraciones ni PHPUnit.
+
+## PostgreSQL PASS y ampliación de cobertura
+
+Run 40721330761, commit b724f3e: migraciones en PostgreSQL 15.10 PASS;
+PHPUnit 18 pruebas / 141 aserciones / cero skips; contratos frontend 4 PASS;
+build PASS. Métrica del fixture de 300: 10.65 ms, 2 consultas (sin SLA aprobado).
+
+Run 40722383725: la suite base volvió a aprobar; el QA HTTP ampliado aprobó
+login de cuatro roles, sesiones duales, token antiguo/cuenta inactiva, alcance,
+revocación, búsqueda y lectura sin escrituras. Dos clientes HTTP/servidores y
+conexiones PostgreSQL contendieron: una alta 201, otra 409 y auditoría única.
+El historial reveló responsable null al precargar la relación polimórfica:
+MorphTo se denominaba expulsado_por, pero el método/carga usaban expulsadoPor.
+Se conserva el esquema y se declara el nombre del método con ambas columnas
+explícitas. Se añade regresión de responsable.id/rol al historial tras baja.
+El lote ampliado no se declara aprobado hasta completar su reejecución.

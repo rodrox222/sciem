@@ -112,6 +112,8 @@ class FlujosSprint3Test extends TestCase
         $this->assertNotNull(Expulsion::withTrashed()->findOrFail($id)->deleted_at);
         $this->assertSame(0, DB::table('expulsion_vigencias')->where('id_examen', $this->exam->id)->count());
         $history = $this->getJson($this->url('expulsiones'))->assertOk()->assertJsonPath('total', 1);
+        $history->assertJsonPath('expulsiones.0.responsable.id', $this->teacher->id)
+            ->assertJsonPath('expulsiones.0.responsable.rol', 'docente');
         $this->assertCount(1, $history->json('expulsiones.0.ediciones'));
         $this->assertSame(3, LogAuditoria::where('modulo', 'EXPULSIONES')->where('detalles->expulsion_id', $id)->count());
         // Eliminar una expulsión no elimina ni duplica un ingreso autorizado.

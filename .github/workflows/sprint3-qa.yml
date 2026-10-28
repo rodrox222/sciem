@@ -58,6 +58,29 @@ jobs:
           docker cp sciem-sprint3-http:/tmp/sciem-qa-evidence/. qa-evidence/
           if ! command -v pdftotext > /dev/null; then sudo apt-get update -qq && sudo apt-get install -y poppler-utils; fi
           python3 scripts/verify-sprint3-pdf.py qa-evidence
+          mkdir -p "$RUNNER_TEMP/sciem-browser"
+          docker cp sciem-sprint3-http:/tmp/sciem-browser-fixture.json "$RUNNER_TEMP/sciem-browser/fixture.json"
+          export SCIEM_BROWSER_FIXTURE="$RUNNER_TEMP/sciem-browser/fixture.json"
+          export SCIEM_PLAYWRIGHT_PATH="$RUNNER_TEMP/sciem-browser/node_modules/playwright"
+          export SCIEM_QR_VIDEO="$RUNNER_TEMP/sciem-browser/camera.y4m"
+          npm install --prefix "$RUNNER_TEMP/sciem-browser" --no-save playwright@1.56.1 qrcode@1.5.4
+          "$RUNNER_TEMP/sciem-browser/node_modules/.bin/playwright" install --with-deps chromium
+          node - <<'JS'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const folder = path.dirname(process.env.SCIEM_BROWSER_FIXTURE);
+          const qr = JSON.parse(fs.readFileSync(process.env.SCIEM_BROWSER_FIXTURE)).qr;
+          require(path.join(folder, 'node_modules/qrcode')).toFile(path.join(folder, 'qr.png'), qr, { width: 288, margin: 4 });
+          JS
+          ffmpeg -hide_banner -loglevel error -loop 1 -i "$RUNNER_TEMP/sciem-browser/qr.png" -vf 'pad=640:480:(ow-iw)/2:(oh-ih)/2:color=white,format=yuv420p' -t 3 -r 10 "$SCIEM_QR_VIDEO"
+          npm --prefix gui ci
+          VITE_API_URL=http://127.0.0.1:8200 npm --prefix gui run build 2>&1 | tee qa-evidence/frontend-build.txt
+          npm --prefix gui run preview -- --host 0.0.0.0 --port 4173 > "$RUNNER_TEMP/sciem-browser/vite.txt" 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:4173 > /dev/null; then break; fi
+            sleep 1
+          done
+          node gui/tests/sprint3-browser.cjs 2>&1 | tee qa-evidence/browser.txt
       - name: Frontend contracts and build
         shell: bash
         run: |
