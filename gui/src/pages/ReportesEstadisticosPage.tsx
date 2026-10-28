@@ -157,6 +157,7 @@ export default function ReportesEstadisticosPage() {
       return
     }
     setErrorFiltros('')
+    setAvisoDescarga(null)
     setFiltros({ ...borrador })
     setRevision((actual) => actual + 1)
   }
@@ -165,6 +166,7 @@ export default function ReportesEstadisticosPage() {
     setBorrador(SIN_FILTROS)
     setFiltros(SIN_FILTROS)
     setErrorFiltros('')
+    setAvisoDescarga(null)
     setRevision((actual) => actual + 1)
   }
 
@@ -306,11 +308,11 @@ export default function ReportesEstadisticosPage() {
           <div className="grid gap-3 md:grid-cols-2">
             <div>
               <label htmlFor="fecha-desde" className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-foreground"><CalendarDays className="size-3.5 text-sci-cyan" aria-hidden="true" /> Fecha desde</label>
-              <input id="fecha-desde" type="date" value={borrador.fecha_desde} disabled={descargando} onChange={(event) => setBorrador((valor) => ({ ...valor, fecha_desde: event.target.value }))} className="min-h-11 w-full min-w-0 rounded-xl border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sci-cyan" />
+              <input id="fecha-desde" type="date" value={borrador.fecha_desde} disabled={descargando} onChange={(event) => { setBorrador((valor) => ({ ...valor, fecha_desde: event.target.value })); setAvisoDescarga(null) }} className="min-h-11 w-full min-w-0 rounded-xl border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sci-cyan" />
             </div>
             <div>
               <label htmlFor="fecha-hasta" className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-foreground"><CalendarDays className="size-3.5 text-sci-cyan" aria-hidden="true" /> Fecha hasta</label>
-              <input id="fecha-hasta" type="date" value={borrador.fecha_hasta} disabled={descargando} onChange={(event) => setBorrador((valor) => ({ ...valor, fecha_hasta: event.target.value }))} className="min-h-11 w-full min-w-0 rounded-xl border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sci-cyan" />
+              <input id="fecha-hasta" type="date" value={borrador.fecha_hasta} disabled={descargando} onChange={(event) => { setBorrador((valor) => ({ ...valor, fecha_hasta: event.target.value })); setAvisoDescarga(null) }} className="min-h-11 w-full min-w-0 rounded-xl border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sci-cyan" />
             </div>
           </div>
           {errorFiltros && <p className="text-xs font-semibold text-destructive" role="alert">{errorFiltros}</p>}
