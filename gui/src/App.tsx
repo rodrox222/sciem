@@ -29,6 +29,7 @@ import NormasPage from './pages/NormasPage'
 import { AuditoriaPage } from './pages/AuditoriaPage'
 import ProgramarExamenPage from './pages/ProgramarExamenPage'
 import ConfiguracionPage from './pages/ConfiguracionPage'
+import ReportesEstadisticosPage from './pages/ReportesEstadisticosPage'
 
 
 export default function App() {
@@ -89,8 +90,9 @@ export default function App() {
             </Route>
 
             {/* Administrador y Docente */}
-            <Route element={<ProtectedRoute allowedRoles={['admin', 'docente']} />}>
+            <Route element={<ProtectedRoute allowedRoles={['admin', 'administrador', 'docente']} />}>
               <Route path="/programar-examen" element={<ProgramarExamenPage />} />
+              <Route path="/reportes" element={<ReportesEstadisticosPage />} />
             </Route>
           </Route>
         </Route>

@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { validarQrOffline } from '../db/offlineStorage';
 
+//http://localhost:8200/api
 const rawUrl = (import.meta.env.VITE_API_URL?.trim() || 'http://192.168.1.17:8200')
   .replace(/\/api\/?$/, '')
   .replace(/\/$/, '');
@@ -83,13 +84,13 @@ function extraerDatosQr(qrRaw: string): {
 export async function procesarIngresoEscaneado(
   qrData: string,
   idExamen: string,
-  token: string
+  token: string,
+  idAuxiliarActual?: string // Parámetro para delimitar el módulo
 ): Promise<ResultadoEscaneo> {
   const { codigoSis, idExamenToken, expiraAt, idEstudianteToken } = extraerDatosQr(qrData);
 
   const hayConexion = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
-  // Si hay conexión a la red, intentamos validar directamente en Laravel
   if (hayConexion) {
     try {
       const authToken = obtenerTokenValido(token);
@@ -114,7 +115,6 @@ export async function procesarIngresoEscaneado(
         detalles: res.data.detalles,
       };
     } catch (error: any) {
-      // Si el servidor respondió un error 400/403/409, Laravel YA registró el intento no autorizado
       if (error.response) {
         return {
           success: false,
@@ -124,13 +124,13 @@ export async function procesarIngresoEscaneado(
         };
       }
 
-      // Si no hubo respuesta del servidor (timeout o red caída), recurrimos a offline
-      return resolverOffline(idExamen, codigoSis, idExamenToken, expiraAt, idEstudianteToken);
+      // Si se agota el tiempo de espera o se cae el servidor, resuelve offline
+      return resolverOffline(idExamen, codigoSis, idExamenToken, expiraAt, idEstudianteToken, idAuxiliarActual);
     }
   }
 
   // Modo offline sin internet
-  return resolverOffline(idExamen, codigoSis, idExamenToken, expiraAt, idEstudianteToken);
+  return resolverOffline(idExamen, codigoSis, idExamenToken, expiraAt, idEstudianteToken, idAuxiliarActual);
 }
 
 async function resolverOffline(
@@ -138,16 +138,29 @@ async function resolverOffline(
   codigoSis: string,
   idExamenToken?: string,
   expiraAt?: number,
-  idEstudianteToken?: string
+  idEstudianteToken?: string,
+  idAuxiliarActual?: string
 ): Promise<ResultadoEscaneo> {
-  const resOffline = await validarQrOffline(idExamen, codigoSis, idExamenToken, expiraAt, idEstudianteToken);
+  const resOffline = await validarQrOffline(
+    idExamen,
+    codigoSis,
+    idExamenToken,
+    expiraAt,
+    idEstudianteToken,
+    idAuxiliarActual
+  );
 
   return {
     success: resOffline.acceso,
     metodo: 'OFFLINE',
     mensaje: resOffline.mensaje,
     estudiante: resOffline.estudiante
-      ? { nombre_completo: resOffline.estudiante, codigo_sis: codigoSis }
+      ? {
+          nombre_completo: typeof resOffline.estudiante === 'string' ? resOffline.estudiante : resOffline.estudiante.nombre_completo,
+          codigo_sis: codigoSis,
+          ci: typeof resOffline.estudiante === 'object' ? resOffline.estudiante.ci : undefined,
+          foto_url: typeof resOffline.estudiante === 'object' ? resOffline.estudiante.foto_url : undefined,
+        }
       : undefined,
     detalles: {
       codigo: resOffline.codigo,

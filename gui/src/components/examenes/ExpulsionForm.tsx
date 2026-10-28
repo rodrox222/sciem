@@ -27,25 +27,19 @@ import {
   expulsionesService,
   type AsistenciaExpulsion,
   type RegistroExpulsionResponse,
+  type ExpulsionRegistrada,
 } from '@/services/expulsiones.service'
-import type { Estudiante } from '@/services/estudiantes.service'
+import type { EstudianteInscritoExamen } from '@/services/estudiantes.service'
 import type { Examen } from '@/services/examenes.service'
+import { verificarHorarioExpulsion } from '@/components/examenes/horarioExpulsion'
 
 interface ExpulsionFormProps {
   exam: Examen
-  estudiante: Estudiante
+  estudiante: Pick<EstudianteInscritoExamen, 'id' | 'codigo_sis' | 'nombre_completo'>
   asistencia: AsistenciaExpulsion
+  horarioPermitido: boolean
+  onRegistered?: (registro: ExpulsionRegistrada) => void
 }
-
-const nombreCompleto = (estudiante: Estudiante) =>
-  [
-    estudiante.nombre,
-    estudiante.apellido_paterno,
-    estudiante.apellido_materno,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .trim()
 
 const formatServerDateTime = (value: string) => {
   const parsed = new Date(value)
@@ -63,6 +57,8 @@ export function ExpulsionForm({
   exam,
   estudiante,
   asistencia,
+  horarioPermitido,
+  onRegistered,
 }: ExpulsionFormProps) {
   const [motivo, setMotivo] = useState('')
   const [touched, setTouched] = useState(false)
@@ -90,12 +86,23 @@ export function ExpulsionForm({
     setError('')
 
     if (!motivoValido) return
+    const horario = verificarHorarioExpulsion(exam, new Date())
+    if (!horario.permitido) {
+      setError(horario.mensaje)
+      return
+    }
 
     setConfirmOpen(true)
   }
 
   const registerExpulsion = async () => {
     if (!motivoValido || submitting) return
+    const horario = verificarHorarioExpulsion(exam, new Date())
+    if (!horario.permitido) {
+      setConfirmOpen(false)
+      setError(horario.mensaje)
+      return
+    }
 
     setSubmitting(true)
     setError('')
@@ -107,6 +114,7 @@ export function ExpulsionForm({
       })
 
       setSuccess(response)
+      onRegistered?.(response.expulsion)
     } catch (requestError) {
       if (requestError instanceof ApiError) {
         setError(requestError.message)
@@ -233,6 +241,12 @@ export function ExpulsionForm({
           )}
         </div>
 
+        {!horarioPermitido && (
+          <p role="status" className="rounded-xl border border-sci-amber/30 bg-sci-amber/10 p-3 text-xs text-sci-navy">
+            El examen está fuera de su horario. No se puede registrar la expulsión.
+          </p>
+        )}
+
         {error && (
           <div
             className="flex items-start gap-2 rounded-xl border border-sci-red/20 bg-sci-red/10 p-3 text-[11px] text-sci-red"
@@ -249,7 +263,7 @@ export function ExpulsionForm({
         <Button
           type="button"
           onClick={openConfirmation}
-          disabled={submitting}
+          disabled={submitting || !horarioPermitido}
           className="w-full cursor-pointer bg-sci-red text-xs font-bold text-white hover:bg-sci-red/90"
         >
           {submitting ? (
@@ -275,7 +289,7 @@ export function ExpulsionForm({
             <AlertDialogTitle>Confirmar expulsión</AlertDialogTitle>
             <AlertDialogDescription>
               Esta acción registrará la expulsión de{' '}
-              <strong>{nombreCompleto(estudiante)}</strong> del examen{' '}
+              <strong>{estudiante.nombre_completo}</strong> del examen{' '}
               <strong>{exam.nombre}</strong>.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -293,7 +307,7 @@ export function ExpulsionForm({
             </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
-              disabled={submitting}
+              disabled={submitting || !horarioPermitido}
               onClick={() => void registerExpulsion()}
             >
               Confirmar expulsión

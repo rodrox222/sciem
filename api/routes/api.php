@@ -20,6 +20,9 @@ use App\Http\Controllers\ConfiguracionSistemaController;
 use App\Http\Controllers\IntentoNoAutorizadoController;
 use App\Http\Controllers\AuxiliarModuloController;
 use App\Http\Controllers\ExpulsionController;
+use App\Http\Controllers\MonitoreoController;
+use App\Http\Controllers\ReporteEstadisticoController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\AuxiliarOfflineController;
 use App\Models\Admin;
 use App\Models\Docente;
@@ -47,6 +50,7 @@ Route::get('/seed-render-now', function () {
 
 // --- RUTAS PROTEGIDAS (Sanctum) ---
 Route::middleware('auth:sanctum')->group(function () {
+    Route::get('dashboard', [DashboardController::class, 'index']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
     // Perfil del usuario autenticado
@@ -206,8 +210,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('examenes/{id}/verificar-ingreso', [VerificacionController::class, 'verificarIngreso']);
     });
 
-    // --- HU 15: REGISTRO DE EXPULSIONES ---
+    // --- HU 15: REGISTRO Y CONSULTA DE EXPULSIONES ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::get(
+            'examenes/{id}/expulsiones',
+            [ExpulsionController::class, 'index']
+        );
+
         Route::post(
             'examenes/{id}/expulsiones',
             [ExpulsionController::class, 'store']
@@ -222,6 +231,28 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('examenes/{id_examen}/intentos-no-autorizados', [IntentoNoAutorizadoController::class, 'index']);
         Route::post('examenes/{id_examen}/escanear-ingreso', [VerificacionController::class, 'verificarIngreso']);
     });
+    // MONITOREO EN TIEMPO REAL (HU16) 
+    Route::middleware('role:admin,administrador,docente,auxiliar')
+        ->get('examenes/{idExamen}/monitoreo', [MonitoreoController::class, 'resumen']);
+    Route::middleware('role:admin,administrador,docente,auxiliar')
+    ->get('examenes/{idExamen}/monitoreo/estudiantes', [MonitoreoController::class, 'estudiantes']);
+    // HU 17: REPORTES ESTADÍSTICOS
+    Route::middleware('role:admin,administrador,docente')
+    ->get(
+        'examenes/{idExamen}/reportes/estadisticas',
+        [ReporteEstadisticoController::class, 'resumen']
+    );
+
+    Route::middleware('role:admin,administrador,docente')
+    ->get(
+        'examenes/{idExamen}/reportes/estadisticas/franjas-horarias',
+        [ReporteEstadisticoController::class, 'franjasHorarias']
+    );
+    Route::middleware('role:admin,administrador,docente')
+    ->get(
+        'examenes/{idExamen}/reportes/estadisticas/descargar',
+        [ReporteEstadisticoController::class, 'descargar']
+    );
 
 
     // HU 18: MODULO DE ESTUDIANTES
@@ -229,7 +260,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Completar o cambiar CI
         Route::match(['post', 'patch'], '/completar-datos', [EstudianteController::class, 'completarDatos']);
         
-        // Subir foto facial a Cloudinary
+        // Subir foto facial a laravel
         Route::post('/foto', [EstudianteController::class, 'subirFoto']);
         
         // Consultar exámenes inscritos y estado de habilitación
@@ -243,15 +274,14 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     //HU 19: GESTIÓN DE AUXILIARES
-    Route::middleware('role:admin,administrador,docente')->group(function () {
-        Route::post('examenes/{id_examen}/invitar-auxiliar', [AuxiliarModuloController::class, 'invitarAuxiliar']);
-        Route::get('examenes/{id_examen}/auxiliares', [AuxiliarModuloController::class, 'listarAuxiliaresExamen']);
+    Route::middleware('role:auxiliar')->prefix('auxiliar')->group(function () {
+        Route::get('/mis-examenes', [AuxiliarModuloController::class, 'misExamenesAsignados']);
     });
 
-    Route::middleware('role:auxiliar')->prefix('auxiliar')->group(function () {
-        Route::get('/invitaciones', [AuxiliarModuloController::class, 'misInvitaciones']);
-        Route::patch('/invitaciones/{id_invitacion}/responder', [AuxiliarModuloController::class, 'responderInvitacion']);
-        Route::get('/mis-examenes', [AuxiliarModuloController::class, 'misExamenesAsignados']);
+    Route::middleware('role:admin,administrador,docente')->group(function () {
+        Route::post('examenes/{id_examen}/auxiliares', [AuxiliarModuloController::class, 'invitarAuxiliar']);
+        Route::get('examenes/{id_examen}/auxiliares', [AuxiliarModuloController::class, 'listarAuxiliaresExamen']);
+        Route::delete('examenes/{id_examen}/auxiliares/{id_auxiliar}', [AuxiliarModuloController::class, 'desvincularAuxiliar']);
     });
 
     // todos tienen acceso a ver la foto del estudiante, pero solo el propio estudiante puede subirla
@@ -269,7 +299,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // --- HU 14: NOTICIAS OPERATIVAS ---
-    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+    Route::middleware('role:admin,administrador,docente,auxiliar,estudiante')->group(function () {
         Route::get('noticias/internas', [NoticiaController::class, 'index']); 
     });
 

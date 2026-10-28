@@ -49,6 +49,15 @@ class Examen extends Model
     {
         return $this->belongsTo(Docente::class, 'id_docente');
     }
+    public function auxiliares(): BelongsToMany
+    {
+    return $this->belongsToMany(
+        Auxiliar::class,
+        'auxiliar_examen',
+        'id_examen',
+        'id_auxiliar'
+    )->withTimestamps();
+    }
 
     public function normas(): BelongsToMany
     {
@@ -58,7 +67,15 @@ class Examen extends Model
     public function estudiantes(): BelongsToMany
     {
         return $this->belongsToMany(Estudiante::class, 'estudiante_examen', 'id_examen', 'id_estudiante')
-            ->withPivot('estado', 'motivo_estado', 'ajuste_manual', 'modificado_por_docente_id', 'fecha_ajuste_manual', 'fecha_ingreso')
+            ->withPivot(
+                'id_auxiliar',
+                'estado',
+                'motivo_estado',
+                'ajuste_manual',
+                'modificado_por_docente_id',
+                'fecha_ajuste_manual',
+                'fecha_ingreso'
+            )
             ->withTimestamps();
     }
 
