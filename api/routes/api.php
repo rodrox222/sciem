@@ -260,7 +260,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Completar o cambiar CI
         Route::match(['post', 'patch'], '/completar-datos', [EstudianteController::class, 'completarDatos']);
         
-        // Subir foto facial a Cloudinary
+        // Subir foto facial a laravel
         Route::post('/foto', [EstudianteController::class, 'subirFoto']);
         
         // Consultar exámenes inscritos y estado de habilitación
