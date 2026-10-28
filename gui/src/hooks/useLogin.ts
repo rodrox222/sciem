@@ -1,6 +1,5 @@
 import { useState } from 'react'
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8200/api'
+import { apiUrl } from '@/services/apiUrl'
 
 export type Role = 'Auxiliar' | 'Docente' | 'Administrador'
 
@@ -50,7 +49,7 @@ export const useLogin = ({ onSuccess }: UseLoginOptions) => {
     const backendRole = selectedRole === 'Administrador' ? 'admin' : selectedRole.toLowerCase()
 
     try {
-      const res = await fetch(`${API_BASE_URL}/login`, {
+      const res = await fetch(apiUrl('/login'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
