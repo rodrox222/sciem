@@ -114,8 +114,8 @@ class PrerrequisitoSeeder extends Seeder
             );
         }
 
-        // Vincular a todos los estudiantes habilitados
-        $estudiantes = Estudiante::where('es_auxiliar', false)->orderBy('codigo_sis')->get();
+        // 1. Filtrar con whereRaw para evitar casteo numérico en Postgres
+        $estudiantes = Estudiante::whereRaw('es_auxiliar is false')->orderBy('codigo_sis')->get();
 
         $req1 = 'aaaaaaaa-1111-1111-1111-111111111111';
         $req2 = 'bbbbbbbb-2222-2222-2222-222222222222';
@@ -126,12 +126,13 @@ class PrerrequisitoSeeder extends Seeder
             $this->asignarCumplimiento($req2, $estudiante->id, true, $docente->id);
             $this->asignarCumplimiento($req3, $estudiante->id, true, $docente->id);
 
+            // 2. Usar DB::raw('false') para ajuste_manual en Query Builder
             DB::table('estudiante_examen')->updateOrInsert(
                 ['id_examen' => $examen->id, 'id_estudiante' => $estudiante->id],
                 [
                     'estado'                    => 'Habilitado',
                     'motivo_estado'             => null,
-                    'ajuste_manual'             => false,
+                    'ajuste_manual'             => DB::raw('false'),
                     'modificado_por_docente_id' => null,
                     'fecha_ajuste_manual'       => null,
                     'updated_at'                => now(),
@@ -147,13 +148,14 @@ class PrerrequisitoSeeder extends Seeder
 
     private function asignarCumplimiento(string $prerrequisitoId, string $estudianteId, bool $cumplido, ?string $docenteId): void
     {
+        // 3. Forzar el literal SQL exacto para el campo cumplido
         DB::table('estudiante_prerrequisito')->updateOrInsert(
             [
                 'id_prerrequisito' => $prerrequisitoId,
                 'id_estudiante'    => $estudianteId,
             ],
             [
-                'cumplido'                => $cumplido,
+                'cumplido'                => $cumplido ? DB::raw('true') : DB::raw('false'),
                 'fecha_cumplimiento'      => $cumplido ? now() : null,
                 'revisado_por_docente_id' => $docenteId,
                 'created_at'              => now(),
