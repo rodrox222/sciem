@@ -89,8 +89,10 @@ export const useLogin = ({ onSuccess }: UseLoginOptions) => {
       localStorage.setItem('user_role', userRole)
       localStorage.setItem('sci_last_activity', Date.now().toString())
 
-      // 2. Guardar únicamente datos de presentación visual (sin CI ni identificadores sensibles)
+      // Guardar identificador interno y datos mínimos para mostrar el monitoreo del docente titular.
+      // La autorización real se valida siempre en el backend; no guardar CI ni credenciales.
       const usuarioSeguro = {
+        id: data.user?.id,
         nombre: data.user?.nombre || '',
         apellido: data.user?.apellido_paterno || data.user?.apellido || '',
       }

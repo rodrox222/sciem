@@ -18,14 +18,22 @@ async function screenshot(page, name) {
 }
 async function session(browser, role, width = 1366) {
   const context = await browser.newContext({ viewport: { width, height: 900 }, permissions: ['camera'] });
-  await context.addInitScript(({ token, role }) => {
+  // Reproducir el perfil entregado por el servidor en login, incluido el ID del docente.
+  const profileResponse = await context.request.get(`${api}/me`, {
+    headers: { Authorization: `Bearer ${fixture.tokens[role]}` },
+  });
+  assert.equal(profileResponse.status(), 200, `/me para ${role}`);
+  const profile = await profileResponse.json();
+  assert.equal(profile.rol, role, `rol de /me para ${role}`);
+  await context.addInitScript(({ token, role, userId, userName }) => {
     if (!localStorage.getItem('qa_initialized')) {
       localStorage.setItem('auth_token', token);
       localStorage.setItem('user_role', role);
+      localStorage.setItem('user_data', JSON.stringify({ id: userId, nombre: userName }));
       localStorage.setItem('sci_last_activity', Date.now().toString());
       localStorage.setItem('qa_initialized', '1');
     }
-  }, { token: fixture.tokens[role], role });
+  }, { token: fixture.tokens[role], role, userId: profile.id, userName: profile.nombre });
   const page = await context.newPage(); activePage = page;
   page.setDefaultTimeout(20000);
   return { context, page };
