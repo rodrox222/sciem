@@ -102,3 +102,67 @@ MorphTo se denominaba expulsado_por, pero el método/carga usaban expulsadoPor.
 Se conserva el esquema y se declara el nombre del método con ambas columnas
 explícitas. Se añade regresión de responsable.id/rol al historial tras baja.
 El lote ampliado no se declara aprobado hasta completar su reejecución.
+
+
+## Cierre de QA automatizado de iteración 3 (28-10-2026)
+
+**Ejecución verde definitiva:** [GitHub Actions #40727267733](https://github.com/MiguelVarMer/sciem-frontend-integracion/actions/runs/40727267733), commit probado `607cad22e59c1e1a6190f309d9346a13dc881907`, conclusión GitHub `success`. [Artefacto de evidencias](https://github.com/MiguelVarMer/sciem-frontend-integracion/actions/runs/40727267733/artifacts/12834031129): 37 archivos, incluidas capturas desktop/390 px, datos de referencia, preflight, PDF/XLSX, logs HTTP, métricas y JSON de escenarios.
+
+**Resultado confirmado por logs y artefactos, no inferido del build:**
+
+- PostgreSQL 15.10 QA aislada, bootstrap y migraciones incrementales: **PASS**, sin `fresh`, `wipe` ni seed general.
+- PHPUnit `phpunit.sprint3.xml`: **18 pruebas, 143 aserciones, 0 skips, PASS**. La excepción de auditoría simulada de una prueba negativa está registrada intencionalmente; valida rollback y no representa una falla de suite. Warning no fatal al intentar guardar caché de PHPUnit bajo `/app:ro`.
+- QA HTTP multiconexión: **10 grupos PASS** (`extended.json`): login con admin, docente, auxiliar y estudiante; sesiones duales y token antiguo, cuenta inactiva; aislamiento/alcance y revocación; búsquedas por nombre/apellido/SIS/QR y GET sin escritura; doble alta concurrente 201/409, auditoría única; edición/eliminación auditadas, cierre horario, carreras alta/baja e ingreso/expulsión; productores QR/manual/offline; coherencia SQL de HU16/17/20, 6 métricas, 4 hojas XLSX y 24 franjas; error parcial del dashboard como `null`; 300 estudiantes; conservación de duplicados históricos en backfill.
+- Verificación PDF con extracción de texto: **PASS** (6 cifras cotejadas con SQL, tablas, caracteres tildados/ñ, 24 franjas); XLSX real de cuatro hojas y descarga de UI **PASS**.
+- Chromium contra HTTP y BD QA: **7 grupos PASS**, incluyendo HU20 cuatro roles en desktop y 390 px, manipulación de rol local sin escalar permisos, error parcial; HU15 cancelación/alta/edición/baja/historial tras recarga, lectura de QR firmado con cámara virtual sin escritura; HU16 polling, pestaña oculta, red caída/restablecida, cambio a examen vacío; HU17 filtros/descargas XLSX/PDF desktop/390 px; **inactividad 5 minutos y logout real con reloj Playwright controlado**. Se comprueba ausencia de desbordamiento horizontal en las capturas.
+- Contratos frontend Node: **4/4 PASS, 0 fallos/0 skips**; build TypeScript/Vite: **PASS**. Advertencia no bloqueante de chunk >500 kB. Se preserva diseño aprobado de HU17.
+
+**Medición de rendimiento de esta ejecución:** consulta del fixture 300 estudiantes `11.13 ms`, 2 queries; carga HTTP 20 peticiones con 4 clientes simultáneos `p50=84.29 ms`, `p95=115.39 ms`, memoria del orquestador 35,651,584 bytes. Tres carreras con 2 clientes/2 conexiones bloqueadas cada una; duraciones registradas en `extended.json`. No hay SLA cuantificado aprobado; no generalizar estas cifras a producción.
+
+### Defectos hallados y cambios de la continuación
+
+| Commit en sandbox | Corrección y justificación |
+| --- | --- |
+| `f4d8517` | Instalación explícita de ffmpeg para cámara QR virtual en CI; el run anterior terminó con `ffmpeg: command not found` |
+| `e3192b9` | Test de autorización usaba URL inexistente `/api/usuarios` (404); usa `/api/dashboard/stats` restringida a admin (403) |
+| `10c9811` | Inicio de sesión conservaba el nombre pero no `user.id`, ocultando Monitoreo al docente titular; persiste el ID interno y el fixture obtiene identidad real desde `/api/me` |
+| `b9c9027` | Incorporación sin sobrescrituras de los cinco archivos cambiados en `rodrox222/sciem:Develop` `d9e52d8` (config BD y cuatro seeders), con SHA de blobs coincidente |
+| `021933c` | El test de inactividad verifica primero HEAD real `/api/health` y estabiliza esa respuesta durante el reloj virtual, evitando confundir timeout artificial con desconexión |
+| `607cad2` | GitHub Actions cancela runs obsoletos del mismo grupo; solo la ejecución del HEAD vigente sirve como evidencia de cierre |
+
+### Relación Task/CA con archivos y evidencia
+
+La matriz individual de **37 Tasks** y rutas está en `docs/sprint3/ITERACION2.md` y en el documento de continuidad. El código no sustituye la evidencia: los grupos siguientes enlazan esa matriz con pruebas reales.
+
+| Tasks / CA funcionales | Archivos de implementación principales | Evidencia objetiva | Resultado |
+| --- | --- | --- | --- |
+| HU15 T15.1–T15.6, T15.10: vigencia, búsqueda, permisos, alta, edición/baja solicitadas por cliente, auditoría, duplicados y rollback | Migración `2026_10_28_120000_...`, `ExpulsionController.php`, `Expulsion.php`, `IdentificadorQr.php` | `postgres.txt`, `extended.json`, 8 pruebas feature/10 unitarias | PASS QA aislado |
+| HU15 T15.7–T15.9: formulario, cámara/QR, confirmación, historial y responsive | `DetalleExpulsionesTab.tsx`, `ExpulsionForm.tsx`, `gui/src/services/expulsiones.service.ts` | `browser/resultados.json`, capturas `HU15-*.png` | PASS con cámara virtual |
+| HU16 T16.1–T16.10: fuente única, totales/listas, permisos, actualización, reconexión, inactividad y móvil | `AsistenciaExamen.php`, `MonitoreoController.php`, `DetalleMonitoreoTab.tsx`, `useIdleTimer.ts` | PHPUnit/HTTP SQL, `browser/HU16-*.png`, inactividad controlada | PASS automatizado |
+| HU17 T17.1–T17.12: seis indicadores, filtros, franjas, reportes XLSX/PDF y UI aprobada | `ReporteEstadisticoController.php`, `ReportesEstadisticosPage.tsx` y componentes de reportes | `referencia.json`, `reporte-pdf.txt`, `reporte.xlsx`, `browser/descarga-ui.*`, capturas `HU17-*.png` | PASS automatizado |
+| HU20 T1–T5: rol operativo, asignación, caché y errores parciales | `RolOperativo.php`, `DashboardController.php`, `DashboardUnificado.tsx` | tests PHP/HTTP, `browser/HU20-*.png` para cuatro roles y 390 px | PASS automatizado |
+| Contratos compartidos necesarios para estas HU | Productores QR/manual/offline, `AuthController.php`, `useLogin.ts` | `extended.json`, pruebas de aislamiento/rollback | PASS limitado al alcance |
+
+### Gates de publicación y límites
+
+| Gate | Estado al cierre de la validación |
+| --- | --- |
+| G1 matriz Task/CA y decisión del cliente sobre editar/eliminar | Trazada en dossier y aquí; conserva PATCH/DELETE con auditoría |
+| G2 conservación de trabajo del equipo | No se borraron ramas ni archivos; integración de cinco novedades oficiales por SHA. Revalidar ancestros y diff en la rama oficial al publicar |
+| G3 build, PostgreSQL, PHP/HTTP y frontend sin skips | **PASS** en workflow #40727267733 |
+| G4 cuatro roles, asignaciones y aislamiento | **PASS** HTTP/Chromium; identidad del login corregida |
+| G5 concurrencia, horario, expulsiones y auditoría | **PASS** en procesos/conexiones QA reales |
+| G6 coherencia HU16/HU17/HU20 y PDF/XLSX | **PASS** con SQL/JSON/PDF/XLSX; 24 franjas |
+| G7 migración/backfill incremental y preservación | **PASS** en BD desechable, incluidos duplicados. Backup real y preflight de una BD existente siguen siendo requisitos previos al despliegue, NO ejecutados aquí |
+| G8 verificación visual | **PASS** Chromium desktop/390 px; QR con cámara virtual. Hardware físico y redes reales no comprobados |
+| G9 HEAD oficiales, diff y PR | **BLOQUEADO**: el conector GitHub recibe HTTP 403 `Resource not accessible by integration` al crear blob/tree en `rodrox222/sciem`. No se publicó `ExNayra-PrimoLukas`, no existe PR creado por este rescate. Reconsultar refs antes de intentar desde un cliente con permisos |
+| G10 secretos/datos/no destrucción/fuera de alcance | No se modificó BD real ni se publicaron secretos; fixtures aislados y permisos mínimos. CI y evidencia están solo en el sandbox |
+
+**Advertencias sin ocultar:** no se certificaron cámara física, condiciones de red reales, métricas de rendimiento de producción ni respaldo/preflight sobre una BD de despliegue. Los seeders incorporados desde Develop no se ejecutaron porque el QA prohíbe seed general. `npm ci` informó vulnerabilidades en dependencias existentes, que requieren análisis separado y no justifican `npm audit fix --force` fuera de alcance. No ejecutar rollback destructivo: conservar soft delete e historial.
+
+### Estado de integración y transferencia
+
+- Sandbox: rama `rescue/sprint3-iteracion2-20261028`, integró cinco archivos de `Develop` `d9e52d8` sin eliminar otros archivos. Antes de editar esta sección, la diferencia de árboles con `Develop` era 29 archivos nuevos, 33 modificados y 0 eliminados; comparar nuevamente con refs vivos antes del PR.
+- La rama `ExNayra-PrimoLukas` del repositorio compartido y su `Develop` no fueron alteradas por esta instancia. Los metadatos de permiso indicaban `push`, pero las operaciones de escritura reales respondieron 403: **prevalece la evidencia de la operación rechazada**.
+- Los cambios oficiales de `Develop` se aplicaron como contenidos, no como merge de ancestro Git. Una estación con autorización efectiva debe integrar preservando el historial de `ExNayra-PrimoLukas` y `Develop`, revisar conflictos, ejecutar QA afectado, hacer push sin force y abrir PR `ExNayra-PrimoLukas` → `Develop`. **Nunca ejecutar Merge del PR sin instrucción del equipo.**
+- La ejecución QA verde antecede a esta adición documental; este archivo no modifica comportamiento ni invalida las verificaciones ya realizadas.
