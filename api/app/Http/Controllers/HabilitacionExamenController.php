@@ -24,13 +24,12 @@ class HabilitacionExamenController extends Controller
                 'apellido_paterno', 
                 'apellido_materno', 
                 'email_institucional'
-            )->withPivot('id_auxiliar', 'estado', 'motivo_estado', 'ajuste_manual', 'fecha_ajuste_manual'); // <--- AGREGAR ESTA LÍNEA
+            )->withPivot('estado', 'motivo_estado', 'ajuste_manual', 'fecha_ajuste_manual');
         }])->findOrFail($examenId);
 
         $estudiantes = $examen->estudiantes->map(function ($estudiante) {
             return [
                 'id'                  => $estudiante->id,
-                'id_auxiliar'         => $estudiante->pivot->id_auxiliar,
                 'codigo_sis'          => $estudiante->codigo_sis,
                 'ci'                  => $estudiante->ci,
                 'ci_extension'        => $estudiante->ci_extension,
