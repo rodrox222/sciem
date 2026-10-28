@@ -72,7 +72,6 @@ class VerificacionController extends Controller
         }
 
         // EXTRACCIÓN Y PARSEO DEL QR
-
         $idExamenToken = null;
         $idEstudianteToken = null;
         $codigoSis = null;
@@ -111,7 +110,6 @@ class VerificacionController extends Controller
         }
 
         // QR DE OTRO TIPO (Bancario, URL, Cadena arbitraria)
-
         if (!$esFormatoValido) {
             $identificadorSeguro = substr(preg_replace('/[^a-zA-Z0-9_-]/', '', $trimmedQr), 0, 20);
             if (empty($identificadorSeguro)) {
@@ -127,7 +125,6 @@ class VerificacionController extends Controller
                 $userId,
                 $identificadorSeguro
             );
-
             $this->registrarLog(
                 $examen->id,
                 null,
@@ -146,7 +143,6 @@ class VerificacionController extends Controller
         }
 
         // BUSCAR AL ESTUDIANTE EN LA BASE DE DATOS
-
         $estudiante = null;
         if ($idEstudianteToken && Str::isUuid($idEstudianteToken)) {
             $estudiante = Estudiante::find($idEstudianteToken);
@@ -156,7 +152,6 @@ class VerificacionController extends Controller
         }
 
         // EXAMEN QUE YA ACABÓ
-
         $ahora = Carbon::now('America/La_Paz');
         $estadoExamen = strtolower(trim($examen->estado ?? ''));
         $esEstadoConcluido = in_array($estadoExamen, ['terminado', 'finalizado', 'concluido']);
@@ -165,7 +160,6 @@ class VerificacionController extends Controller
         if (!empty($examen->fecha) && !empty($examen->hora_fin)) {
             $soloFecha = substr(trim((string) $examen->fecha), 0, 10);
             $soloHora = trim((string) $examen->hora_fin);
-
             try {
                 $horaFinExamen = Carbon::parse("{$soloFecha} {$soloHora}", 'America/La_Paz');
             } catch (\Exception $e) {
@@ -183,7 +177,6 @@ class VerificacionController extends Controller
                 $userId,
                 $codigoSis ?? 'DESCONOCIDO'
             );
-
             $this->registrarLog(
                 $examen->id,
                 $estudiante?->id,
@@ -202,7 +195,6 @@ class VerificacionController extends Controller
         }
 
         // NO ESTÁ EN EL SISTEMA EN LA BASE DE DATOS
-
         if (!$estudiante) {
             $this->registrarIntentoYAuditoria(
                 $request,
@@ -213,7 +205,6 @@ class VerificacionController extends Controller
                 $userId,
                 $codigoSis ?? 'DESCONOCIDO'
             );
-
             $this->registrarLog(
                 $examen->id,
                 null,
@@ -232,7 +223,6 @@ class VerificacionController extends Controller
         }
 
         // ESTUDIANTE QUE YA INGRESÓ (REINGRESO DUPLICADO)
-
         $ingresoPrevio = LogAsistencia::where('id_examen', $examen->id)
             ->where('id_estudiante', $estudiante->id)
             ->where('resultado', 'PERMITIDO')
@@ -260,7 +250,6 @@ class VerificacionController extends Controller
                 $userId,
                 $estudiante->codigo_sis
             );
-
             $this->registrarLog(
                 $examen->id,
                 $estudiante->id,
@@ -282,7 +271,6 @@ class VerificacionController extends Controller
         }
 
         // ESTÁ EN EL SISTEMA, PERO NO ESTÁ EN LA MATERIA/EXAMEN (NO INSCRITO)
-
         $inscripcion = DB::table('estudiante_examen')
             ->where('id_examen', $examen->id)
             ->where('id_estudiante', $estudiante->id)
@@ -298,7 +286,6 @@ class VerificacionController extends Controller
                 $userId,
                 $estudiante->codigo_sis
             );
-
             $this->registrarLog(
                 $examen->id,
                 $estudiante->id,
@@ -321,7 +308,6 @@ class VerificacionController extends Controller
         }
 
         // ESTÁ EN LA NÓMINA, PERO SU QR TRAE OTRO EXAMEN O MATERIA
-
         $esExamenDistinto = ($idExamenToken && $idExamenToken !== $examen->id);
         $esMateriaDistinta = ($materiaQr && $examen->materia && strcasecmp(trim($materiaQr), trim($examen->materia->nombre)) !== 0);
 
@@ -335,7 +321,6 @@ class VerificacionController extends Controller
                 $userId,
                 $estudiante->codigo_sis
             );
-
             $this->registrarLog(
                 $examen->id,
                 $estudiante->id,
@@ -354,9 +339,7 @@ class VerificacionController extends Controller
         }
 
         // ESTÁ EN EL EXAMEN, PERO NO ESTÁ HABILITADO
-
         $estadoHabilitacion = trim($inscripcion->estado ?? 'Inhabilitado');
-
         if (strcasecmp($estadoHabilitacion, 'Habilitado') !== 0) {
             $motivoInhabilitacion = $inscripcion->motivo_estado ?? 'No cumple con los prerrequisitos asignados.';
 
@@ -369,7 +352,6 @@ class VerificacionController extends Controller
                 $userId,
                 $estudiante->codigo_sis
             );
-
             $this->registrarLog(
                 $examen->id,
                 $estudiante->id,
@@ -397,7 +379,6 @@ class VerificacionController extends Controller
         }
 
         // INGRESO AUTORIZADO (PERMITIDO)
-
         $ahoraIngreso = Carbon::now('America/La_Paz');
 
         DB::table('estudiante_examen')
@@ -428,7 +409,6 @@ class VerificacionController extends Controller
                     $userId,
                     $estudiante->codigo_sis
                 );
-
                 return response()->json([
                     'success'    => false,
                     'resultado'  => 'RECHAZADO_YA_INGRESO',
@@ -475,6 +455,7 @@ class VerificacionController extends Controller
         $motivo = $request->input('motivo', 'Ingreso manual autorizado');
 
         $examen = Examen::with(['aula:id,nombre', 'materia:id,nombre'])->find($idExamen);
+
         if (!$examen) {
             return response()->json(['message' => 'La evaluación no existe.'], 404);
         }
@@ -526,7 +507,6 @@ class VerificacionController extends Controller
                 $usuario?->id,
                 $estudiante->codigo_sis
             );
-
             return response()->json(['message' => 'El estudiante no está inscrito en este examen.'], 403);
         }
 
@@ -623,7 +603,7 @@ class VerificacionController extends Controller
     }
 
     /**
-     * Registra en log_asistencias asegurando que no aborte por check constraints.
+     * Registra en log_asistencias (Permite que QueryException burbujee)
      */
     private function registrarLog(
         string $idExamen,
@@ -633,21 +613,17 @@ class VerificacionController extends Controller
         string $mensaje,
         ?array $payload = null
     ): void {
-        try {
-            $sisLimpio = !empty($codigoSis) ? substr(trim($codigoSis), 0, 20) : 'DESCONOCIDO';
+        $sisLimpio = !empty($codigoSis) ? substr(trim($codigoSis), 0, 20) : 'DESCONOCIDO';
 
-            LogAsistencia::create([
-                'id_examen'            => $idExamen,
-                'id_estudiante'        => $idEstudiante,
-                'codigo_sis_escaneado' => $sisLimpio,
-                'resultado'            => $resultado,
-                'mensaje'              => $mensaje,
-                'payload_qr_recibido'  => $payload,
-                'fecha_escaneo'        => Carbon::now('America/La_Paz'),
-            ]);
-        } catch (\Exception $e) {
-            \Log::warning("No se pudo registrar log_asistencia: " . $e->getMessage());
-        }
+        LogAsistencia::create([
+            'id_examen'            => $idExamen,
+            'id_estudiante'        => $idEstudiante,
+            'codigo_sis_escaneado' => $sisLimpio,
+            'resultado'            => $resultado,
+            'mensaje'              => $mensaje,
+            'payload_qr_recibido'  => $payload,
+            'fecha_escaneo'        => Carbon::now('America/La_Paz'),
+        ]);
     }
 
     /**
@@ -690,7 +666,7 @@ class VerificacionController extends Controller
             'updated_at'               => $horaBolivia,
         ]);
 
-        // Registro en log_auditorias (sin updated_at)
+        // Registro en log_auditorias
         try {
             $nombreCompleto = $usuarioActual
                 ? trim("{$usuarioActual->nombre} {$usuarioActual->apellido_paterno} {$usuarioActual->apellido_materno}")
@@ -716,7 +692,7 @@ class VerificacionController extends Controller
                 'created_at'        => $horaBolivia,
             ]);
         } catch (\Exception $e) {
-            \Log::warning("No se pudo registrar log_auditoria: " . $e->getMessage());
+            // Silenciado intencionalmente para evitar error 500 por falta de permisos en laravel.log al correr en Docker
         }
     }
 }

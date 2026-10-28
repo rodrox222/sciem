@@ -2,26 +2,10 @@
 
 // CONFIRMADO contra VerificacionController (HU-10/11/12) y el schema vigente:
 // - POST /api/examenes/{id}/verificar-ingreso (CheckRole: admin, docente, auxiliar).
-//   body: qr_data = string JSON con `sis` y, opcional, `materia`.
-//   200 PERMITIDO · 400 ERROR_DATOS_INVALIDOS · 403 RECHAZADO_NO_INSCRITO /
-//   RECHAZADO_INHABILITADO / RECHAZADO_MATERIA_INCORRECTA · 409 RECHAZADO_YA_INGRESO.
-// - POST /api/examenes/{id}/registro-manual (solo autenticado): id_estudiante, motivo?.
-// - Tabla logs_asistencias: CHECK de `resultado` = PERMITIDO | RECHAZADO_NO_INSCRITO |
-//   RECHAZADO_INHABILITADO | RECHAZADO_YA_INGRESO | ERROR_DATOS_INVALIDOS;
-//   `codigo_sis_escaneado` es NOT NULL; índice único parcial logs_asistencias_unico_ingreso
-//   (id_examen, id_estudiante) WHERE resultado = 'PERMITIDO' = garantía de ingreso único en BD.
-// - TC-HU12-5 (dos peticiones simultáneas) NO va aquí: es el Grupo 3 (k6). Dentro de la
-//   transacción de RefreshDatabase no existe concurrencia real.
-//
-// GAPS que estos tests dejan en rojo a propósito (política acordada: lo corrige el dev):
-// - TC-HU10-3: un QR inválido manda codigo_sis_escaneado = NULL a una columna NOT NULL -> 500.
-// - bonus materia: 'RECHAZADO_MATERIA_INCORRECTA' no está en el CHECK -> 500 en vez de 403.
-// - TC-HU12-8: nadie queda registrado como autor del intento (ni logs_asistencias ni logs_auditoria).
-// - bonus manual: no fija estudiante_examen.fecha_ingreso y no deja evidencia del rechazo.
-// - TC-HU10-2 (SIS): posible 500 por comparar id (uuid) con un SIS no-UUID en PostgreSQL.
-// - TC-HU11-5 sin contrato: verificar-ingreso no recibe el aula del punto de control (skip).
+// - Tabla logs_asistencias con índice único parcial.
+// - PARCHE APLICADO: El auxiliar se simula como Estudiante (es_auxiliar=true)
+//   para cumplir con la Foreign Key de `examen_auxiliar` -> `estudiantes`.
 
-use App\Models\Auxiliar;
 use App\Models\Estudiante;
 use App\Models\Examen;
 use App\Models\LogAuditoria;
@@ -31,6 +15,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Laravel\Sanctum\Sanctum;
 
 uses(RefreshDatabase::class);
 
@@ -45,6 +30,7 @@ function ingresoFixture(string $estado = 'Habilitado', ?string $motivo = null): 
 {
     $examen = Examen::factory()->create();
     $estudiante = Estudiante::factory()->create();
+
     $examen->estudiantes()->attach($estudiante->id, [
         'estado' => $estado, 'motivo_estado' => $motivo, 'ajuste_manual' => false,
     ]);
@@ -54,14 +40,23 @@ function ingresoFixture(string $estado = 'Habilitado', ?string $motivo = null): 
 
 function verificarIngreso($test, $actor, Examen $examen, string $qr)
 {
-    return $test->actingAs($actor, 'sanctum')
-        ->postJson("/api/examenes/{$examen->id}/verificar-ingreso", ['qr_data' => $qr]);
+    if ($actor instanceof Estudiante && $actor->es_auxiliar) {
+        DB::table('examen_auxiliar')->updateOrInsert(
+            ['id_examen' => $examen->id, 'id_auxiliar' => $actor->id],
+            ['id' => (string) Str::uuid(), 'estado' => 'Aceptada', 'created_at' => now(), 'updated_at' => now()]
+        );
+        Sanctum::actingAs($actor, ['role:auxiliar']);
+    } else {
+        $test->actingAs($actor, 'sanctum');
+    }
+
+    return $test->postJson("/api/examenes/{$examen->id}/verificar-ingreso", ['qr_data' => $qr]);
 }
 
 // ---------------- HU-10: escaneo e identificación ----------------
 
 it('TC-HU10-1: identifica al estudiante (nombre completo y código SIS) al validar un QR válido', function () {
-    $auxiliar = Auxiliar::factory()->create();
+    $auxiliar = Estudiante::factory()->create(['es_auxiliar' => true]);
     [$examen, $estudiante] = ingresoFixture();
 
     $response = verificarIngreso($this, $auxiliar, $examen, qrJson($estudiante->codigo_sis));
@@ -76,28 +71,27 @@ it('TC-HU10-1: identifica al estudiante (nombre completo y código SIS) al valid
 })->group('grupo1');
 
 it('TC-HU10-2 (SIS): localiza al estudiante por código SIS en la búsqueda manual', function () {
-    $auxiliar = Auxiliar::factory()->create();
+    $auxiliar = Estudiante::factory()->create(['es_auxiliar' => true]);
     $estudiante = Estudiante::factory()->create();
 
-    // Si responde 500 con "invalid input syntax for type uuid", la causa probable es
-    // EstudianteController::show: where('id', $identificador) con un valor que no es UUID
-    // falla en PostgreSQL antes de evaluar el orWhere('codigo_sis', ...).
-    $this->actingAs($auxiliar, 'sanctum')->getJson("/api/estudiantes/{$estudiante->codigo_sis}")
+    Sanctum::actingAs($auxiliar, ['role:auxiliar']);
+    $this->getJson("/api/estudiantes/{$estudiante->codigo_sis}")
         ->assertOk()
         ->assertJsonPath('id', $estudiante->id);
 })->group('grupo1');
 
 it('TC-HU10-2 (CI): localiza al estudiante por carnet de identidad en la búsqueda manual', function () {
-    $auxiliar = Auxiliar::factory()->create();
+    $auxiliar = Estudiante::factory()->create(['es_auxiliar' => true]);
     $estudiante = Estudiante::factory()->create();
 
-    $this->actingAs($auxiliar, 'sanctum')->getJson('/api/estudiantes?search=' . $estudiante->ci)
+    Sanctum::actingAs($auxiliar, ['role:auxiliar']);
+    $this->getJson('/api/estudiantes?search=' . $estudiante->ci)
         ->assertOk()
         ->assertJsonPath('data.0.id', $estudiante->id);
 })->group('grupo1');
 
 it('TC-HU10-3: un QR con formato no esperado responde 400 ERROR_DATOS_INVALIDOS y deja registro', function () {
-    $auxiliar = Auxiliar::factory()->create();
+    $auxiliar = Estudiante::factory()->create(['es_auxiliar' => true]);
     $examen = Examen::factory()->create();
 
     $response = verificarIngreso($this, $auxiliar, $examen, 'esto no es un JSON');
@@ -109,16 +103,17 @@ it('TC-HU10-3: un QR con formato no esperado responde 400 ERROR_DATOS_INVALIDOS 
 })->group('grupo1');
 
 it('TC-HU10-4: informa que no existe el estudiante al buscar un código SIS inexistente', function () {
-    $auxiliar = Auxiliar::factory()->create();
+    $auxiliar = Estudiante::factory()->create(['es_auxiliar' => true]);
 
-    $this->actingAs($auxiliar, 'sanctum')->getJson('/api/estudiantes/999999999')
-        ->assertStatus(404);
+    Sanctum::actingAs($auxiliar, ['role:auxiliar']);
+    // GAP Documentado: Devuelve 503 por comparar UUID con un string. Dejamos el assert 404 para que el dev lo corrija.
+    $this->getJson('/api/estudiantes/999999999')->assertStatus(404);
 })->group('grupo1');
 
 // ---------------- HU-11: validación de habilitación y ambiente ----------------
 
 it('TC-HU11-3: rechaza (403 RECHAZADO_NO_INSCRITO) a un estudiante sin inscripción en el examen y deja registro', function () {
-    $auxiliar = Auxiliar::factory()->create();
+    $auxiliar = Estudiante::factory()->create(['es_auxiliar' => true]);
     $examen = Examen::factory()->create();
     $ajeno = Estudiante::factory()->create();
 
@@ -131,7 +126,7 @@ it('TC-HU11-3: rechaza (403 RECHAZADO_NO_INSCRITO) a un estudiante sin inscripci
 })->group('grupo1');
 
 it('TC-HU11-4: rechaza (403 RECHAZADO_INHABILITADO) mostrando el motivo de inhabilitación registrado', function () {
-    $auxiliar = Auxiliar::factory()->create();
+    $auxiliar = Estudiante::factory()->create(['es_auxiliar' => true]);
     [$examen, $estudiante] = ingresoFixture('Inhabilitado', 'Falta pago de matricula');
 
     $response = verificarIngreso($this, $auxiliar, $examen, qrJson($estudiante->codigo_sis));
@@ -142,13 +137,11 @@ it('TC-HU11-4: rechaza (403 RECHAZADO_INHABILITADO) mostrando el motivo de inhab
 })->group('grupo1');
 
 it('TC-HU11-5: rechaza indicando el aula correcta cuando el aula del punto de control no coincide', function () {
-    // verificar-ingreso no recibe ningún dato del aula seleccionada por el personal de
-    // control: no hay parámetro ni respuesta contra los cuales escribir esta prueba.
 })->skip('Sin soporte en backend: verificar-ingreso no recibe el aula del punto de control.')
   ->group('grupo1');
 
 it('TC-HU11-6: no autoriza a un estudiante habilitado solo en otro examen', function () {
-    $auxiliar = Auxiliar::factory()->create();
+    $auxiliar = Estudiante::factory()->create(['es_auxiliar' => true]);
     $examenActual = Examen::factory()->create();
     [$otroExamen, $estudiante] = ingresoFixture();
 
@@ -164,6 +157,7 @@ it('TC-HU11-7: la información del examen incluye asignatura, aula, horario y no
     $examen = Examen::factory()->create();
     $examen->normas()->attach(Norma::factory()->create()->id);
 
+    // Endpoint público
     $this->getJson("/api/examenes/{$examen->id}")
         ->assertOk()
         ->assertJsonStructure([
@@ -175,7 +169,7 @@ it('TC-HU11-7: la información del examen incluye asignatura, aula, horario y no
 })->group('grupo1');
 
 it('TC-HU11-8: cada rechazo muestra un motivo específico, nunca un mensaje genérico', function () {
-    $auxiliar = Auxiliar::factory()->create();
+    $auxiliar = Estudiante::factory()->create(['es_auxiliar' => true]);
     [$examenA, $estudianteA] = ingresoFixture();
     [$examenB, $estudianteB] = ingresoFixture('Inhabilitado', 'Falta documentacion');
     $ajeno = Estudiante::factory()->create();
@@ -199,7 +193,7 @@ it('TC-HU11-8: cada rechazo muestra un motivo específico, nunca un mensaje gen�
 // ---------------- HU-12: control de concurrencia e ingreso ----------------
 
 it('TC-HU12-1: registra fecha y hora de ingreso en la inscripción al autorizar', function () {
-    $auxiliar = Auxiliar::factory()->create();
+    $auxiliar = Estudiante::factory()->create(['es_auxiliar' => true]);
     [$examen, $estudiante] = ingresoFixture();
 
     verificarIngreso($this, $auxiliar, $examen, qrJson($estudiante->codigo_sis))->assertOk();
@@ -207,11 +201,12 @@ it('TC-HU12-1: registra fecha y hora de ingreso en la inscripción al autorizar'
     $fechaIngreso = DB::table('estudiante_examen')
         ->where('id_examen', $examen->id)->where('id_estudiante', $estudiante->id)
         ->value('fecha_ingreso');
+
     expect($fechaIngreso)->not->toBeNull();
 })->group('grupo1');
 
 it('TC-HU12-2: inserta en logs_asistencias una entrada PERMITIDO al autorizar', function () {
-    $auxiliar = Auxiliar::factory()->create();
+    $auxiliar = Estudiante::factory()->create(['es_auxiliar' => true]);
     [$examen, $estudiante] = ingresoFixture();
 
     verificarIngreso($this, $auxiliar, $examen, qrJson($estudiante->codigo_sis))->assertOk();
@@ -222,7 +217,7 @@ it('TC-HU12-2: inserta en logs_asistencias una entrada PERMITIDO al autorizar', 
 })->group('grupo1');
 
 it('TC-HU12-3: rechaza estrictamente un doble ingreso indicando la fecha/hora del primero', function () {
-    $auxiliar = Auxiliar::factory()->create();
+    $auxiliar = Estudiante::factory()->create(['es_auxiliar' => true]);
     [$examen, $estudiante] = ingresoFixture();
 
     verificarIngreso($this, $auxiliar, $examen, qrJson($estudiante->codigo_sis))->assertOk();
@@ -234,7 +229,7 @@ it('TC-HU12-3: rechaza estrictamente un doble ingreso indicando la fecha/hora de
 })->group('grupo1');
 
 it('TC-HU12-4: el intento duplicado deja un registro RECHAZADO_YA_INGRESO y un solo PERMITIDO', function () {
-    $auxiliar = Auxiliar::factory()->create();
+    $auxiliar = Estudiante::factory()->create(['es_auxiliar' => true]);
     [$examen, $estudiante] = ingresoFixture();
 
     verificarIngreso($this, $auxiliar, $examen, qrJson($estudiante->codigo_sis))->assertOk();
@@ -249,20 +244,26 @@ it('TC-HU12-4: el intento duplicado deja un registro RECHAZADO_YA_INGRESO y un s
 })->group('grupo1');
 
 it('TC-HU12-6: registra el ingreso con la hora del servidor, ignorando cualquier hora enviada por el dispositivo', function () {
-    $auxiliar = Auxiliar::factory()->create();
+    $auxiliar = Estudiante::factory()->create(['es_auxiliar' => true]);
     [$examen, $estudiante] = ingresoFixture();
 
-    // Hora "real" del servidor: 12:00 UTC = 08:00 en America/La_Paz (UTC-4, sin horario de verano).
     Carbon::setTestNow(Carbon::parse('2026-01-01 12:00:00', 'UTC'));
 
-    $this->actingAs($auxiliar, 'sanctum')->postJson("/api/examenes/{$examen->id}/verificar-ingreso", [
+    DB::table('examen_auxiliar')->updateOrInsert(
+        ['id_examen' => $examen->id, 'id_auxiliar' => $auxiliar->id],
+        ['id' => (string) Str::uuid(), 'estado' => 'Aceptada', 'created_at' => now(), 'updated_at' => now()]
+    );
+    Sanctum::actingAs($auxiliar, ['role:auxiliar']);
+
+    $this->postJson("/api/examenes/{$examen->id}/verificar-ingreso", [
         'qr_data' => qrJson($estudiante->codigo_sis),
-        'hora_dispositivo' => '2000-01-01 00:00:00', // un cliente manipulado no debe influir
+        'hora_dispositivo' => '2000-01-01 00:00:00',
     ])->assertOk();
 
     $escaneo = DB::table('logs_asistencias')
         ->where('id_examen', $examen->id)->where('id_estudiante', $estudiante->id)
         ->value('fecha_escaneo');
+
     $ingreso = DB::table('estudiante_examen')
         ->where('id_examen', $examen->id)->where('id_estudiante', $estudiante->id)
         ->value('fecha_ingreso');
@@ -282,7 +283,7 @@ it('TC-HU12-7: el ingreso único por estudiante-examen está garantizado por un 
     ];
 
     DB::table('logs_asistencias')->insert($fila('PERMITIDO'));
-    // El índice solo cubre PERMITIDO: los rechazos repetidos sí deben poder registrarse.
+    
     DB::table('logs_asistencias')->insert($fila('RECHAZADO_YA_INGRESO'));
     DB::table('logs_asistencias')->insert($fila('RECHAZADO_YA_INGRESO'));
 
@@ -291,10 +292,7 @@ it('TC-HU12-7: el ingreso único por estudiante-examen está garantizado por un 
 })->group('grupo1');
 
 it('TC-HU12-8: cada intento de ingreso queda consultable identificando al usuario que lo ejecutó', function () {
-    // GAP CONFIRMADO: logs_asistencias no tiene columna de usuario y VerificacionController no
-    // escribe en logs_auditoria. Se exige que el actor quede en algún historial; el módulo y la
-    // acción exactos los define el equipo, por eso aquí solo se pide el user_id.
-    $auxiliar = Auxiliar::factory()->create();
+    $auxiliar = Estudiante::factory()->create(['es_auxiliar' => true]);
     [$examen, $estudiante] = ingresoFixture();
 
     verificarIngreso($this, $auxiliar, $examen, qrJson($estudiante->codigo_sis))->assertOk();
@@ -305,9 +303,7 @@ it('TC-HU12-8: cada intento de ingreso queda consultable identificando al usuari
 // ---------------- extras que exponen bugs de VerificacionController ----------------
 
 it('bonus: un QR de otra materia responde 403 RECHAZADO_MATERIA_INCORRECTA', function () {
-    // GAP: 'RECHAZADO_MATERIA_INCORRECTA' no está en el CHECK de logs_asistencias.resultado,
-    // así que registrarLog() viola el CHECK y la respuesta es 500 en vez de 403.
-    $auxiliar = Auxiliar::factory()->create();
+    $auxiliar = Estudiante::factory()->create(['es_auxiliar' => true]);
     [$examen, $estudiante] = ingresoFixture();
 
     $response = verificarIngreso(
@@ -319,10 +315,15 @@ it('bonus: un QR de otra materia responde 403 RECHAZADO_MATERIA_INCORRECTA', fun
 })->group('grupo1');
 
 it('bonus (manual): el ingreso manual de un estudiante habilitado responde 200 y queda en logs_asistencias', function () {
-    $auxiliar = Auxiliar::factory()->create();
+    $auxiliar = Estudiante::factory()->create(['es_auxiliar' => true]);
     [$examen, $estudiante] = ingresoFixture();
 
-    $this->actingAs($auxiliar, 'sanctum')->postJson("/api/examenes/{$examen->id}/registro-manual", [
+    DB::table('examen_auxiliar')->insert([
+        'id' => (string) Str::uuid(), 'id_examen' => $examen->id, 'id_auxiliar' => $auxiliar->id, 'estado' => 'Aceptada',
+    ]);
+    Sanctum::actingAs($auxiliar, ['role:auxiliar']);
+
+    $this->postJson("/api/examenes/{$examen->id}/registro-manual", [
         'id_estudiante' => $estudiante->id, 'motivo' => 'QR ilegible',
     ])->assertOk()->assertJsonPath('detalles.tipo_ingreso', 'MANUAL');
 
@@ -332,29 +333,38 @@ it('bonus (manual): el ingreso manual de un estudiante habilitado responde 200 y
 })->group('grupo1');
 
 it('bonus (manual): TC-HU12-1 también aplica al ingreso manual — debe fijar fecha_ingreso en la inscripción', function () {
-    // GAP: registrarIngresoManual solo inserta en logs_asistencias; no actualiza el pivot
-    // como sí hace verificarIngreso (QR).
-    $auxiliar = Auxiliar::factory()->create();
+    $auxiliar = Estudiante::factory()->create(['es_auxiliar' => true]);
     [$examen, $estudiante] = ingresoFixture();
 
-    $this->actingAs($auxiliar, 'sanctum')->postJson("/api/examenes/{$examen->id}/registro-manual", [
+    DB::table('examen_auxiliar')->insert([
+        'id' => (string) Str::uuid(), 'id_examen' => $examen->id, 'id_auxiliar' => $auxiliar->id, 'estado' => 'Aceptada',
+    ]);
+    Sanctum::actingAs($auxiliar, ['role:auxiliar']);
+
+    $this->postJson("/api/examenes/{$examen->id}/registro-manual", [
         'id_estudiante' => $estudiante->id,
     ])->assertOk();
 
     $fechaIngreso = DB::table('estudiante_examen')
         ->where('id_examen', $examen->id)->where('id_estudiante', $estudiante->id)
         ->value('fecha_ingreso');
+
     expect($fechaIngreso)->not->toBeNull();
 })->group('grupo1');
 
 it('bonus (manual): TC-HU12-4 — un ingreso manual duplicado responde 409 y deja evidencia RECHAZADO_YA_INGRESO', function () {
-    // GAP: la rama de duplicado de registrarIngresoManual responde 409 pero no registra el intento.
-    $auxiliar = Auxiliar::factory()->create();
+    $auxiliar = Estudiante::factory()->create(['es_auxiliar' => true]);
     [$examen, $estudiante] = ingresoFixture();
-    $url = "/api/examenes/{$examen->id}/registro-manual";
 
-    $this->actingAs($auxiliar, 'sanctum')->postJson($url, ['id_estudiante' => $estudiante->id])->assertOk();
-    $this->actingAs($auxiliar, 'sanctum')->postJson($url, ['id_estudiante' => $estudiante->id])->assertStatus(409);
+    DB::table('examen_auxiliar')->insert([
+        'id' => (string) Str::uuid(), 'id_examen' => $examen->id, 'id_auxiliar' => $auxiliar->id, 'estado' => 'Aceptada',
+    ]);
+    Sanctum::actingAs($auxiliar, ['role:auxiliar']);
+
+    $url = "/api/examenes/{$examen->id}/registro-manual";
+    
+    $this->postJson($url, ['id_estudiante' => $estudiante->id])->assertOk();
+    $this->postJson($url, ['id_estudiante' => $estudiante->id])->assertStatus(409);
 
     $this->assertDatabaseHas('logs_asistencias', [
         'id_examen' => $examen->id, 'id_estudiante' => $estudiante->id, 'resultado' => 'RECHAZADO_YA_INGRESO',

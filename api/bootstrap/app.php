@@ -25,7 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->render(function (QueryException|\PDOException $e, Request $request) {
+        $exceptions->render(function (QueryException $e, Request $request) {
             // Si está en local o con debug activado, mostrar el error real para no quedar a ciegas
             if (config('app.debug')) {
                 return null;
