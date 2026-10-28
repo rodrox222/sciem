@@ -221,21 +221,31 @@ Route::middleware('auth:sanctum')->group(function () {
             'examenes/{id}/expulsiones',
             [ExpulsionController::class, 'store']
         );
+        Route::patch(
+            'examenes/{id}/expulsiones/{expulsionId}',
+            [ExpulsionController::class, 'updateMotivo']
+        );
     });
 
-    Route::post('/examenes/{id}/registro-manual', [VerificacionController::class, 'registrarIngresoManual']);
-    Route::get('/examenes/{id}/asistencias', [VerificacionController::class, 'listarAsistencias']);
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::post('/examenes/{id}/registro-manual', [VerificacionController::class, 'registrarIngresoManual']);
+});
 
+    Route::middleware('role:admin,administrador,docente')->group(function () {
+        Route::get('/examenes/{id}/asistencias', [VerificacionController::class, 'listarAsistencias']);
+    });
     // HU 13: REGISTRO Y CONSULTA DE INTENTOS NO CORRESPONDIENTES 
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('examenes/{id_examen}/intentos-no-autorizados', [IntentoNoAutorizadoController::class, 'index']);
         Route::post('examenes/{id_examen}/escanear-ingreso', [VerificacionController::class, 'verificarIngreso']);
     });
+
     // MONITOREO EN TIEMPO REAL (HU16) 
-    Route::middleware('role:admin,administrador,docente,auxiliar')
+    Route::middleware('role:admin,administrador,docente')
         ->get('examenes/{idExamen}/monitoreo', [MonitoreoController::class, 'resumen']);
-    Route::middleware('role:admin,administrador,docente,auxiliar')
+    Route::middleware('role:admin,administrador,docente')
     ->get('examenes/{idExamen}/monitoreo/estudiantes', [MonitoreoController::class, 'estudiantes']);
+
     // HU 17: REPORTES ESTADÍSTICOS
     Route::middleware('role:admin,administrador,docente')
     ->get(
