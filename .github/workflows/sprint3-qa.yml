@@ -39,8 +39,25 @@ jobs:
           export SCIEM_QA_APP_KEY="base64:$(openssl rand -base64 32)"
           echo "::add-mask::$SCIEM_QA_DB_PASSWORD"
           echo "::add-mask::$SCIEM_QA_APP_KEY"
-          trap 'docker compose -p sciem-sprint3-qa -f docker-compose.sprint3-qa.yml down' EXIT
-          docker compose -p sciem-sprint3-qa -f docker-compose.sprint3-qa.yml up --build --abort-on-container-exit --exit-code-from api-qa 2>&1 | tee qa-evidence/postgres.txt
+          cleanup() {
+            docker logs sciem-sprint3-http > qa-evidence/http-server.txt 2>&1 || true
+            docker rm -f sciem-sprint3-http || true
+            docker compose -p sciem-sprint3-qa -f docker-compose.sprint3-qa.yml down
+          }
+          trap cleanup EXIT
+          docker compose -p sciem-sprint3-qa -f docker-compose.sprint3-qa.yml build api-qa
+          docker compose -p sciem-sprint3-qa -f docker-compose.sprint3-qa.yml up -d --wait db-qa
+          docker compose -p sciem-sprint3-qa -f docker-compose.sprint3-qa.yml run --rm api-qa 2>&1 | tee qa-evidence/postgres.txt
+          docker compose -p sciem-sprint3-qa -f docker-compose.sprint3-qa.yml run -d --name sciem-sprint3-http -e PHP_CLI_SERVER_WORKERS=4 -p 127.0.0.1:8200:8200 api-qa php -S 0.0.0.0:8200 -t public public/index.php
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8200/api/health > /dev/null; then break; fi
+            sleep 1
+          done
+          docker exec sciem-sprint3-http php scripts/sprint3-extended-qa.php 2>&1 | tee qa-evidence/extended.txt
+          docker exec sciem-sprint3-http php scripts/sprint3-preflight.php > qa-evidence/preflight.json
+          docker cp sciem-sprint3-http:/tmp/sciem-qa-evidence/. qa-evidence/
+          if ! command -v pdftotext > /dev/null; then sudo apt-get update -qq && sudo apt-get install -y poppler-utils; fi
+          python3 scripts/verify-sprint3-pdf.py qa-evidence
       - name: Frontend contracts and build
         shell: bash
         run: |
