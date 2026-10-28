@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { useIdleTimer } from '../hooks/useIdleTimer'
+import { apiUrl } from '@/services/apiUrl'
 
 export const IdleTimer: React.FC = () => {
   const { showModal, secondsRemaining, handleLogout, handleStayActive } = useIdleTimer()
@@ -19,15 +20,11 @@ export const IdleTimer: React.FC = () => {
 
       // 2. Si dice online, comprobamos si realmente alcanza el backend o internet
       try {
-        const rawUrl = (import.meta.env.VITE_API_URL?.trim() || 'http://localhost:8200/api') //http://192.168.1.17:8200
-          .replace(/\/api\/?$/, '')
-          .replace(/\/$/, '')
-
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), 1200)
 
         // Petición rápida tipo ping
-        await fetch(`${rawUrl}/api/health`, {
+        await fetch(apiUrl('/health'), {
           method: 'HEAD',
           mode: 'no-cors',
           signal: controller.signal,
