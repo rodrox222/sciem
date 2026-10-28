@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Activity, AlertTriangle, ArrowLeft, CalendarDays, Download, FileSpreadsheet, Filter, LoaderCircle, RefreshCw, RotateCcw, ShieldCheck, Sparkles } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { AlertTriangle, ArrowLeft, CalendarDays, CheckCircle2, Download, FileSpreadsheet, Filter, LoaderCircle, RefreshCw, RotateCcw, ShieldCheck } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { BalanceAsistencia, TarjetasEstadisticas } from '@/components/reportes/TarjetasEstadisticas'
@@ -48,10 +48,8 @@ interface DatosReporte {
 }
 
 export default function ReportesEstadisticosPage() {
-  const [urlParams] = useSearchParams()
-  const solicitado = urlParams.get('examen') ?? ''
   const [examenes, setExamenes] = useState<Examen[]>([])
-  const [examenId, setExamenId] = useState(solicitado)
+  const [examenId, setExamenId] = useState('')
   const [cargandoExamenes, setCargandoExamenes] = useState(true)
   const [errorExamenes, setErrorExamenes] = useState('')
   const [recargaExamenes, setRecargaExamenes] = useState(0)
@@ -63,7 +61,8 @@ export default function ReportesEstadisticosPage() {
   const [fallo, setFallo] = useState<{ clave: string; mensaje: string } | null>(null)
   const [revision, setRevision] = useState(0)
   const [descargando, setDescargando] = useState(false)
-  const [errorDescarga, setErrorDescarga] = useState('')
+  const [formatoDescarga, setFormatoDescarga] = useState('')
+  const [avisoDescarga, setAvisoDescarga] = useState<{ tipo: 'exito' | 'error'; mensaje: string } | null>(null)
 
   const clave = claveConsulta(examenId, filtros)
   const reporte = datos?.clave === clave ? datos : null
@@ -105,7 +104,7 @@ export default function ReportesEstadisticosPage() {
         } while (pagina <= ultima)
         if (!vigente) return
         setExamenes(lista)
-        setExamenId((actual) => lista.some((examen) => String(examen.id) === actual) ? actual : String(lista[0]?.id ?? ''))
+        setExamenId((actual) => lista.some((examen) => String(examen.id) === actual) ? actual : '')
       } catch (error) {
         if (vigente) {
           setExamenes([])
@@ -169,24 +168,55 @@ export default function ReportesEstadisticosPage() {
     setRevision((actual) => actual + 1)
   }
 
+  function seleccionarExamen(id: string) {
+    setExamenId(id)
+    setBorrador(SIN_FILTROS)
+    setFiltros(SIN_FILTROS)
+    setErrorFiltros('')
+    setFormatoDescarga('')
+    setAvisoDescarga(null)
+  }
+
   async function descargar() {
-    if (!reporte || descargando || !examenId) return
+    if (!reporte || descargando || !examenId || !examenElegido || filtrosSinAplicar || formatoDescarga !== 'xlsx') return
     setDescargando(true)
-    setErrorDescarga('')
+    setAvisoDescarga(null)
+
     try {
       const respuesta = await reportesService.descargar(examenId, filtros)
-      if (respuesta.blob.size === 0) throw new Error('El servidor devolvió un archivo vacío.')
-      const nombre = respuesta.filename || `reporte_estadistico_${examenId}.xlsx`
+      if (respuesta.blob.size < 4) {
+        throw new Error('El servidor devolvió un archivo vacío o incompleto.')
+      }
+
+      // XLSX es un contenedor ZIP. Rechazar respuestas no descargables,
+      // incluso cuando algún servidor responde HTTP 200 por error.
+      const firma = new Uint8Array(await respuesta.blob.slice(0, 4).arrayBuffer())
+      if (firma[0] !== 0x50 || firma[1] !== 0x4b || firma[2] !== 0x03 || firma[3] !== 0x04) {
+        throw new Error('El servidor no devolvió un archivo Excel válido. Vuelve a intentarlo.')
+      }
+
+      const nombreServidor = respuesta.filename?.trim() || ''
+      const nombre = nombreServidor.toLowerCase().endsWith('.xlsx')
+        ? nombreServidor
+        : `reporte_estadistico_${examenId}.xlsx`
+
       const enlace = document.createElement('a')
       const archivoUrl = URL.createObjectURL(respuesta.blob)
-      enlace.href = archivoUrl
-      enlace.download = nombre
-      document.body.appendChild(enlace)
-      enlace.click()
-      enlace.remove()
-      window.setTimeout(() => URL.revokeObjectURL(archivoUrl), 1000)
+      try {
+        enlace.href = archivoUrl
+        enlace.download = nombre
+        document.body.appendChild(enlace)
+        enlace.click()
+        setAvisoDescarga({
+          tipo: 'exito',
+          mensaje: `Archivo XLSX generado correctamente. Descarga iniciada: ${nombre}. Comprueba el archivo en Descargas del navegador.`,
+        })
+      } finally {
+        enlace.remove()
+        window.setTimeout(() => URL.revokeObjectURL(archivoUrl), 60_000)
+      }
     } catch (error) {
-      setErrorDescarga(describirError(error))
+      setAvisoDescarga({ tipo: 'error', mensaje: describirError(error) })
     } finally {
       setDescargando(false)
     }
@@ -211,10 +241,7 @@ export default function ReportesEstadisticosPage() {
             <Link to="/examenes" className="inline-flex min-h-8 items-center gap-1.5 rounded-md text-xs font-semibold text-white/75 underline-offset-4 transition hover:text-white hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
               <ArrowLeft className="size-4" aria-hidden="true" /> Volver a exámenes
             </Link>
-            <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-white/90">
-              <Activity className="size-3.5 text-sci-cyan" aria-hidden="true" /> SCI · Inteligencia operativa
-            </div>
-            <h1 className="mt-4 text-2xl font-extrabold leading-tight tracking-tight sm:text-3xl lg:text-4xl">
+            <h1 className="mt-5 text-2xl font-extrabold leading-tight tracking-tight sm:text-3xl lg:text-4xl">
               Reportes estadísticos
             </h1>
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/70">
@@ -243,11 +270,10 @@ export default function ReportesEstadisticosPage() {
         </div>
       </header>
 
-      <section className="relative z-10 -mt-12 mx-2 space-y-5 rounded-2xl border border-border bg-card p-4 shadow-[0_20px_55px_-32px_rgba(0,55,112,0.4)] sm:mx-4 sm:p-6 lg:mx-6" aria-label="Seleccionar examen y filtros">
+      <section className="relative z-10 -mt-12 space-y-5 rounded-2xl border border-border bg-card p-4 shadow-[0_20px_55px_-32px_rgba(0,55,112,0.4)] sm:p-6" aria-label="Seleccionar examen y filtros">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
           <div>
             <h2 className="text-base font-bold text-sci-navy dark:text-foreground">Configurar reporte</h2>
-            <p className="mt-1 text-xs text-muted-foreground">Selecciona un examen y acota la consulta cuando lo necesites.</p>
           </div>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-sci-cyan/10 px-3 py-1 text-[11px] font-semibold text-sci-navy dark:text-foreground">
             <Filter className="size-3.5" aria-hidden="true" /> Filtros de consulta
@@ -260,11 +286,11 @@ export default function ReportesEstadisticosPage() {
             <select
               id="reporte-examen"
               value={examenId}
-              onChange={(event) => { setExamenId(event.target.value); setErrorDescarga('') }}
+              onChange={(event) => seleccionarExamen(event.target.value)}
               disabled={cargandoExamenes || descargando || examenes.length === 0}
               className="min-h-11 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-sm text-foreground shadow-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sci-cyan disabled:opacity-60"
             >
-              {examenes.length === 0 && <option value="">No hay exámenes disponibles</option>}
+              <option value="">{cargandoExamenes ? 'Cargando exámenes...' : 'Seleccione un examen'}</option>
               {examenes.map((examen) => <option key={examen.id} value={examen.id}>{examen.nombre} · {examen.fecha?.slice(0, 10)}</option>)}
             </select>
             <Button type="button" variant="outline" className="min-h-11 w-full gap-2 px-4 sm:w-auto" disabled={cargandoExamenes || descargando} onClick={() => setRecargaExamenes((actual) => actual + 1)}>
@@ -299,10 +325,60 @@ export default function ReportesEstadisticosPage() {
             {filtrosSinAplicar && <span className="text-xs text-muted-foreground">Hay cambios de fecha sin aplicar.</span>}
           </div>
         </form>
+
+        <div className="space-y-3 border-t border-border pt-5" aria-label="Descargar reporte">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-bold text-sci-navy dark:text-foreground">Descargar reporte</h3>
+            <span className="text-xs text-muted-foreground">Datos y fechas de la consulta actual</span>
+          </div>
+          <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1">
+              <label htmlFor="formato-reporte" className="mb-2 block text-xs font-semibold text-foreground">Formato de archivo</label>
+              <select
+                id="formato-reporte"
+                value={formatoDescarga}
+                onChange={(event) => { setFormatoDescarga(event.target.value); setAvisoDescarga(null) }}
+                disabled={!examenId || !reporte || cargando || descargando}
+                className="min-h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sci-cyan disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <option value="">Seleccione un formato</option>
+                <option value="xlsx">Excel (.xlsx)</option>
+                <option value="pdf" disabled>PDF (.pdf) — pendiente de habilitación</option>
+              </select>
+            </div>
+            <Button
+              type="button"
+              className="min-h-11 w-full gap-2 px-5 sm:w-auto"
+              disabled={!reporte || !examenId || !examenElegido || !formatoDescarga || formatoDescarga !== 'xlsx' || descargando || cargando || filtrosSinAplicar}
+              onClick={() => void descargar()}
+            >
+              {descargando ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <Download className="size-4" aria-hidden="true" />}
+              {descargando ? 'Preparando descarga...' : 'Descargar reporte'}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">PDF estará disponible cuando se incorpore el servicio correspondiente. Excel utiliza las cifras y los filtros aplicados.</p>
+          {filtrosSinAplicar && <p className="text-xs font-semibold text-sci-blue" role="status">Aplica los cambios de fecha antes de descargar para asegurar que coincidan con las cifras en pantalla.</p>}
+          {avisoDescarga && (
+            <div
+              role={avisoDescarga.tipo === 'error' ? 'alert' : 'status'}
+              aria-live={avisoDescarga.tipo === 'error' ? 'assertive' : 'polite'}
+              className={`flex items-start gap-2 rounded-xl border p-3 text-sm ${avisoDescarga.tipo === 'error' ? 'border-sci-red/25 bg-sci-red/5 text-destructive' : 'border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy dark:text-foreground'}`}
+            >
+              {avisoDescarga.tipo === 'error' ? <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" /> : <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />}
+              <p className="min-w-0 break-words">{avisoDescarga.mensaje}</p>
+            </div>
+          )}
+        </div>
       </section>
 
       {!cargandoExamenes && !errorExamenes && examenes.length === 0 && (
         <p className="rounded-2xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">No tienes exámenes autorizados para consultar reportes.</p>
+      )}
+
+      {!cargandoExamenes && !errorExamenes && examenes.length > 0 && !examenId && (
+        <div className="rounded-2xl border border-dashed border-border bg-card px-5 py-8 text-center text-sm text-muted-foreground">
+          Seleccione un examen en «Configurar reporte» para consultar sus estadísticas.
+        </div>
       )}
 
       {cargando && (
@@ -327,21 +403,13 @@ export default function ReportesEstadisticosPage() {
                 </p>
               </div>
             </div>
-            <Button type="button" className="min-h-11 w-full gap-2 px-4 sm:w-auto" disabled={descargando} onClick={() => void descargar()}>
-              {descargando ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <Download className="size-4" aria-hidden="true" />}
-              {descargando ? 'Generando archivo...' : 'Descargar reporte (.xlsx)'}
-            </Button>
           </section>
 
-          {errorDescarga && <Alert variant="destructive"><AlertTriangle /><AlertTitle>No se pudo descargar</AlertTitle><AlertDescription>{errorDescarga}</AlertDescription></Alert>}
           {sinRegistros && <p className="rounded-xl border border-dashed border-border bg-card p-4 text-sm text-muted-foreground">No hay registros estadísticos para el examen y las fechas seleccionadas. Los valores oficiales reportados son cero.</p>}
 
           <section className="space-y-4" aria-labelledby="titulo-indicadores">
             <div className="flex flex-wrap items-end justify-between gap-2">
               <div>
-                <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-sci-cyan">
-                  <Sparkles className="size-4" aria-hidden="true" /> Panorama general
-                </div>
                 <h2 id="titulo-indicadores" className="mt-1 text-xl font-extrabold text-sci-navy dark:text-foreground sm:text-2xl">Indicadores clave</h2>
               </div>
               <p className="text-xs text-muted-foreground">Valores oficiales del examen seleccionado</p>
@@ -354,10 +422,6 @@ export default function ReportesEstadisticosPage() {
             <BalanceAsistencia resumen={resumen} />
           </section>
 
-          <p className="flex items-start gap-2 rounded-xl border border-border bg-card/70 p-3 text-xs leading-relaxed text-muted-foreground">
-            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-sci-cyan" aria-hidden="true" />
-            Las cifras se presentan tal como las entrega SCIEM. Las proporciones y visualizaciones se calculan únicamente a partir de esos resultados.
-          </p>
         </div>
       )}
     </div>
