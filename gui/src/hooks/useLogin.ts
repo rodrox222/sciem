@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8200/api'
+//http://localhost:8200/api'
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://192.168.1.17:8200'
 
 export type Role = 'Auxiliar' | 'Docente' | 'Administrador'
 
