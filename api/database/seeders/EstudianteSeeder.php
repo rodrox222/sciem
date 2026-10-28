@@ -40,7 +40,7 @@ class EstudianteSeeder extends Seeder
                 'id'                       => (string) Str::uuid(),
                 'codigo_sis'               => '202301641',
                 'ci'                       => '7654129',
-                'ci_extension'             => null,
+                'ci_extension'             => 'SC',
                 'nombre'                   => 'Rodrigo',
                 'apellido_paterno'         => 'Fernandez',
                 'apellido_materno'         => 'Gomez',
@@ -51,7 +51,7 @@ class EstudianteSeeder extends Seeder
             [
                 'id'                       => (string) Str::uuid(),
                 'codigo_sis'               => '20202020',
-                'ci'                       => '8765431',
+                'ci'                       => '8765432',
                 'ci_extension'             => 'CB',
                 'nombre'                   => 'geraldo',
                 'apellido_paterno'         => 'mamani',
