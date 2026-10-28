@@ -9,6 +9,10 @@ $rng.GetBytes($random); $rng.Dispose()
 $env:SCIEM_QA_APP_KEY = 'base64:' + [Convert]::ToBase64String($random)
 $result = 1
 try {
+    # Docker no puede crear mountpoints bajo el bind mount /app:ro en un checkout limpio.
+    foreach ($mountpoint in @('api/vendor', 'api/bootstrap/cache', 'api/storage')) {
+        New-Item -ItemType Directory -Force -Path $mountpoint | Out-Null
+    }
     & docker compose -p sciem-sprint3-qa -f docker-compose.sprint3-qa.yml up --build --abort-on-container-exit --exit-code-from api-qa
     $result = $LASTEXITCODE
     if ($result -ne 0) { throw "FAIL: QA PostgreSQL terminó con código $result. No publicar upstream." }

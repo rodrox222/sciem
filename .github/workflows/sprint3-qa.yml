@@ -34,7 +34,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p qa-evidence
+          mkdir -p qa-evidence api/vendor api/bootstrap/cache api/storage
           export SCIEM_QA_DB_PASSWORD="$(openssl rand -hex 32)"
           export SCIEM_QA_APP_KEY="base64:$(openssl rand -base64 32)"
           echo "::add-mask::$SCIEM_QA_DB_PASSWORD"

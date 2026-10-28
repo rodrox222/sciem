@@ -76,3 +76,13 @@ config/database.php y cuatro seeders); ExNayra-PrimoLukas permanece en
 `b77445db084d46738fb06be611e8869b19978991`; no hay PR abiertos en la consulta.
 Es necesario integrar esa novedad conservadoramente en el paso 5 y repetir la
 regresión afectada. No se ha actualizado ninguna rama oficial ni abierto PR.
+
+## QA remoto disponible: primer fallo de checkout limpio
+
+Se habilitó GitHub Actions solo en la rama de rescate del sandbox, con permisos
+de lectura, claves efímeras y el mismo compose aislado. Run 40720748576 construyó
+la imagen e inició PostgreSQL 15.10, pero Docker rechazó montar el volumen vendor
+porque /app es read-only y api/vendor no existe en un checkout limpio.
+Se preparan los directorios de montaje en Actions y PowerShell antes de iniciar
+compose. No se cambia el montaje read-only ni se añaden puertos públicos.
+Este primer run es FAIL de entorno; no alcanzó migraciones ni PHPUnit.
