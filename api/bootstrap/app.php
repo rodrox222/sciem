@@ -16,6 +16,10 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
 
+        $middleware->redirectGuestsTo(
+        fn (Request $request) => $request->is('api/*') ? null : route('login')
+        );
+
         $middleware->web(append: [
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
         ]);
@@ -25,6 +29,18 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->render(function (
+    \Illuminate\Auth\AuthenticationException $e,
+    Request $request
+) {
+    if ($request->is('api/*') || $request->expectsJson()) {
+        return response()->json([
+            'message' => 'No autenticado.',
+        ], 401);
+    }
+
+    return null;
+});
         $exceptions->render(function (QueryException|\PDOException $e, Request $request) {
             // Si está en local o con debug activado, mostrar el error real para no quedar a ciegas
             if (config('app.debug')) {

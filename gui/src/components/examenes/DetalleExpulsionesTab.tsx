@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
 import {
   Camera,
-  CheckCircle2,
   Clock3,
   IdCard,
+  FileText,
+  CalendarClock,
+  ListFilter,
+  PencilLine,
   Loader2,
   QrCode,
   RefreshCw,
@@ -13,44 +16,47 @@ import {
   UserRoundCheck,
   UserRoundX,
   VideoOff,
-  X,
 } from 'lucide-react'
 
 import { ExpulsionForm } from '@/components/examenes/ExpulsionForm'
+import { EditarMotivoExpulsionForm } from '@/components/examenes/EditarMotivoExpulsionForm'
+import { verificarHorarioExpulsion } from '@/components/examenes/horarioExpulsion'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ApiError } from '@/services/api'
 import {
   expulsionesService,
   type AsistenciaExpulsion,
+  type ExpulsionHistorial,
+  type ExpulsionRegistrada,
 } from '@/services/expulsiones.service'
 import {
   estudiantesService,
-  type Estudiante,
   type EstudianteInscritoExamen,
 } from '@/services/estudiantes.service'
 import type { Examen } from '@/services/examenes.service'
 
 const READER_ID = 'expulsion-qr-reader'
 
-type Elegibilidad = {
-  elegible: boolean
-  etiqueta: string
-  detalle: string
-  asistencia?: AsistenciaExpulsion
-}
+type EstudianteParaExpulsion = Pick<
+  EstudianteInscritoExamen,
+  'id' | 'codigo_sis' | 'nombre_completo'
+>
 
-const nombreCompleto = (estudiante: Estudiante) =>
-  [
-    estudiante.nombre,
-    estudiante.apellido_paterno,
-    estudiante.apellido_materno,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .trim()
+type SeleccionExpulsion = {
+  estudiante: EstudianteParaExpulsion
+  asistencia: AsistenciaExpulsion
+}
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (error instanceof ApiError) return error.message
@@ -58,142 +64,239 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return fallback
 }
 
+const compararEspanol = new Intl.Collator('es', { sensitivity: 'base', numeric: true })
+
+// El padrón actual solo envía nombre_completo. Este criterio por apellido
+// supone apellido paterno y materno al final; no es exacto para nombres compuestos.
+const claveApellido = (nombreCompleto: string) => {
+  const partes = nombreCompleto.trim().split(/\s+/)
+  return partes.length >= 3 ? partes.slice(-2).join(' ') : partes.at(-1) ?? ''
+}
+
+const normalizar = (value: string) =>
+  value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim()
+
 export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
   const [searchQuery, setSearchQuery] = useState('')
-  const [results, setResults] = useState<Estudiante[]>([])
-  const [searched, setSearched] = useState(false)
-  const [searching, setSearching] = useState(false)
-  const [searchError, setSearchError] = useState('')
+  const [ordenAlfabetico, setOrdenAlfabetico] = useState<'nombre' | 'apellido'>('nombre')
+  const [instanteActual, setInstanteActual] = useState(() => Date.now())
 
+  useEffect(() => {
+    const intervalo = window.setInterval(() => setInstanteActual(Date.now()), 10_000)
+    return () => window.clearInterval(intervalo)
+  }, [])
+
+  const horario = verificarHorarioExpulsion(exam, new Date(instanteActual))
   const [roster, setRoster] = useState<EstudianteInscritoExamen[]>([])
   const [asistencias, setAsistencias] = useState<AsistenciaExpulsion[]>([])
   const [contextLoading, setContextLoading] = useState(true)
   const [contextError, setContextError] = useState('')
-
-  const [selectedStudent, setSelectedStudent] = useState<Estudiante | null>(null)
+  const [selected, setSelected] = useState<SeleccionExpulsion | null>(null)
+  const [expulsiones, setExpulsiones] = useState<ExpulsionHistorial[]>([])
+  const [editandoMotivo, setEditandoMotivo] = useState(false)
+  const [detalleExpulsion, setDetalleExpulsion] = useState<{
+    estudiante: EstudianteParaExpulsion
+    registro: ExpulsionHistorial
+  } | null>(null)
 
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraError, setCameraError] = useState('')
   const [qrSearching, setQrSearching] = useState(false)
+  const [qrError, setQrError] = useState('')
 
   const scannerRef = useRef<Html5Qrcode | null>(null)
   const scanLockedRef = useRef(false)
-  const searchRequestRef = useRef(0)
+  const contextRequestRef = useRef(0)
+
+  // Los ingresos permitidos son los datos disponibles para identificar a quienes
+  // ingresaron; no se infiere presencia física ni se registra una nueva asistencia.
+  const asistenciaPorEstudiante = useMemo(() => {
+    const map = new Map<string, AsistenciaExpulsion>()
+    for (const asistencia of asistencias) {
+      // El endpoint devuelve los ingresos más recientes primero.
+      if (!map.has(asistencia.estudiante_id)) {
+        map.set(asistencia.estudiante_id, asistencia)
+      }
+    }
+    return map
+  }, [asistencias])
+
+  // GET de expulsiones devuelve registros ordenados del más nuevo al más antiguo.
+  // El primero por estudiante es el que se muestra; no se crean duplicados visuales.
+  const expulsionPorEstudiante = useMemo(() => {
+    const map = new Map<string, ExpulsionHistorial>()
+    for (const registro of expulsiones) {
+      if (!map.has(registro.id_estudiante)) map.set(registro.id_estudiante, registro)
+    }
+    return map
+  }, [expulsiones])
+
+  const ingresados = useMemo(
+    () => roster.filter((estudiante) => asistenciaPorEstudiante.has(estudiante.id)),
+    [roster, asistenciaPorEstudiante],
+  )
+
+  const visibles = useMemo(() => {
+    const query = normalizar(searchQuery)
+    const filtrados = !query ? ingresados : ingresados.filter((estudiante) =>
+      normalizar([
+        estudiante.nombre_completo,
+        estudiante.codigo_sis,
+        estudiante.ci ?? '',
+        estudiante.email_institucional ?? '',
+      ].join(' ')).includes(query),
+    )
+
+    return [...filtrados].sort((a, b) => {
+      const claveA = ordenAlfabetico === 'apellido' ? claveApellido(a.nombre_completo) : a.nombre_completo
+      const claveB = ordenAlfabetico === 'apellido' ? claveApellido(b.nombre_completo) : b.nombre_completo
+      return compararEspanol.compare(claveA, claveB)
+        || compararEspanol.compare(a.nombre_completo, b.nombre_completo)
+        || compararEspanol.compare(a.codigo_sis, b.codigo_sis)
+    })
+  }, [ingresados, searchQuery, ordenAlfabetico])
 
   const loadContext = useCallback(async () => {
+    const requestId = ++contextRequestRef.current
     setContextLoading(true)
     setContextError('')
-
     try {
-      const [rosterResponse, asistenciasResponse] = await Promise.all([
+      // Leemos el historial oficial: así «Ver motivo» funciona tras recargar
+      // y no solo con expulsiones hechas durante esta sesión del navegador.
+      const cargarHistorial = async (): Promise<ExpulsionHistorial[]> => {
+        const primera = await expulsionesService.listarExpulsiones(exam.id)
+        const todos = [...primera.expulsiones]
+        for (let pagina = 2; pagina <= primera.last_page; pagina += 1) {
+          const resultado = await expulsionesService.listarExpulsiones(exam.id, pagina)
+          todos.push(...resultado.expulsiones)
+        }
+        return todos
+      }
+
+      const [rosterResponse, asistenciasResponse, historial] = await Promise.all([
         estudiantesService.listByExam(exam.id),
         expulsionesService.listarAsistencias(exam.id),
+        cargarHistorial(),
       ])
-
+      if (requestId !== contextRequestRef.current) return
       setRoster(rosterResponse.estudiantes ?? [])
       setAsistencias(asistenciasResponse.asistencias ?? [])
+      setExpulsiones(historial)
     } catch (error) {
-      setContextError(
-        getErrorMessage(
-          error,
-          'No se pudo verificar el padrón y los ingresos registrados para este examen.',
-        ),
-      )
+      if (requestId !== contextRequestRef.current) return
+      setContextError(getErrorMessage(
+        error,
+        'No se pudo verificar el padrón, los ingresos y el historial de expulsiones de este examen.',
+      ))
     } finally {
-      setContextLoading(false)
+      if (requestId === contextRequestRef.current) setContextLoading(false)
     }
   }, [exam.id])
 
   useEffect(() => {
-    let cancelled = false
+    // Posponer la carga evita actualizar estado sincrónicamente desde el efecto.
+    // El temporizador se cancela si el componente se desmonta antes de ejecutarse.
+    const timerId = window.setTimeout(() => {
+      void loadContext()
+    }, 0)
+    return () => window.clearTimeout(timerId)
+  }, [loadContext])
 
-    Promise.all([
-      estudiantesService.listByExam(exam.id),
-      expulsionesService.listarAsistencias(exam.id),
-    ])
-      .then(([rosterResponse, asistenciasResponse]) => {
-        if (cancelled) return
-        setRoster(rosterResponse.estudiantes ?? [])
-        setAsistencias(asistenciasResponse.asistencias ?? [])
-        setContextError('')
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return
-        setContextError(
-          getErrorMessage(
-            error,
-            'No se pudo verificar el padrón y los ingresos registrados para este examen.',
-          ),
-        )
-      })
-      .finally(() => {
-        if (!cancelled) setContextLoading(false)
-      })
+  const seleccionar = useCallback((estudiante: EstudianteParaExpulsion) => {
+    const inscrito = roster.some((item) => item.id === estudiante.id)
+    const asistencia = asistenciaPorEstudiante.get(estudiante.id)
 
-    return () => {
-      cancelled = true
-    }
-  }, [exam.id])
+    if (contextLoading || contextError || !inscrito || !asistencia) return false
+    if (!verificarHorarioExpulsion(exam, new Date()).permitido) return false
+    if (expulsionPorEstudiante.has(estudiante.id)) return false
+
+    setSelected({ estudiante, asistencia })
+    return true
+  }, [roster, asistenciaPorEstudiante, contextLoading, contextError, expulsionPorEstudiante, exam])
 
   const stopScanner = useCallback(async () => {
     const scanner = scannerRef.current
     scannerRef.current = null
-
     if (scanner) {
       try {
         if (scanner.isScanning) await scanner.stop()
         await scanner.clear()
       } catch {
-        // El lector puede haber sido liberado por el navegador al cerrar la cámara.
+        // El navegador puede liberar la cámara antes de completar el cierre.
       }
     }
-
     scanLockedRef.current = false
     setCameraActive(false)
   }, [])
 
-  const buscarQr = useCallback(
-    async (decodedText: string) => {
-      if (scanLockedRef.current) return
+  const buscarQr = useCallback(async (decodedText: string) => {
+    if (scanLockedRef.current) return
+    scanLockedRef.current = true
+    setQrSearching(true)
+    setQrError('')
 
-      scanLockedRef.current = true
-      searchRequestRef.current += 1
-      setQrSearching(true)
-      setSearchQuery('')
-      setSearchError('')
-      setSelectedStudent(null)
-
-      try {
-        const response = await expulsionesService.buscarPorQr(decodedText)
-        setResults(response.estudiantes ?? [])
-        setSearched(true)
-
-        if ((response.estudiantes ?? []).length === 0) {
-          setSearchError('El código QR no corresponde a un estudiante registrado.')
-        }
-      } catch (error) {
-        setResults([])
-        setSearched(true)
-        setSearchError(
-          getErrorMessage(error, 'No se pudo identificar al estudiante mediante el código QR.'),
-        )
-      } finally {
-        setQrSearching(false)
-        await stopScanner()
+    try {
+      // El backend acepta QR JSON con el campo sis. Nunca elegimos
+      // arbitrariamente el primer resultado de su búsqueda parcial.
+      const data: unknown = JSON.parse(decodedText)
+      const sis = data && typeof data === 'object' && 'sis' in data
+        ? (data as { sis?: unknown }).sis
+        : undefined
+      if (typeof sis !== 'string' && typeof sis !== 'number') {
+        setQrError('El QR no contiene un código SIS válido.')
+        return
       }
-    },
-    [stopScanner],
-  )
+
+      const codigoSis = String(sis).trim()
+      if (!codigoSis) {
+        setQrError('El QR no contiene un código SIS válido.')
+        return
+      }
+
+      // La lista de ingresados ya está cargada. Identificar localmente por SIS
+      // evita búsquedas parciales y abre el modal sin otra petición al servidor.
+      const exacto = roster.find((estudiante) => estudiante.codigo_sis === codigoSis)
+      if (!exacto) {
+        setQrError('El QR no corresponde a un estudiante inscrito en este examen.')
+        return
+      }
+
+      // Volver a consultar el registro oficial: un compañero pudo expulsar al
+      // estudiante después de que cargamos el listado inicialmente.
+      const registroExistente = await expulsionesService.buscarExpulsionEstudiante(exam.id, exacto.id)
+      if (registroExistente) {
+        setExpulsiones((actual) => [
+          registroExistente,
+          ...actual.filter((item) => item.id !== registroExistente.id),
+        ])
+        // Es exactamente el mismo modal de «Ver motivo», sin permitir un segundo POST.
+        setDetalleExpulsion({ estudiante: exacto, registro: registroExistente })
+        return
+      }
+
+      if (!seleccionar(exacto)) {
+        setQrError(!verificarHorarioExpulsion(exam, new Date()).permitido
+          ? 'Fuera del horario del examen solo se permite consultar expulsiones anteriores.'
+          : 'El estudiante todavía no tiene un ingreso autorizado verificado en este examen.')
+      }
+    } catch (error) {
+      setQrError(error instanceof SyntaxError
+        ? 'El contenido del QR no tiene el formato esperado (JSON con campo sis).'
+        : getErrorMessage(error, 'No se pudo identificar al estudiante mediante QR.'))
+    } finally {
+      setQrSearching(false)
+      await stopScanner()
+    }
+  }, [seleccionar, roster, stopScanner, exam])
 
   const startScanner = useCallback(async () => {
     setCameraError('')
-    setSearchError('')
+    setQrError('')
     await stopScanner()
 
     try {
       const scanner = new Html5Qrcode(READER_ID)
       scannerRef.current = scanner
-
       await scanner.start(
         { facingMode: 'environment' },
         {
@@ -207,135 +310,45 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
         (decodedText) => void buscarQr(decodedText),
         () => {},
       )
-
       setCameraActive(true)
     } catch (error) {
       scannerRef.current = null
       setCameraActive(false)
-      setCameraError(
-        getErrorMessage(
-          error,
-          'No se pudo acceder a la cámara. Revisa los permisos del navegador.',
-        ),
-      )
+      setCameraError(getErrorMessage(error, 'No se pudo acceder a la cámara. Revisa sus permisos.'))
     }
   }, [buscarQr, stopScanner])
 
-  useEffect(
-    () => () => {
-      void stopScanner()
-    },
-    [stopScanner],
-  )
+  useEffect(() => () => { void stopScanner() }, [stopScanner])
 
-  const executeSearch = useCallback(async (query: string) => {
-    const requestId = ++searchRequestRef.current
-
-    setSearching(true)
-    setSearchError('')
-
-    try {
-      const response = await expulsionesService.buscarEstudiantes(query)
-
-      if (requestId !== searchRequestRef.current) return
-
-      setResults(response.estudiantes ?? [])
-      setSearched(true)
-    } catch (error) {
-      if (requestId !== searchRequestRef.current) return
-
-      setResults([])
-      setSearched(true)
-      setSearchError(
-        getErrorMessage(error, 'No se pudo completar la búsqueda de estudiantes.'),
-      )
-    } finally {
-      if (requestId === searchRequestRef.current) {
-        setSearching(false)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    const query = searchQuery.trim()
-    if (!query) return
-
-    const timeoutId = window.setTimeout(() => {
-      void executeSearch(query)
-    }, 250)
-
-    return () => {
-      window.clearTimeout(timeoutId)
-    }
-  }, [executeSearch, searchQuery])
-
-  const handleSearchChange = (value: string) => {
-    setSearchQuery(value)
-    setSelectedStudent(null)
-    setSearchError('')
-
-    if (!value.trim()) {
-      searchRequestRef.current += 1
-      setResults([])
-      setSearched(false)
-      setSearching(false)
-    }
+  const abrirManualmente = async (estudiante: EstudianteParaExpulsion) => {
+    // La selección manual también debe liberar la cámara antes de abrir el modal.
+    if (cameraActive) await stopScanner()
+    seleccionar(estudiante)
   }
 
-  const getElegibilidad = (student: Estudiante): Elegibilidad => {
-    if (contextLoading) {
-      return {
-        elegible: false,
-        etiqueta: 'Verificando',
-        detalle: 'Comprobando inscripción e ingreso previo.',
-      }
-    }
-
-    if (contextError) {
-      return {
-        elegible: false,
-        etiqueta: 'Sin verificar',
-        detalle: 'No fue posible comprobar la elegibilidad en este momento.',
-      }
-    }
-
-    const inscrito = roster.some((item) => item.id === student.id)
-
-    if (!inscrito) {
-      return {
-        elegible: false,
-        etiqueta: 'No inscrito',
-        detalle: 'El estudiante no pertenece al padrón de este examen.',
-      }
-    }
-
-    const asistencia = asistencias.find(
-      (item) => item.estudiante_id === student.id,
-    )
-
-    if (!asistencia) {
-      return {
-        elegible: false,
-        etiqueta: 'Sin ingreso',
-        detalle: 'Está inscrito, pero todavía no registró un ingreso autorizado.',
-      }
-    }
-
-    return {
-      elegible: true,
-      etiqueta: 'Elegible',
-      detalle: 'Ingreso autorizado verificado. Puede continuar con la expulsión.',
-      asistencia,
-    }
+  const registrarLocalmente = (registro: ExpulsionRegistrada) => {
+    setExpulsiones((actual) => [
+      {
+        ...registro,
+        estudiante: null,
+      },
+      ...actual.filter((item) => item.id !== registro.id),
+    ])
   }
 
-  const selectedEligibility = selectedStudent
-    ? getElegibilidad(selectedStudent)
-    : null
+  const formatFecha = (value: string) => {
+    const fecha = new Date(value)
+    if (Number.isNaN(fecha.getTime())) return value
+    return new Intl.DateTimeFormat('es-BO', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: 'America/La_Paz',
+    }).format(fecha)
+  }
 
   return (
     <div className="grid gap-6 xl:grid-cols-12">
-      <div className="space-y-6 xl:col-span-8">
+      <div className="min-w-0 space-y-6 xl:col-span-8">
         <Card className="rounded-2xl border-border bg-card shadow-xs">
           <CardContent className="space-y-5 p-5 sm:p-6">
             <div>
@@ -343,11 +356,20 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
                 Registro de expulsiones
               </span>
               <h2 className="mt-1 text-lg font-extrabold text-sci-navy">
-                Buscar estudiante
+                Estudiantes con ingreso registrado
               </h2>
               <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-                Localiza al estudiante por nombre, apellido o código SIS. Solo podrá seleccionarse
-                si pertenece al examen y ya registró un ingreso autorizado.
+                Lista de estudiantes inscritos que registraron un ingreso autorizado a este examen.
+                El buscador sirve para filtrar la lista, sin necesidad de escribir para verla.
+              </p>
+            </div>
+
+            <div role="status" className={`rounded-xl border px-3 py-2.5 text-xs ${horario.permitido
+              ? 'border-emerald-600/25 bg-emerald-600/5 text-emerald-800'
+              : 'border-sci-amber/30 bg-sci-amber/10 text-sci-navy'}`}>
+              <p className="flex items-start gap-2">
+                <Clock3 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                {horario.mensaje}
               </p>
             </div>
 
@@ -359,154 +381,148 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
               <Input
                 type="search"
                 value={searchQuery}
-                onChange={(event) => handleSearchChange(event.target.value)}
-                placeholder="Nombre, apellido o código SIS..."
-                className="h-10 bg-background pl-9 pr-10 text-xs"
-                aria-label="Buscar estudiante para expulsión"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Filtrar por nombre, apellido, SIS o CI..."
+                className="h-10 bg-background pl-9 text-xs"
+                aria-label="Filtrar estudiantes con ingreso autorizado"
                 autoComplete="off"
               />
-              {searching && (
-                <Loader2
-                  className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-sci-cyan"
-                  aria-label="Buscando coincidencias"
-                />
-              )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 flex-wrap items-center gap-3">
+                <p className="text-[11px] text-muted-foreground" aria-live="polite">
+                  {contextLoading ? 'Consultando ingresos...' : `${visibles.length} de ${ingresados.length} estudiantes con ingreso registrado`}
+                </p>
+                <div className="flex items-center gap-2">
+                  <ListFilter className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <label htmlFor="orden-estudiantes" className="text-xs text-muted-foreground">Ordenar por</label>
+                  <Select value={ordenAlfabetico} onValueChange={(valor) => setOrdenAlfabetico(valor as 'nombre' | 'apellido')}>
+                    <SelectTrigger id="orden-estudiantes" size="sm" className="min-w-[125px] bg-background text-xs" aria-label="Ordenar estudiantes alfabéticamente">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="nombre">Nombre (A–Z)</SelectItem>
+                      <SelectItem value="apellido">Apellido (A–Z)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void loadContext()}
+                disabled={contextLoading || cameraActive || qrSearching}
+                className="cursor-pointer gap-1.5 text-xs"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${contextLoading ? 'animate-spin' : ''}`} />
+                Actualizar lista
+              </Button>
             </div>
 
             {contextError && (
-              <div
-                className="flex items-start gap-2 rounded-xl border border-sci-amber/30 bg-sci-amber/10 p-3 text-xs text-foreground"
-                role="alert"
-              >
-                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-sci-amber" />
-                <div className="flex-1">
-                  <p className="font-bold">No se pudo verificar la elegibilidad.</p>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">{contextError}</p>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => void loadContext()}
-                  className="cursor-pointer gap-1"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" /> Reintentar
-                </Button>
+              <div role="alert" className="rounded-xl border border-sci-amber/30 bg-sci-amber/10 p-3 text-xs">
+                <p className="flex items-center gap-2 font-bold"><ShieldAlert className="h-4 w-4" /> No se pudo verificar el listado.</p>
+                <p className="mt-1 text-muted-foreground">{contextError}</p>
               </div>
             )}
 
-            {searchError && (
-              <div
-                className="rounded-xl border border-sci-red/20 bg-sci-red/10 p-3 text-xs font-semibold text-sci-red"
-                role="alert"
-              >
-                {searchError}
+            {contextLoading ? (
+              <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed p-8 text-xs text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Cargando estudiantes e ingresos...
               </div>
-            )}
+            ) : !contextError && visibles.length > 0 ? (
+              <div className="max-h-[560px] space-y-3 overflow-y-auto pr-1" aria-label="Estudiantes con ingreso registrado">
+                {visibles.map((estudiante) => {
+                  const asistencia = asistenciaPorEstudiante.get(estudiante.id)
+                  if (!asistencia) return null
+                  const expulsionRegistrada = expulsionPorEstudiante.get(estudiante.id)
+                  const registrado = Boolean(expulsionRegistrada)
 
-            <div className="space-y-3" aria-live="polite">
-              {results.map((student) => {
-                const eligibility = getElegibilidad(student)
-                const selected = selectedStudent?.id === student.id
-
-                return (
-                  <div
-                    key={student.id}
-                    className={`rounded-2xl border p-4 transition-colors ${
-                      selected
-                        ? 'border-sci-cyan bg-sci-cyan/5'
-                        : 'border-border bg-muted/20 hover:bg-muted/35'
-                    }`}
-                  >
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="break-words text-sm font-extrabold text-sci-navy">
-                            {nombreCompleto(student)}
-                          </p>
-                          <Badge
-                            variant="outline"
-                            className={
-                              eligibility.elegible
-                                ? 'border-emerald-600/30 bg-emerald-600/10 text-emerald-700'
-                                : 'border-sci-amber/30 bg-sci-amber/10 text-sci-amber'
-                            }
-                          >
-                            {eligibility.etiqueta}
-                          </Badge>
-                        </div>
-
-                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-                          <span className="font-mono">SIS: {student.codigo_sis}</span>
-                          <span className="flex items-center gap-1">
-                            <IdCard className="h-3.5 w-3.5 text-sci-cyan" />
-                            CI: {student.ci || 'No registrado'}
-                            {student.ci_extension ? ` ${student.ci_extension}` : ''}
-                          </span>
-                        </div>
-
-                        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-                          {eligibility.detalle}
-                        </p>
-
-                        {eligibility.asistencia && (
-                          <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+                  return (
+                    <div key={estudiante.id} className="rounded-2xl border border-border bg-muted/20 p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="break-words text-sm font-extrabold text-sci-navy">
+                              {estudiante.nombre_completo}
+                            </p>
+                            <Badge variant="outline" className={registrado
+                              ? 'border-sci-amber/30 bg-sci-amber/10 text-sci-amber'
+                              : 'border-emerald-600/30 bg-emerald-600/10 text-emerald-700'}>
+                              {registrado ? 'Expulsión registrada' : 'Ingreso verificado'}
+                            </Badge>
+                          </div>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                            <span className="font-mono">SIS: {estudiante.codigo_sis}</span>
+                            <span className="flex items-center gap-1">
+                              <IdCard className="h-3.5 w-3.5 text-sci-cyan" />
+                              CI: {estudiante.ci || 'No registrado'}{estudiante.ci_extension ? ` ${estudiante.ci_extension}` : ''}
+                            </span>
+                            <span className="break-all">{estudiante.email_institucional}</span>
+                          </div>
+                          <p className="flex flex-wrap items-center gap-1 text-[11px] font-semibold text-emerald-700">
                             <Clock3 className="h-3.5 w-3.5" />
-                            Ingreso: {eligibility.asistencia.fecha_ingreso} ·{' '}
-                            {eligibility.asistencia.hora_ingreso}
+                            Ingreso: {asistencia.fecha_ingreso} · {asistencia.hora_ingreso} ({asistencia.metodo})
                           </p>
+                        </div>
+                        {expulsionRegistrada ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setDetalleExpulsion({ estudiante, registro: expulsionRegistrada })}
+                            className="w-full cursor-pointer gap-2 border-sci-amber/50 text-xs font-bold text-sci-navy hover:bg-sci-amber/10 sm:w-auto"
+                            aria-label={`Ver motivo de expulsión de ${estudiante.nombre_completo}`}
+                          >
+                            <FileText className="h-4 w-4 text-sci-amber" aria-hidden="true" />
+                            Ver motivo
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            onClick={() => void abrirManualmente(estudiante)}
+                            disabled={!horario.permitido || contextLoading || Boolean(contextError)}
+                            title={!horario.permitido ? horario.mensaje : undefined}
+                            className="w-full cursor-pointer bg-sci-blue text-xs font-bold text-white hover:opacity-90 sm:w-auto"
+                          >
+                            <UserRoundCheck className="h-4 w-4" />
+                            Registrar expulsión
+                          </Button>
                         )}
                       </div>
-
-                      <Button
-                        type="button"
-                        variant={eligibility.elegible ? 'default' : 'outline'}
-                        disabled={!eligibility.elegible}
-                        onClick={() => setSelectedStudent(student)}
-                        className={
-                          eligibility.elegible
-                            ? 'w-full cursor-pointer bg-sci-blue text-xs font-bold text-white hover:opacity-90 sm:w-auto'
-                            : 'w-full text-xs sm:w-auto'
-                        }
-                      >
-                        {eligibility.elegible ? (
-                          <UserRoundCheck className="h-4 w-4" />
-                        ) : (
-                          <UserRoundX className="h-4 w-4" />
-                        )}
-                        {selected ? 'Seleccionado' : 'Seleccionar'}
-                      </Button>
                     </div>
-                  </div>
-                )
-              })}
-
-              {searched && !searching && results.length === 0 && !searchError && (
-                <div className="rounded-2xl border border-dashed border-border bg-muted/20 px-5 py-10 text-center">
-                  <UserRoundX className="mx-auto h-8 w-8 text-muted-foreground/70" />
-                  <p className="mt-3 text-xs font-bold text-foreground">
-                    No se encontraron estudiantes
-                  </p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    Prueba con otro nombre, apellido o código SIS.
-                  </p>
-                </div>
-              )}
-            </div>
+                  )
+                })}
+              </div>
+            ) : !contextError && (
+              <div className="rounded-2xl border border-dashed border-border bg-muted/20 px-5 py-10 text-center">
+                <UserRoundX className="mx-auto h-8 w-8 text-muted-foreground/70" />
+                <p className="mt-3 text-xs font-bold text-foreground">
+                  {searchQuery.trim() ? 'No hay coincidencias' : 'Todavía no hay ingresos registrados'}
+                </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {searchQuery.trim()
+                    ? 'Prueba con otro nombre, apellido, código SIS o CI.'
+                    : 'Cuando se registren ingresos autorizados, aparecerán aquí. Puedes actualizar la lista.'}
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      <div className="space-y-6 xl:col-span-4">
+      <div className="min-w-0 space-y-6 xl:col-span-4">
         <Card className="rounded-2xl border-border bg-card shadow-xs">
           <CardContent className="space-y-4 p-5">
             <div>
               <h3 className="flex items-center gap-2 text-sm font-extrabold text-sci-navy">
-                <QrCode className="h-4 w-4 text-sci-cyan" />
-                Identificación por QR
+                <QrCode className="h-4 w-4 text-sci-cyan" /> Identificación por QR
               </h3>
               <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                El escaneo solo identifica al estudiante. No registra un nuevo ingreso ni una expulsión.
+                Al identificar un estudiante con ingreso autorizado se abrirá directamente
+                el formulario de expulsión. Si ya fue expulsado, se mostrará su motivo.
+                Escanear no registra otro ingreso ni una expulsión.
               </p>
             </div>
 
@@ -515,17 +531,15 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
                 id={READER_ID}
                 className="aspect-square w-full overflow-hidden [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
               />
-
               {!cameraActive && !qrSearching && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-card p-6 text-center">
                   <Camera className="h-9 w-9 text-sci-cyan" />
                   <p className="mt-3 text-xs font-bold text-foreground">Lector QR en espera</p>
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    Activa la cámara cuando necesites identificar una credencial.
+                    Activa la cámara para identificar la credencial.
                   </p>
                 </div>
               )}
-
               {cameraActive && !qrSearching && (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                   <div className="h-44 w-44 rounded-2xl border-2 border-sci-cyan/80 shadow-[0_0_18px_rgba(22,143,189,0.35)]">
@@ -533,7 +547,6 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
                   </div>
                 </div>
               )}
-
               {qrSearching && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-sci-navy/85 text-white">
                   <Loader2 className="h-8 w-8 animate-spin text-sci-cyan" />
@@ -542,104 +555,177 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
               )}
             </div>
 
-            {cameraError && (
-              <div
-                className="rounded-xl border border-sci-red/20 bg-sci-red/10 p-3 text-[11px] font-semibold text-sci-red"
-                role="alert"
-              >
-                {cameraError}
+            {(cameraError || qrError) && (
+              <div role="alert" className="rounded-xl border border-sci-red/20 bg-sci-red/10 p-3 text-[11px] font-semibold text-sci-red">
+                {cameraError || qrError}
               </div>
             )}
 
             <Button
               type="button"
               variant={cameraActive ? 'outline' : 'default'}
-              onClick={() =>
-                cameraActive ? void stopScanner() : void startScanner()
-              }
-              disabled={qrSearching}
-              className={
-                cameraActive
-                  ? 'w-full cursor-pointer text-xs text-sci-red hover:text-sci-red'
-                  : 'w-full cursor-pointer bg-sci-blue text-xs font-bold text-white hover:opacity-90'
-              }
+              onClick={() => cameraActive ? void stopScanner() : void startScanner()}
+              disabled={qrSearching || contextLoading || Boolean(contextError) || Boolean(selected) || Boolean(detalleExpulsion)}
+              className={cameraActive
+                ? 'w-full cursor-pointer text-xs text-sci-red hover:text-sci-red'
+                : 'w-full cursor-pointer bg-sci-blue text-xs font-bold text-white hover:opacity-90'}
             >
               {cameraActive ? (
-                <>
-                  <VideoOff className="h-4 w-4" /> Detener cámara
-                </>
+                <><VideoOff className="h-4 w-4" /> Detener cámara</>
               ) : (
-                <>
-                  <Camera className="h-4 w-4" /> Escanear código QR
-                </>
+                <><Camera className="h-4 w-4" /> {horario.permitido ? 'Escanear código QR' : 'Consultar motivo por QR'}</>
               )}
             </Button>
           </CardContent>
         </Card>
+      </div>
 
-        <Card className="order-1 rounded-2xl border-border bg-card shadow-xs xl:order-none">
-          <CardContent className="space-y-4 p-5">
-            <div>
-              <h3 className="text-sm font-extrabold text-sci-navy">
-                Estudiante seleccionado
-              </h3>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                La selección solo está disponible para estudiantes con ingreso autorizado.
-              </p>
-            </div>
+      <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null) }}>
+        <DialogContent
+          className="max-h-[90dvh] w-full overflow-y-auto sm:max-w-lg"
+          aria-describedby="expulsion-dialog-description"
+          onInteractOutside={(event) => event.preventDefault()}
+        >
+          <DialogHeader className="pr-8">
+            <DialogTitle className="flex items-center gap-2 text-sci-navy">
+              <UserRoundX className="h-5 w-5 text-sci-red" /> Registro de expulsión
+            </DialogTitle>
+            <DialogDescription id="expulsion-dialog-description" className="text-xs">
+              Estudiante: <strong>{selected?.estudiante.nombre_completo}</strong> · SIS: {selected?.estudiante.codigo_sis}
+            </DialogDescription>
+          </DialogHeader>
+          {selected && (
+            <ExpulsionForm
+              key={selected.estudiante.id}
+              exam={exam}
+              estudiante={selected.estudiante}
+              asistencia={selected.asistencia}
+              horarioPermitido={horario.permitido}
+              onRegistered={registrarLocalmente}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
-            {selectedStudent && selectedEligibility?.elegible ? (
-              <div className="space-y-3">
-                <div className="rounded-xl border border-emerald-600/25 bg-emerald-600/5 p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-600/10">
-                      <CheckCircle2 className="h-5 w-5 text-emerald-700" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="break-words text-sm font-extrabold text-sci-navy">
-                        {nombreCompleto(selectedStudent)}
-                      </p>
-                      <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                        SIS: {selectedStudent.codigo_sis}
-                      </p>
-                      {selectedEligibility.asistencia && (
-                        <p className="mt-2 text-[11px] font-semibold text-emerald-700">
-                          Ingreso verificado · {selectedEligibility.asistencia.hora_ingreso}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {selectedEligibility.asistencia && (
-                  <ExpulsionForm
-                    key={selectedStudent.id}
-                    exam={exam}
-                    estudiante={selectedStudent}
-                    asistencia={selectedEligibility.asistencia}
-                  />
-                )}
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setSelectedStudent(null)}
-                  className="w-full cursor-pointer gap-1.5 text-xs"
-                >
-                  <X className="h-3.5 w-3.5" /> Quitar selección
-                </Button>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center">
-                <UserRoundCheck className="mx-auto h-8 w-8 text-muted-foreground/60" />
-                <p className="mt-3 text-xs font-semibold text-muted-foreground">
-                  Busca y selecciona un estudiante elegible.
+      {/* Consulta de solo lectura de una expulsión ya registrada. */}
+      <Dialog
+        open={Boolean(detalleExpulsion)}
+        onOpenChange={(open) => { if (!open) { setDetalleExpulsion(null); setEditandoMotivo(false) } }}
+      >
+        <DialogContent className="max-h-[90dvh] w-full overflow-y-auto sm:max-w-lg">
+          <DialogHeader className="pr-8">
+            <DialogTitle className="flex items-center gap-2 text-sci-navy">
+              <FileText className="h-5 w-5 text-sci-amber" aria-hidden="true" />
+              {editandoMotivo ? 'Editar motivo de expulsión' : 'Motivo de expulsión'}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Registro de expulsión del examen {exam.nombre}.
+            </DialogDescription>
+          </DialogHeader>
+          {detalleExpulsion && (editandoMotivo ? (
+            <EditarMotivoExpulsionForm
+              key={detalleExpulsion.registro.id}
+              exam={exam}
+              registro={detalleExpulsion.registro}
+              horarioPermitido={horario.permitido}
+              onCancel={() => setEditandoMotivo(false)}
+              onSaved={(nuevoRegistro) => {
+                setExpulsiones((actual) => actual.map((item) =>
+                  item.id === nuevoRegistro.id ? nuevoRegistro : item,
+                ))
+                setDetalleExpulsion((actual) => actual ? { ...actual, registro: nuevoRegistro } : null)
+                setEditandoMotivo(false)
+              }}
+            />
+          ) : (
+            <div className="space-y-4 text-xs">
+              <div className="rounded-xl border border-border bg-muted/20 p-4">
+                <p className="font-bold text-sci-navy">{detalleExpulsion.estudiante.nombre_completo}</p>
+                <p className="mt-1 text-muted-foreground">
+                  SIS: {detalleExpulsion.estudiante.codigo_sis}
                 </p>
               </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              <div className="rounded-xl border border-sci-amber/30 bg-sci-amber/5 p-4">
+                <p className="font-semibold text-muted-foreground">Motivo vigente</p>
+                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
+                  {detalleExpulsion.registro.motivo}
+                </p>
+              </div>
+              {detalleExpulsion.registro.motivo_original &&
+               detalleExpulsion.registro.motivo_original !== detalleExpulsion.registro.motivo && (
+                <div className="rounded-xl border border-border bg-muted/20 p-4">
+                  <p className="font-semibold text-muted-foreground">Motivo original (conservado)</p>
+                  <p className="mt-2 whitespace-pre-wrap break-words text-sm">
+                    {detalleExpulsion.registro.motivo_original}
+                  </p>
+                </div>
+              )}
+              <div className="grid gap-3 rounded-xl border border-border p-4 sm:grid-cols-2">
+                <div>
+                  <p className="flex items-center gap-1 font-semibold text-muted-foreground">
+                    <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" /> Fecha y hora de expulsión
+                  </p>
+                  <p className="mt-1 font-medium text-foreground">
+                    {formatFecha(detalleExpulsion.registro.fecha_hora)}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-semibold text-muted-foreground">Expulsión registrada por</p>
+                  <p className="mt-1 font-medium text-foreground">
+                    {detalleExpulsion.registro.responsable?.nombre || 'No disponible'}
+                  </p>
+                  {detalleExpulsion.registro.responsable?.rol && (
+                    <p className="mt-0.5 uppercase text-muted-foreground">
+                      {detalleExpulsion.registro.responsable.rol}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {detalleExpulsion.registro.ultima_edicion && (
+                <div className="grid gap-3 rounded-xl border border-border bg-muted/20 p-4 sm:grid-cols-2">
+                  <div>
+                    <p className="font-semibold text-muted-foreground">Última edición</p>
+                    <p className="mt-1 font-medium">{formatFecha(detalleExpulsion.registro.ultima_edicion.fecha_hora)}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-muted-foreground">Editado por</p>
+                    <p className="mt-1 font-medium">
+                      {detalleExpulsion.registro.ultima_edicion.responsable?.nombre || 'No disponible'}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {detalleExpulsion.registro.ediciones && detalleExpulsion.registro.ediciones.length > 0 && (
+                <details className="rounded-xl border border-border p-3">
+                  <summary className="cursor-pointer font-bold text-sci-navy">Historial de ediciones</summary>
+                  <ol className="mt-3 space-y-3">
+                    {detalleExpulsion.registro.ediciones.map((edicion, indice) => (
+                      <li key={`${edicion.fecha_hora}-${indice}`} className="border-t border-border pt-2">
+                        <p className="font-semibold">{formatFecha(edicion.fecha_hora)} · {edicion.responsable?.nombre ?? 'No disponible'}</p>
+                        <p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">Anterior: {edicion.motivo_anterior}</p>
+                        <p className="mt-1 whitespace-pre-wrap break-words">Nuevo: {edicion.motivo_nuevo}</p>
+                      </li>
+                    ))}
+                  </ol>
+                </details>
+              )}
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button type="button" variant="outline" onClick={() => setDetalleExpulsion(null)}>
+                  Cerrar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setEditandoMotivo(true)}
+                  disabled={!horario.permitido}
+                  title={!horario.permitido ? horario.mensaje : undefined}
+                >
+                  <PencilLine className="h-4 w-4" aria-hidden="true" /> Editar motivo
+                </Button>
+              </div>
+            </div>
+          ))}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
