@@ -17,8 +17,10 @@ function obtenerTokenValido(paramToken?: string): string {
 
 export interface ResultadoEscaneo {
   success: boolean;
+  acceso?: boolean; 
   metodo: 'ONLINE' | 'OFFLINE';
   mensaje: string;
+  codigo?: string;
   estudiante?: {
     nombre_completo?: string;
     codigo_sis?: string;
@@ -58,11 +60,11 @@ function extraerDatosQr(qrRaw: string): {
         expiraAt: parsed.expira_at,
       };
     } catch {
-      // Ignorar fallo de decodificación
+      // Si falla la decodificación Base64/JSON, no es un token válido
     }
   }
 
-  // Caso 2: JSON directo
+  // Caso 2: JSON institucional directo
   if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
     try {
       const parsed: QrPayload = JSON.parse(trimmed);
@@ -77,8 +79,14 @@ function extraerDatosQr(qrRaw: string): {
     }
   }
 
-  // Caso 3: SIS en texto plano
-  return { codigoSis: trimmed };
+  // Caso 3: Código SIS en texto plano (en la UMSS son estrictamente numéricos de 8 a 10 dígitos)
+  const esNumeroSis = /^\d{8,10}$/.test(trimmed);
+  if (esNumeroSis) {
+    return { codigoSis: trimmed };
+  }
+
+  // Caso 4: Si es una URL, datos bancarios o cualquier otro formato ajeno
+  return { codigoSis: '' };
 }
 
 export async function procesarIngresoEscaneado(
@@ -152,8 +160,10 @@ async function resolverOffline(
 
   return {
     success: resOffline.acceso,
+    acceso: resOffline.acceso,
     metodo: 'OFFLINE',
     mensaje: resOffline.mensaje,
+    codigo: resOffline.codigo,
     estudiante: resOffline.estudiante
       ? {
           nombre_completo: typeof resOffline.estudiante === 'string' ? resOffline.estudiante : resOffline.estudiante.nombre_completo,
@@ -164,6 +174,7 @@ async function resolverOffline(
       : undefined,
     detalles: {
       codigo: resOffline.codigo,
+      ...(resOffline.detalles || {}),
     },
   };
 }
