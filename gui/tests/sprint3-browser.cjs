@@ -61,7 +61,7 @@ async function apiJson(context, route, token = fixture.tokens.docente) {
       await page.evaluate(() => localStorage.setItem('user_role', 'admin'));
       await page.reload();
       await page.getByText('El servidor no autorizó este dashboard para el rol de tu sesión.').waitFor();
-      assert.equal((await context.request.get(`${api}/usuarios`, { headers: { Authorization: `Bearer ${fixture.tokens.estudiante}` } })).status(), 403);
+      assert.equal((await context.request.get(`${api}/dashboard/stats`, { headers: { Authorization: `Bearer ${fixture.tokens.estudiante}` } })).status(), 403);
       await screenshot(page, 'HU20-rol-local-manipulado');
       await context.close();
     }
