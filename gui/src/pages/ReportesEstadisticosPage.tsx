@@ -180,29 +180,33 @@ export default function ReportesEstadisticosPage() {
   }
 
   async function descargar() {
-    if (!reporte || descargando || !examenId || !examenElegido || filtrosSinAplicar || formatoDescarga !== 'xlsx') return
+    const formato = formatoDescarga
+    if (!reporte || descargando || !examenId || !examenElegido || filtrosSinAplicar || (formato !== 'xlsx' && formato !== 'pdf')) return
     setDescargando(true)
     setAvisoDescarga(null)
     const controlador = new AbortController()
     const limite = window.setTimeout(() => controlador.abort(), 60_000)
 
     try {
-      const respuesta = await reportesService.descargar(examenId, filtros, controlador.signal)
-      if (respuesta.blob.size < 4) {
+      const respuesta = await reportesService.descargar(examenId, filtros, formato, controlador.signal)
+      const bytesFirma = formato === 'pdf' ? 5 : 4
+      if (respuesta.blob.size < bytesFirma) {
         throw new Error('El servidor devolvió un archivo vacío o incompleto.')
       }
 
-      // XLSX es un contenedor ZIP. Rechazar respuestas no descargables,
-      // incluso cuando algún servidor responde HTTP 200 por error.
-      const firma = new Uint8Array(await respuesta.blob.slice(0, 4).arrayBuffer())
-      if (firma[0] !== 0x50 || firma[1] !== 0x4b || firma[2] !== 0x03 || firma[3] !== 0x04) {
-        throw new Error('El servidor no devolvió un archivo Excel válido. Vuelve a intentarlo.')
+      // Rechazar respuestas erróneas aunque el servidor responda HTTP 200.
+      // Un XLSX comienza con la firma ZIP (PK), mientras que un PDF comienza con %PDF-.
+      const firma = new Uint8Array(await respuesta.blob.slice(0, bytesFirma).arrayBuffer())
+      const esXlsx = firma[0] === 0x50 && firma[1] === 0x4b && firma[2] === 0x03 && firma[3] === 0x04
+      const esPdf = firma[0] === 0x25 && firma[1] === 0x50 && firma[2] === 0x44 && firma[3] === 0x46 && firma[4] === 0x2d
+      if (formato === 'xlsx' ? !esXlsx : !esPdf) {
+        throw new Error(`El servidor no devolvió un archivo ${formato.toUpperCase()} válido. Vuelve a intentarlo.`)
       }
 
       const nombreServidor = respuesta.filename?.trim() || ''
-      const nombre = nombreServidor.toLowerCase().endsWith('.xlsx')
+      const nombre = nombreServidor.toLowerCase().endsWith(`.${formato}`)
         ? nombreServidor
-        : `reporte_estadistico_${examenId}.xlsx`
+        : `reporte_estadistico_${examenId}.${formato}`
 
       const enlace = document.createElement('a')
       const archivoUrl = URL.createObjectURL(respuesta.blob)
@@ -213,7 +217,7 @@ export default function ReportesEstadisticosPage() {
         enlace.click()
         setAvisoDescarga({
           tipo: 'exito',
-          mensaje: `Archivo XLSX generado correctamente. Descarga iniciada: ${nombre}. Comprueba el archivo en Descargas del navegador.`,
+          mensaje: `Archivo ${formato.toUpperCase()} generado correctamente. Descarga iniciada: ${nombre}. Comprueba el archivo en Descargas del navegador.`,
         })
       } finally {
         enlace.remove()
@@ -353,20 +357,20 @@ export default function ReportesEstadisticosPage() {
               >
                 <option value="">Seleccione un formato</option>
                 <option value="xlsx">Excel (.xlsx)</option>
-                <option value="pdf" disabled>PDF (.pdf) — pendiente de habilitación</option>
+                <option value="pdf">PDF (.pdf)</option>
               </select>
             </div>
             <Button
               type="button"
               className="min-h-11 w-full gap-2 px-5 sm:w-auto"
-              disabled={!reporte || !examenId || !examenElegido || !formatoDescarga || formatoDescarga !== 'xlsx' || descargando || cargando || filtrosSinAplicar}
+              disabled={!reporte || !examenId || !examenElegido || (formatoDescarga !== 'xlsx' && formatoDescarga !== 'pdf') || descargando || cargando || filtrosSinAplicar}
               onClick={() => void descargar()}
             >
               {descargando ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <Download className="size-4" aria-hidden="true" />}
               {descargando ? 'Preparando descarga...' : 'Descargar reporte'}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">PDF estará disponible cuando se incorpore el servicio correspondiente. Excel utiliza las cifras y los filtros aplicados.</p>
+          <p className="text-xs text-muted-foreground">Selecciona PDF o Excel. La descarga conserva el examen y los filtros aplicados al reporte.</p>
           {filtrosSinAplicar && <p className="text-xs font-semibold text-sci-blue" role="status">Aplica los cambios de fecha antes de descargar para asegurar que coincidan con las cifras en pantalla.</p>}
           {avisoDescarga && (
             <div
