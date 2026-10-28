@@ -184,6 +184,12 @@ async function apiJson(context, route, token = fixture.tokens.docente) {
 
     // Timer de 5 minutos con reloj controlado; el polling no mantiene viva la sesión.
     const idle = await session(browser, 'docente');
+    // La conectividad HEAD se verifica de verdad antes de controlar el reloj.
+    // Durante el avance virtual, responder health determinísticamente evita
+    // que un timeout artificial de 1200 ms simule desconexión.
+    const health = await idle.context.request.head(`${api}/health`);
+    assert.equal(health.status(), 204, 'HEAD /api/health debe responder durante inactividad');
+    await idle.page.route('**/api/health', route => route.fulfill({ status: 204 }));
     await idle.page.clock.install();
     await idle.page.goto(`${origin}/examenes/${fixture.exam}`);
     await idle.page.getByRole('tab', { name: 'Monitoreo', exact: true }).click();
