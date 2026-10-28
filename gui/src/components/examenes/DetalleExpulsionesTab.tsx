@@ -572,7 +572,7 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
         </Card>
       </div>
 
-      <section className="space-y-3 rounded-2xl border border-border p-4" aria-label="Historial completo de expulsiones">
+      <section className="min-w-0 space-y-3 rounded-2xl border border-border p-4 xl:col-span-12" aria-label="Historial completo de expulsiones">
         <h3 className="font-bold text-sci-navy">Historial de expulsiones · {exam.nombre}</h3>
         <div className="flex flex-wrap gap-2">
           <Input aria-label="Filtrar historial por estudiante o SIS" placeholder="Nombre o SIS" value={filtroHistorial} onChange={(e) => setFiltroHistorial(e.target.value)} />
