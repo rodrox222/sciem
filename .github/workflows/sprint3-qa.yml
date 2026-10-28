@@ -1,0 +1,57 @@
+name: Sprint 3 isolated QA
+
+on:
+  push:
+    branches: [rescue/sprint3-iteracion2-20261028]
+    paths:
+      - 'api/**'
+      - 'gui/**'
+      - 'docker-compose.sprint3-qa.yml'
+      - '.github/workflows/sprint3-qa.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sprint3-qa-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qa:
+    if: github.repository == 'MiguelVarMer/sciem-frontend-integracion'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: gui/package-lock.json
+      - name: PostgreSQL migrations and PHPUnit without skips
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa-evidence
+          export SCIEM_QA_DB_PASSWORD="$(openssl rand -hex 32)"
+          export SCIEM_QA_APP_KEY="base64:$(openssl rand -base64 32)"
+          echo "::add-mask::$SCIEM_QA_DB_PASSWORD"
+          echo "::add-mask::$SCIEM_QA_APP_KEY"
+          trap 'docker compose -p sciem-sprint3-qa -f docker-compose.sprint3-qa.yml down' EXIT
+          docker compose -p sciem-sprint3-qa -f docker-compose.sprint3-qa.yml up --build --abort-on-container-exit --exit-code-from api-qa 2>&1 | tee qa-evidence/postgres.txt
+      - name: Frontend contracts and build
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --prefix gui ci
+          node --test gui/tests/sprint3.test.cjs 2>&1 | tee qa-evidence/frontend-tests.txt
+          npm --prefix gui run build 2>&1 | tee qa-evidence/frontend-build.txt
+      - name: Preserve QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sprint3-qa-${{ github.sha }}
+          path: qa-evidence/
+          retention-days: 7
