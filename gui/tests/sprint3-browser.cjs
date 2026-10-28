@@ -94,6 +94,9 @@ async function apiJson(context, route, token = fixture.tokens.docente) {
     await page.getByLabel('Filtrar estudiantes con ingreso autorizado').fill(fixture.sis);
     await page.getByRole('button', { name: 'Registrar expulsión', exact: true }).waitFor();
     await screenshot(page, 'HU15-desktop');
+    const anchoHistorial = await page.getByRole('region', { name: 'Historial completo de expulsiones' })
+      .evaluate(element => element.getBoundingClientRect().width);
+    assert.ok(anchoHistorial >= 600, `HU15: historial demasiado angosto en escritorio (${anchoHistorial}px)`);
     const before = await apiJson(context, `examenes/${fixture.exam}/expulsiones`);
     await page.getByRole('button', { name: 'Registrar expulsión', exact: true }).click();
     await page.locator('#motivo-expulsion').fill('UI motivo de QA');
