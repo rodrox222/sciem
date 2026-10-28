@@ -263,7 +263,7 @@ export default function DetalleExamenPage() {
 
         {canExpel && (
           <TabsContent value="expulsiones">
-            <DetalleExpulsionesTab exam={exam} />
+            <DetalleExpulsionesTab key={exam.id} exam={exam} />
           </TabsContent>
         )}
 

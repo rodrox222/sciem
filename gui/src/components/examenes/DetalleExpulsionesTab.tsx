@@ -37,19 +37,16 @@ import { ApiError } from '@/services/api'
 import {
   expulsionesService,
   type AsistenciaExpulsion,
+  type EstudianteElegible,
   type ExpulsionHistorial,
   type ExpulsionRegistrada,
 } from '@/services/expulsiones.service'
-import {
-  estudiantesService,
-  type EstudianteInscritoExamen,
-} from '@/services/estudiantes.service'
 import type { Examen } from '@/services/examenes.service'
 
 const READER_ID = 'expulsion-qr-reader'
 
 type EstudianteParaExpulsion = Pick<
-  EstudianteInscritoExamen,
+  EstudianteElegible,
   'id' | 'codigo_sis' | 'nombre_completo'
 >
 
@@ -79,6 +76,14 @@ const normalizar = (value: string) =>
 export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [ordenAlfabetico, setOrdenAlfabetico] = useState<'nombre' | 'apellido'>('nombre')
+  const [desfaseServidor, setDesfaseServidor] = useState(0)
+  const [guardando, setGuardando] = useState(false)
+  const [eliminando, setEliminando] = useState(false)
+  const [motivoEliminacion, setMotivoEliminacion] = useState('')
+  const [eliminacionError, setEliminacionError] = useState('')
+  const [confirmarEliminar, setConfirmarEliminar] = useState(false)
+  const [filtroHistorial, setFiltroHistorial] = useState('')
+  const [estadoHistorial, setEstadoHistorial] = useState('todas')
   const [instanteActual, setInstanteActual] = useState(() => Date.now())
 
   useEffect(() => {
@@ -86,8 +91,8 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
     return () => window.clearInterval(intervalo)
   }, [])
 
-  const horario = verificarHorarioExpulsion(exam, new Date(instanteActual))
-  const [roster, setRoster] = useState<EstudianteInscritoExamen[]>([])
+  const horario = verificarHorarioExpulsion(exam, new Date(instanteActual + desfaseServidor))
+  const [roster, setRoster] = useState<EstudianteElegible[]>([])
   const [asistencias, setAsistencias] = useState<AsistenciaExpulsion[]>([])
   const [contextLoading, setContextLoading] = useState(true)
   const [contextError, setContextError] = useState('')
@@ -106,6 +111,7 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
 
   const scannerRef = useRef<Html5Qrcode | null>(null)
   const scanLockedRef = useRef(false)
+  const contextAbortRef = useRef<AbortController | null>(null)
   const contextRequestRef = useRef(0)
 
   // Los ingresos permitidos son los datos disponibles para identificar a quienes
@@ -126,19 +132,16 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
   const expulsionPorEstudiante = useMemo(() => {
     const map = new Map<string, ExpulsionHistorial>()
     for (const registro of expulsiones) {
-      if (!map.has(registro.id_estudiante)) map.set(registro.id_estudiante, registro)
+      if (!registro.deleted_at && !map.has(registro.id_estudiante)) map.set(registro.id_estudiante, registro)
     }
     return map
   }, [expulsiones])
 
-  const ingresados = useMemo(
-    () => roster.filter((estudiante) => asistenciaPorEstudiante.has(estudiante.id)),
-    [roster, asistenciaPorEstudiante],
-  )
+  const historialVisible = expulsiones.filter((e) => (estadoHistorial === 'todas' || (estadoHistorial === 'eliminadas') === Boolean(e.deleted_at)) && normalizar(`${e.estudiante?.nombre_completo ?? ''} ${e.estudiante?.codigo_sis ?? ''}`).includes(normalizar(filtroHistorial)))
 
   const visibles = useMemo(() => {
     const query = normalizar(searchQuery)
-    const filtrados = !query ? ingresados : ingresados.filter((estudiante) =>
+    const filtrados = !query ? roster : roster.filter((estudiante) =>
       normalizar([
         estudiante.nombre_completo,
         estudiante.codigo_sis,
@@ -148,15 +151,18 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
     )
 
     return [...filtrados].sort((a, b) => {
-      const claveA = ordenAlfabetico === 'apellido' ? claveApellido(a.nombre_completo) : a.nombre_completo
-      const claveB = ordenAlfabetico === 'apellido' ? claveApellido(b.nombre_completo) : b.nombre_completo
+      const claveA = ordenAlfabetico === 'apellido' ? [a.apellido_paterno, a.apellido_materno].filter(Boolean).join(' ') || claveApellido(a.nombre_completo) : a.nombre_completo
+      const claveB = ordenAlfabetico === 'apellido' ? [b.apellido_paterno, b.apellido_materno].filter(Boolean).join(' ') || claveApellido(b.nombre_completo) : b.nombre_completo
       return compararEspanol.compare(claveA, claveB)
         || compararEspanol.compare(a.nombre_completo, b.nombre_completo)
         || compararEspanol.compare(a.codigo_sis, b.codigo_sis)
     })
-  }, [ingresados, searchQuery, ordenAlfabetico])
+  }, [roster, searchQuery, ordenAlfabetico])
 
   const loadContext = useCallback(async () => {
+    contextAbortRef.current?.abort()
+    const controller = new AbortController()
+    contextAbortRef.current = controller
     const requestId = ++contextRequestRef.current
     setContextLoading(true)
     setContextError('')
@@ -164,23 +170,26 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
       // Leemos el historial oficial: así «Ver motivo» funciona tras recargar
       // y no solo con expulsiones hechas durante esta sesión del navegador.
       const cargarHistorial = async (): Promise<ExpulsionHistorial[]> => {
-        const primera = await expulsionesService.listarExpulsiones(exam.id)
+        const primera = await expulsionesService.listarExpulsiones(exam.id, 1, controller.signal)
         const todos = [...primera.expulsiones]
         for (let pagina = 2; pagina <= primera.last_page; pagina += 1) {
-          const resultado = await expulsionesService.listarExpulsiones(exam.id, pagina)
+          const resultado = await expulsionesService.listarExpulsiones(exam.id, pagina, controller.signal)
           todos.push(...resultado.expulsiones)
         }
-        return todos
+        return [...new Map(todos.map((e) => [e.id, e])).values()]
       }
 
-      const [rosterResponse, asistenciasResponse, historial] = await Promise.all([
-        estudiantesService.listByExam(exam.id),
-        expulsionesService.listarAsistencias(exam.id),
+      const [rosterResponse, historial] = await Promise.all([
+        expulsionesService.identificar(exam.id, undefined, controller.signal),
         cargarHistorial(),
       ])
       if (requestId !== contextRequestRef.current) return
-      setRoster(rosterResponse.estudiantes ?? [])
-      setAsistencias(asistenciasResponse.asistencias ?? [])
+      setDesfaseServidor(new Date(rosterResponse.hora_servidor).getTime() - Date.now())
+      setRoster(rosterResponse.estudiantes)
+      setAsistencias(rosterResponse.estudiantes.filter((e) => e.fecha_ingreso).map((e) => ({
+        id: e.id, estudiante_id: e.id, nombre_completo: e.nombre_completo, codigo_sis: e.codigo_sis,
+        ci: e.ci, fecha_ingreso: e.fecha_ingreso!, hora_ingreso: '', metodo: 'QR' as const,
+      })))
       setExpulsiones(historial)
     } catch (error) {
       if (requestId !== contextRequestRef.current) return
@@ -199,7 +208,7 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
     const timerId = window.setTimeout(() => {
       void loadContext()
     }, 0)
-    return () => window.clearTimeout(timerId)
+    return () => { window.clearTimeout(timerId); contextRequestRef.current += 1; contextAbortRef.current?.abort() }
   }, [loadContext])
 
   const seleccionar = useCallback((estudiante: EstudianteParaExpulsion) => {
@@ -207,12 +216,12 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
     const asistencia = asistenciaPorEstudiante.get(estudiante.id)
 
     if (contextLoading || contextError || !inscrito || !asistencia) return false
-    if (!verificarHorarioExpulsion(exam, new Date()).permitido) return false
+    if (!verificarHorarioExpulsion(exam, new Date(Date.now() + desfaseServidor)).permitido) return false
     if (expulsionPorEstudiante.has(estudiante.id)) return false
 
     setSelected({ estudiante, asistencia })
     return true
-  }, [roster, asistenciaPorEstudiante, contextLoading, contextError, expulsionPorEstudiante, exam])
+  }, [roster, asistenciaPorEstudiante, contextLoading, contextError, expulsionPorEstudiante, exam, desfaseServidor])
 
   const stopScanner = useCallback(async () => {
     const scanner = scannerRef.current
@@ -236,31 +245,13 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
     setQrError('')
 
     try {
-      // El backend acepta QR JSON con el campo sis. Nunca elegimos
-      // arbitrariamente el primer resultado de su búsqueda parcial.
-      const data: unknown = JSON.parse(decodedText)
-      const sis = data && typeof data === 'object' && 'sis' in data
-        ? (data as { sis?: unknown }).sis
-        : undefined
-      if (typeof sis !== 'string' && typeof sis !== 'number') {
-        setQrError('El QR no contiene un código SIS válido.')
-        return
-      }
-
-      const codigoSis = String(sis).trim()
-      if (!codigoSis) {
-        setQrError('El QR no contiene un código SIS válido.')
-        return
-      }
-
-      // La lista de ingresados ya está cargada. Identificar localmente por SIS
-      // evita búsquedas parciales y abre el modal sin otra petición al servidor.
-      const exacto = roster.find((estudiante) => estudiante.codigo_sis === codigoSis)
+      const resultado = await expulsionesService.identificar(exam.id, decodedText)
+      const exacto = resultado.estudiantes[0]
       if (!exacto) {
         setQrError('El QR no corresponde a un estudiante inscrito en este examen.')
         return
       }
-
+      setDesfaseServidor(new Date(resultado.hora_servidor).getTime() - Date.now())
       // Volver a consultar el registro oficial: un compañero pudo expulsar al
       // estudiante después de que cargamos el listado inicialmente.
       const registroExistente = await expulsionesService.buscarExpulsionEstudiante(exam.id, exacto.id)
@@ -274,20 +265,22 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
         return
       }
 
-      if (!seleccionar(exacto)) {
-        setQrError(!verificarHorarioExpulsion(exam, new Date()).permitido
+      if (exacto.elegible && exacto.fecha_ingreso) {
+        setSelected({ estudiante: exacto, asistencia: { id: exacto.id, estudiante_id: exacto.id, nombre_completo: exacto.nombre_completo, codigo_sis: exacto.codigo_sis, ci: exacto.ci, fecha_ingreso: exacto.fecha_ingreso, hora_ingreso: '', metodo: 'QR' } })
+      } else {
+        setQrError(!verificarHorarioExpulsion(exam, new Date(Date.now() + desfaseServidor)).permitido
           ? 'Fuera del horario del examen solo se permite consultar expulsiones anteriores.'
           : 'El estudiante todavía no tiene un ingreso autorizado verificado en este examen.')
       }
     } catch (error) {
       setQrError(error instanceof SyntaxError
-        ? 'El contenido del QR no tiene el formato esperado (JSON con campo sis).'
+        ? 'El contenido del QR no tiene el formato esperado.'
         : getErrorMessage(error, 'No se pudo identificar al estudiante mediante QR.'))
     } finally {
       setQrSearching(false)
       await stopScanner()
     }
-  }, [seleccionar, roster, stopScanner, exam])
+  }, [stopScanner, exam, desfaseServidor])
 
   const startScanner = useCallback(async () => {
     setCameraError('')
@@ -392,7 +385,7 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex min-w-0 flex-wrap items-center gap-3">
                 <p className="text-[11px] text-muted-foreground" aria-live="polite">
-                  {contextLoading ? 'Consultando ingresos...' : `${visibles.length} de ${ingresados.length} estudiantes con ingreso registrado`}
+                  {contextLoading ? 'Consultando ingresos...' : `${visibles.length} de ${roster.length} estudiantes inscritos`}
                 </p>
                 <div className="flex items-center gap-2">
                   <ListFilter className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
@@ -436,7 +429,6 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
               <div className="max-h-[560px] space-y-3 overflow-y-auto pr-1" aria-label="Estudiantes con ingreso registrado">
                 {visibles.map((estudiante) => {
                   const asistencia = asistenciaPorEstudiante.get(estudiante.id)
-                  if (!asistencia) return null
                   const expulsionRegistrada = expulsionPorEstudiante.get(estudiante.id)
                   const registrado = Boolean(expulsionRegistrada)
 
@@ -451,7 +443,7 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
                             <Badge variant="outline" className={registrado
                               ? 'border-sci-amber/30 bg-sci-amber/10 text-sci-amber'
                               : 'border-emerald-600/30 bg-emerald-600/10 text-emerald-700'}>
-                              {registrado ? 'Expulsión registrada' : 'Ingreso verificado'}
+                              {registrado ? 'Expulsión registrada' : asistencia ? 'Ingreso verificado' : 'Sin ingreso previo'}
                             </Badge>
                           </div>
                           <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
@@ -464,7 +456,7 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
                           </div>
                           <p className="flex flex-wrap items-center gap-1 text-[11px] font-semibold text-emerald-700">
                             <Clock3 className="h-3.5 w-3.5" />
-                            Ingreso: {asistencia.fecha_ingreso} · {asistencia.hora_ingreso} ({asistencia.metodo})
+                            {asistencia ? `Ingreso: ${asistencia.fecha_ingreso}` : 'No elegible para expulsión: requiere ingreso autorizado.'}
                           </p>
                         </div>
                         {expulsionRegistrada ? (
@@ -482,7 +474,7 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
                           <Button
                             type="button"
                             onClick={() => void abrirManualmente(estudiante)}
-                            disabled={!horario.permitido || contextLoading || Boolean(contextError)}
+                            disabled={!asistencia || !horario.permitido || contextLoading || Boolean(contextError)}
                             title={!horario.permitido ? horario.mensaje : undefined}
                             className="w-full cursor-pointer bg-sci-blue text-xs font-bold text-white hover:opacity-90 sm:w-auto"
                           >
@@ -580,7 +572,27 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
         </Card>
       </div>
 
-      <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null) }}>
+      <section className="space-y-3 rounded-2xl border border-border p-4" aria-label="Historial completo de expulsiones">
+        <h3 className="font-bold text-sci-navy">Historial de expulsiones · {exam.nombre}</h3>
+        <div className="flex flex-wrap gap-2">
+          <Input aria-label="Filtrar historial por estudiante o SIS" placeholder="Nombre o SIS" value={filtroHistorial} onChange={(e) => setFiltroHistorial(e.target.value)} />
+          <select aria-label="Estado de expulsión" value={estadoHistorial} onChange={(e) => setEstadoHistorial(e.target.value)} className="rounded border p-2">
+            <option value="todas">Todas</option><option value="vigentes">Vigentes</option><option value="eliminadas">Eliminadas</option>
+          </select>
+        </div>
+        <div className="max-h-96 space-y-2 overflow-y-auto">
+          {historialVisible.map((e) => (
+            <button key={e.id} className="block w-full rounded-xl border p-3 text-left text-sm hover:bg-muted" onClick={() => { setEditandoMotivo(false); setConfirmarEliminar(false); setDetalleExpulsion({ registro: e, estudiante: { id: e.id_estudiante, codigo_sis: e.estudiante?.codigo_sis ?? '', nombre_completo: e.estudiante?.nombre_completo ?? 'Estudiante' } }) }}>
+              <strong>{e.estudiante?.nombre_completo ?? 'Estudiante'}</strong> · {e.estudiante?.codigo_sis} · {e.deleted_at ? 'Eliminada' : 'Vigente'}
+              <p className="text-xs text-muted-foreground">{formatFecha(e.fecha_hora)} · {e.responsable?.nombre ?? 'Responsable no disponible'}</p>
+              <p className="break-words">{e.motivo}</p>
+            </button>
+          ))}
+          {historialVisible.length === 0 && <p className="text-sm text-muted-foreground">{expulsiones.length === 0 ? 'Sin expulsiones registradas.' : 'Sin coincidencias con los filtros actuales.'}</p>}
+        </div>
+      </section>
+
+      <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open && !guardando) setSelected(null) }}>
         <DialogContent
           className="max-h-[90dvh] w-full overflow-y-auto sm:max-w-lg"
           aria-describedby="expulsion-dialog-description"
@@ -601,6 +613,8 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
               estudiante={selected.estudiante}
               asistencia={selected.asistencia}
               horarioPermitido={horario.permitido}
+              desfaseServidor={desfaseServidor}
+              onSubmittingChange={setGuardando}
               onRegistered={registrarLocalmente}
             />
           )}
@@ -610,7 +624,7 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
       {/* Consulta de solo lectura de una expulsión ya registrada. */}
       <Dialog
         open={Boolean(detalleExpulsion)}
-        onOpenChange={(open) => { if (!open) { setDetalleExpulsion(null); setEditandoMotivo(false) } }}
+        onOpenChange={(open) => { if (!open && !eliminando && !guardando) { setDetalleExpulsion(null); setEditandoMotivo(false); setConfirmarEliminar(false); setMotivoEliminacion(''); setEliminacionError('') } }}
       >
         <DialogContent className="max-h-[90dvh] w-full overflow-y-auto sm:max-w-lg">
           <DialogHeader className="pr-8">
@@ -628,6 +642,8 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
               exam={exam}
               registro={detalleExpulsion.registro}
               horarioPermitido={horario.permitido}
+              desfaseServidor={desfaseServidor}
+              onSubmittingChange={setGuardando}
               onCancel={() => setEditandoMotivo(false)}
               onSaved={(nuevoRegistro) => {
                 setExpulsiones((actual) => actual.map((item) =>
@@ -709,6 +725,25 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
                   </ol>
                 </details>
               )}
+              {detalleExpulsion.registro.deleted_at && <p role="status" className="rounded border p-3">Eliminada el {formatFecha(detalleExpulsion.registro.deleted_at)}. Motivo: {detalleExpulsion.registro.motivo_eliminacion}</p>}
+              {confirmarEliminar && <form className="space-y-2 rounded border border-destructive p-3" onSubmit={async (event) => {
+                event.preventDefault()
+                if (eliminando) return
+                setEliminando(true); setEliminacionError('')
+                try {
+                  const respuesta = await expulsionesService.eliminar(exam.id, detalleExpulsion.registro.id, motivoEliminacion)
+                  setDetalleExpulsion({ ...detalleExpulsion, registro: respuesta.expulsion })
+                  setConfirmarEliminar(false); setMotivoEliminacion(''); await loadContext()
+                } catch (error) { setEliminacionError(getErrorMessage(error, 'No se pudo eliminar la expulsión.')) }
+                finally { setEliminando(false) }
+              }}>
+                <p>Se retirará la expulsión vigente y se conservarán el registro y su auditoría. El ingreso previo seguirá registrado.</p>
+                <label htmlFor="motivo-eliminacion">Motivo de eliminación</label>
+                <Input id="motivo-eliminacion" required minLength={3} maxLength={2000} value={motivoEliminacion} onChange={(e) => setMotivoEliminacion(e.target.value)} disabled={eliminando} />
+                {eliminacionError && <p role="alert">{eliminacionError}</p>}
+                <Button type="button" variant="outline" disabled={eliminando} onClick={() => setConfirmarEliminar(false)}>Cancelar</Button>
+                <Button type="submit" variant="destructive" disabled={eliminando || motivoEliminacion.trim().length < 3}>{eliminando ? 'Eliminando…' : 'Confirmar eliminación'}</Button>
+              </form>}
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button type="button" variant="outline" onClick={() => setDetalleExpulsion(null)}>
                   Cerrar
@@ -716,11 +751,12 @@ export function DetalleExpulsionesTab({ exam }: { exam: Examen }) {
                 <Button
                   type="button"
                   onClick={() => setEditandoMotivo(true)}
-                  disabled={!horario.permitido}
+                  disabled={!horario.permitido || Boolean(detalleExpulsion.registro.deleted_at)}
                   title={!horario.permitido ? horario.mensaje : undefined}
                 >
                   <PencilLine className="h-4 w-4" aria-hidden="true" /> Editar motivo
                 </Button>
+                <Button type="button" variant="destructive" disabled={!horario.permitido || Boolean(detalleExpulsion.registro.deleted_at) || eliminando} onClick={() => { setConfirmarEliminar(true); setEliminacionError('') }}>Eliminar</Button>
               </div>
             </div>
           ))}

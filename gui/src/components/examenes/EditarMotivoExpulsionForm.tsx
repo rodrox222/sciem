@@ -22,12 +22,14 @@ type Props = {
   exam: Examen
   registro: ExpulsionHistorial
   horarioPermitido: boolean
+  desfaseServidor?: number
+  onSubmittingChange?: (busy: boolean) => void
   onCancel: () => void
   onSaved: (registro: ExpulsionHistorial) => void
 }
 
 /** Interfaz preparada para PATCH; el servidor debe implementar la operación de edición. */
-export function EditarMotivoExpulsionForm({ exam, registro, horarioPermitido, onCancel, onSaved }: Props) {
+export function EditarMotivoExpulsionForm({ exam, registro, horarioPermitido, desfaseServidor = 0, onSubmittingChange, onCancel, onSaved }: Props) {
   const [motivo, setMotivo] = useState(registro.motivo)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -46,7 +48,7 @@ export function EditarMotivoExpulsionForm({ exam, registro, horarioPermitido, on
       setError('El motivo no ha cambiado.')
       return
     }
-    const horario = verificarHorarioExpulsion(exam, new Date())
+    const horario = verificarHorarioExpulsion(exam, new Date(Date.now() + desfaseServidor))
     if (!horario.permitido) {
       setError(horario.mensaje)
       return
@@ -56,13 +58,14 @@ export function EditarMotivoExpulsionForm({ exam, registro, horarioPermitido, on
 
   const guardar = async () => {
     if (submitting || !valido) return
-    const horario = verificarHorarioExpulsion(exam, new Date())
+    const horario = verificarHorarioExpulsion(exam, new Date(Date.now() + desfaseServidor))
     if (!horario.permitido) {
       setConfirmOpen(false)
       setError(horario.mensaje)
       return
     }
     setSubmitting(true)
+    onSubmittingChange?.(true)
     setError('')
     try {
       const respuesta = await expulsionesService.editarMotivo(exam.id, registro.id, { motivo: motivoLimpio })
@@ -73,7 +76,7 @@ export function EditarMotivoExpulsionForm({ exam, registro, horarioPermitido, on
       onSaved(respuesta.expulsion)
     } catch (err) {
       if (err instanceof ApiError && (err.status === 404 || err.status === 405)) {
-        setError('La edición todavía no está habilitada en el backend de SCIEM. No se guardó ningún cambio.')
+        setError('El registro ya no está disponible para editar. Actualiza el historial.')
       } else if (err instanceof Error) {
         setError(err.message)
       } else {
@@ -81,6 +84,7 @@ export function EditarMotivoExpulsionForm({ exam, registro, horarioPermitido, on
       }
     } finally {
       setSubmitting(false)
+      onSubmittingChange?.(false)
       setConfirmOpen(false)
     }
   }

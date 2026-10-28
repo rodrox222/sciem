@@ -93,7 +93,7 @@ export default function ReportesEstadisticosPage() {
         let pagina = 1
         let ultima = 1
         do {
-          const respuesta = await examenesService.list({ page: pagina, perPage: 100 })
+          const respuesta = await examenesService.misExamenes({ page: pagina, perPage: 100 })
           if (!vigente) return
           const autorizados = esDocente
             ? respuesta.data.filter((examen) => String(examen.id_docente) === String(usuario.id))
