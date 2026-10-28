@@ -1,5 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { Toaster } from 'sonner'
 import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute'
+
+
 
 // Layouts centralizados con Header y Footer
 import PublicLayout from './layouts/PublicLayout'
@@ -35,8 +38,16 @@ import ReportesEstadisticosPage from './pages/ReportesEstadisticosPage'
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
+    <>
+      <Toaster
+        position="top-right"
+        richColors
+        closeButton
+        duration={4000}
+      />
+
+      <BrowserRouter>
+        <Routes>
         {/* 1. Rutas públicas con cabecera y pie oficial (PublicLayout) */}
         <Route element={<PublicLayout />}>
           <Route path="/" element={<HomePage />} />
@@ -108,7 +119,8 @@ export default function App() {
 
         {/* Redirección ante cualquier ruta inexistente */}
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+ </Routes>
+      </BrowserRouter>
+    </>
   )
 }

@@ -86,7 +86,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             className="rounded-xl bg-[#e11d48] px-6 text-white hover:bg-[#be123c] font-bold shadow-sm cursor-pointer"
           >
             {loading && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
-            Eliminar noticia
+Confirmar
           </Button>
         </div>
         
