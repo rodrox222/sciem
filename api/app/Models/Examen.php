@@ -68,7 +68,6 @@ class Examen extends Model
     {
         return $this->belongsToMany(Estudiante::class, 'estudiante_examen', 'id_examen', 'id_estudiante')
             ->withPivot(
-                'id_auxiliar',
                 'estado',
                 'motivo_estado',
                 'ajuste_manual',
