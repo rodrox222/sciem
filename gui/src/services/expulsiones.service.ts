@@ -48,6 +48,8 @@ export interface RegistroExpulsionResponse {
 
 // Contrato de GET /examenes/{id}/expulsiones (historial paginado del backend).
 export interface ExpulsionHistorial {
+  deleted_at?: string | null
+  motivo_eliminacion?: string | null
   id: string
   id_examen: string
   id_estudiante: string
@@ -80,6 +82,8 @@ export interface EdicionMotivoResponse {
 }
 
 export interface HistorialExpulsionesResponse {
+  puede_modificar: boolean
+  hora_servidor: string
   total: number
   per_page: number
   current_page: number
@@ -93,7 +97,32 @@ const buildSearchQuery = (key: 'search' | 'qr_data', value: string) => {
   return params.toString()
 }
 
+export interface EstudianteElegible {
+  apellido_paterno?: string
+  apellido_materno?: string
+  id: string
+  codigo_sis: string
+  nombre_completo: string
+  ci: string | null
+  ci_extension?: string
+  email_institucional?: string
+  fecha_ingreso: string | null
+  expulsado: boolean
+  elegible: boolean
+}
+
 export const expulsionesService = {
+  identificar(examId: string, qrData?: string, signal?: AbortSignal) {
+    const query = qrData ? `?${buildSearchQuery('qr_data', qrData)}` : ''
+    return api.get<{ estudiantes: EstudianteElegible[]; puede_modificar: boolean; hora_servidor: string }>(
+      `/examenes/${examId}/expulsiones/estudiantes${query}`, { signal },
+    )
+  },
+  eliminar(examId: string, expulsionId: string, motivo: string) {
+    return api.delete<EdicionMotivoResponse>(`/examenes/${examId}/expulsiones/${expulsionId}`, {
+      body: JSON.stringify({ motivo_eliminacion: motivo.trim() }),
+    })
+  },
   buscarEstudiantes(search: string) {
     return api.get<BusquedaEstudiantesResponse>(
       `/estudiantes/buscar?${buildSearchQuery('search', search.trim())}`,
@@ -112,17 +141,17 @@ export const expulsionesService = {
     )
   },
 
-  listarExpulsiones(examId: string, page = 1) {
+  listarExpulsiones(examId: string, page = 1, signal?: AbortSignal) {
     const params = new URLSearchParams({ page: String(page), per_page: '100' })
     return api.get<HistorialExpulsionesResponse>(
-      `/examenes/${examId}/expulsiones?${params.toString()}`,
+      `/examenes/${examId}/expulsiones?${params.toString()}`, { signal },
     )
   },
 
   // Consulta puntual para no reutilizar una lista obsoleta al leer un QR.
   // GET es de solo lectura y devuelve la expulsión más reciente del alumno.
   async buscarExpulsionEstudiante(examId: string, estudianteId: string) {
-    const params = new URLSearchParams({ id_estudiante: estudianteId, per_page: '1' })
+    const params = new URLSearchParams({ id_estudiante: estudianteId, per_page: '1', estado: 'vigentes' })
     const resultado = await api.get<HistorialExpulsionesResponse>(
       `/examenes/${examId}/expulsiones?${params.toString()}`,
     )

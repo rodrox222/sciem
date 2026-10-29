@@ -27,7 +27,7 @@ class AuxiliarOfflineController extends Controller
         $esAuxiliarAsignado = DB::table('examen_auxiliar')
             ->where('id_examen', $idExamen)
             ->where('id_auxiliar', $user->id)
-            ->where('estado', 'Aceptada')
+            ->where('estado', 'Activo')
             ->exists();
 
         if (!$esDocente && !$esAuxiliarAsignado) {
@@ -117,7 +117,7 @@ class AuxiliarOfflineController extends Controller
         $request->validate([
             'asistencias'                 => 'required|array|min:1',
             'asistencias.*.codigo_sis'    => 'required|string',
-            'asistencias.*.fecha_ingreso' => 'required',
+            'asistencias.*.fecha_ingreso' => 'required|date',
             'asistencias.*.resultado'     => 'required|in:PERMITIDO,DENEGADO',
             'asistencias.*.motivo'        => 'nullable|string',
         ]);
@@ -133,7 +133,7 @@ class AuxiliarOfflineController extends Controller
         $esAuxiliarAsignado = DB::table('examen_auxiliar')
             ->where('id_examen', $idExamen)
             ->where('id_auxiliar', $user->id)
-            ->where('estado', 'Aceptada')
+            ->where('estado', 'Activo')
             ->exists();
 
         if (!$esDocente && !$esAuxiliarAsignado) {
@@ -164,6 +164,15 @@ class AuxiliarOfflineController extends Controller
                             'codigo_sis' => $codigoSis,
                             'error'      => 'Estudiante no registrado en la base de datos.',
                         ];
+                        continue;
+                    }
+
+                    $inscripcion = DB::table('estudiante_examen')->where('id_examen', $idExamen)->where('id_estudiante', $estudiante->id)->first();
+                    if (!$inscripcion || strcasecmp($inscripcion->estado, 'Habilitado') !== 0
+                        || \App\Models\Expulsion::where('id_examen', $idExamen)->where('id_estudiante', $estudiante->id)->exists()
+                        || !\App\Services\AccesoExamen::enHorario($examen, \Carbon\CarbonImmutable::instance($fechaIngreso))
+                        || $fechaIngreso->isFuture()) {
+                        $errores[] = ['codigo_sis' => $codigoSis, 'error' => 'Ingreso no conciliable: inscripción, habilitación, expulsión u horario inválidos.'];
                         continue;
                     }
 

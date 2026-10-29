@@ -1,0 +1,99 @@
+name: Sprint 3 isolated QA
+
+on:
+  push:
+    branches: [rescue/sprint3-iteracion2-20261028]
+    paths:
+      - 'api/**'
+      - 'gui/**'
+      - 'docker-compose.sprint3-qa.yml'
+      - '.github/workflows/sprint3-qa.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sprint3-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qa:
+    if: github.repository == 'MiguelVarMer/sciem-frontend-integracion'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: gui/package-lock.json
+      - name: PostgreSQL migrations and PHPUnit without skips
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa-evidence api/vendor api/bootstrap/cache api/storage
+          export SCIEM_QA_DB_PASSWORD="$(openssl rand -hex 32)"
+          export SCIEM_QA_APP_KEY="base64:$(openssl rand -base64 32)"
+          echo "::add-mask::$SCIEM_QA_DB_PASSWORD"
+          echo "::add-mask::$SCIEM_QA_APP_KEY"
+          cleanup() {
+            docker logs sciem-sprint3-http > qa-evidence/http-server.txt 2>&1 || true
+            docker rm -f sciem-sprint3-http || true
+            docker compose -p sciem-sprint3-qa -f docker-compose.sprint3-qa.yml down
+          }
+          trap cleanup EXIT
+          docker compose -p sciem-sprint3-qa -f docker-compose.sprint3-qa.yml build api-qa
+          docker compose -p sciem-sprint3-qa -f docker-compose.sprint3-qa.yml up -d --wait db-qa
+          docker compose -p sciem-sprint3-qa -f docker-compose.sprint3-qa.yml run --rm api-qa 2>&1 | tee qa-evidence/postgres.txt
+          docker compose -p sciem-sprint3-qa -f docker-compose.sprint3-qa.yml run -d --name sciem-sprint3-http -e PHP_CLI_SERVER_WORKERS=4 -p 127.0.0.1:8200:8200 api-qa php -S 0.0.0.0:8200 -t public public/index.php
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8200/api/health > /dev/null; then break; fi
+            sleep 1
+          done
+          docker exec sciem-sprint3-http php scripts/sprint3-extended-qa.php 2>&1 | tee qa-evidence/extended.txt
+          docker exec sciem-sprint3-http php scripts/sprint3-preflight.php > qa-evidence/preflight.json
+          docker cp sciem-sprint3-http:/tmp/sciem-qa-evidence/. qa-evidence/
+          if ! command -v pdftotext > /dev/null; then sudo apt-get update -qq && sudo apt-get install -y poppler-utils; fi
+          python3 scripts/verify-sprint3-pdf.py qa-evidence
+          mkdir -p "$RUNNER_TEMP/sciem-browser"
+          docker cp sciem-sprint3-http:/tmp/sciem-browser-fixture.json "$RUNNER_TEMP/sciem-browser/fixture.json"
+          export SCIEM_BROWSER_FIXTURE="$RUNNER_TEMP/sciem-browser/fixture.json"
+          export SCIEM_PLAYWRIGHT_PATH="$RUNNER_TEMP/sciem-browser/node_modules/playwright"
+          export SCIEM_QR_VIDEO="$RUNNER_TEMP/sciem-browser/camera.y4m"
+          npm install --prefix "$RUNNER_TEMP/sciem-browser" --no-save playwright@1.56.1 qrcode@1.5.4
+          "$RUNNER_TEMP/sciem-browser/node_modules/.bin/playwright" install --with-deps chromium
+          node - <<'JS'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const folder = path.dirname(process.env.SCIEM_BROWSER_FIXTURE);
+          const qr = JSON.parse(fs.readFileSync(process.env.SCIEM_BROWSER_FIXTURE)).qr;
+          require(path.join(folder, 'node_modules/qrcode')).toFile(path.join(folder, 'qr.png'), qr, { width: 288, margin: 4 });
+          JS
+          # ffmpeg is not guaranteed on GitHub-hosted Ubuntu runners; fail before camera QA if unavailable.
+          if ! command -v ffmpeg > /dev/null; then sudo apt-get update -qq && sudo apt-get install -y ffmpeg; fi
+          ffmpeg -hide_banner -loglevel error -loop 1 -i "$RUNNER_TEMP/sciem-browser/qr.png" -vf 'pad=640:480:(ow-iw)/2:(oh-ih)/2:color=white,format=yuv420p' -t 3 -r 10 "$SCIEM_QR_VIDEO"
+          npm --prefix gui ci
+          VITE_API_URL=http://127.0.0.1:8200 npm --prefix gui run build 2>&1 | tee qa-evidence/frontend-build.txt
+          npm --prefix gui run preview -- --host 0.0.0.0 --port 4173 > "$RUNNER_TEMP/sciem-browser/vite.txt" 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:4173 > /dev/null; then break; fi
+            sleep 1
+          done
+          node gui/tests/sprint3-browser.cjs 2>&1 | tee qa-evidence/browser.txt
+      - name: Frontend contracts and build
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --prefix gui ci
+          node --test gui/tests/sprint3.test.cjs 2>&1 | tee qa-evidence/frontend-tests.txt
+          npm --prefix gui run build 2>&1 | tee qa-evidence/frontend-build.txt
+      - name: Preserve QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sprint3-qa-${{ github.sha }}
+          path: qa-evidence/
+          retention-days: 7

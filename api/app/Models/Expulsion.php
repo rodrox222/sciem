@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class Expulsion extends Model
 {
-    use HasUuids;
+    use HasUuids, \Illuminate\Database\Eloquent\SoftDeletes;
 
     protected $table = 'expulsiones';
 
@@ -17,6 +17,8 @@ class Expulsion extends Model
         'id_examen',
         'id_estudiante',
         'motivo',
+        'motivo_eliminacion',
+        'rol_responsable',
         'fecha_hora',
         'expulsado_por_type',
         'expulsado_por_id',
@@ -41,6 +43,6 @@ class Expulsion extends Model
 
     public function expulsadoPor(): MorphTo
     {
-        return $this->morphTo('expulsado_por');
+        return $this->morphTo(__FUNCTION__, 'expulsado_por_type', 'expulsado_por_id');
     }
 }

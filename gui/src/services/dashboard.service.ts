@@ -18,27 +18,28 @@ export interface ExamenDashboard {
 }
 
 export interface ResumenAdmin {
-  usuarios: number
-  estudiantes: number
-  aulas_disponibles: number
-  examenes_programados: number
+  usuarios: number | null
+  estudiantes: number | null
+  aulas_disponibles: number | null
+  examenes_programados: number | null
 }
 
 export interface ResumenDocente {
-  total_examenes: number
-  total_inscritos: number
-  total_ingresados: number
+  total_examenes: number | null
+  total_inscritos: number | null
+  total_ingresados: number | null
   examenes: ExamenDashboard[]
 }
 
 export interface ResumenConExamenes {
-  total_examenes: number
+  total_examenes: number | null
   examenes: ExamenDashboard[]
 }
 
 export type ResumenDashboard = ResumenAdmin | ResumenDocente | ResumenConExamenes
 
 export interface DashboardResponse {
+  errores_secciones?: Record<string, string>
   success: boolean
   rol: RolDashboard
   secciones: {

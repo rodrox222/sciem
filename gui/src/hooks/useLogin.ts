@@ -1,7 +1,5 @@
 import { useState } from 'react'
-
-//http://localhost:8200/api'
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://192.168.1.17:8200'
+import { apiUrl } from '@/services/apiUrl'
 
 export type Role = 'Auxiliar' | 'Docente' | 'Administrador'
 
@@ -51,7 +49,7 @@ export const useLogin = ({ onSuccess }: UseLoginOptions) => {
     const backendRole = selectedRole === 'Administrador' ? 'admin' : selectedRole.toLowerCase()
 
     try {
-      const res = await fetch(`${API_BASE_URL}/login`, {
+      const res = await fetch(apiUrl('/login'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -91,8 +89,10 @@ export const useLogin = ({ onSuccess }: UseLoginOptions) => {
       localStorage.setItem('user_role', userRole)
       localStorage.setItem('sci_last_activity', Date.now().toString())
 
-      // 2. Guardar únicamente datos de presentación visual (sin CI ni identificadores sensibles)
+      // Guardar identificador interno y datos mínimos para mostrar el monitoreo del docente titular.
+      // La autorización real se valida siempre en el backend; no guardar CI ni credenciales.
       const usuarioSeguro = {
+        id: data.user?.id,
         nombre: data.user?.nombre || '',
         apellido: data.user?.apellido_paterno || data.user?.apellido || '',
       }
