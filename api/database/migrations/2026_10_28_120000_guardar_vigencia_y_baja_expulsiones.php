@@ -26,7 +26,7 @@ return new class extends Migration
             FROM expulsiones WHERE deleted_at IS NULL ORDER BY id_examen, id_estudiante, fecha_hora DESC, id DESC');
         DB::statement("CREATE INDEX logs_auditoria_expulsion_id_idx ON logs_auditoria ((detalles->>'expulsion_id')) WHERE modulo = 'EXPULSIONES'");
         DB::unprepared(<<<'SQL'
-            CREATE FUNCTION sciem_expulsion_vigencia() RETURNS trigger AS $$
+            CREATE OR REPLACE FUNCTION sciem_expulsion_vigencia() RETURNS trigger AS $$
             DECLARE otra uuid;
             BEGIN
                 IF TG_OP = 'INSERT' THEN
