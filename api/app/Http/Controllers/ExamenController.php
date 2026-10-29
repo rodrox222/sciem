@@ -47,7 +47,7 @@ class ExamenController extends Controller
             $query->where('fecha', '<=', $fechaHasta);
         }
 
-        $perPage = (int) $request->query('per_page', 10);
+        $perPage = max(1, min(100, (int) $request->query('per_page', 10)));
         $examenes = $query->orderBy('fecha', 'desc')->orderBy('hora_ini', 'asc')->paginate($perPage);
 
         return response()->json($examenes);
@@ -68,14 +68,10 @@ class ExamenController extends Controller
             'normas:id,titulo,tipo',
         ]);
 
-        if ($user instanceof Docente || ($user->rol ?? '') === 'docente') {
-            $query->where('id_docente', $user->id);
-        } elseif ($user instanceof Auxiliar || ($user->rol ?? '') === 'auxiliar') {
-            $query->whereHas('auxiliares', function ($q) use ($user) {
-                $q->where('id_auxiliar', $user->id)
-                  ->where('estado', 'Aceptada');
-            });
-        }
+        $rol = \App\Services\RolOperativo::actual($request);
+        if ($rol === 'docente') $query->where('id_docente', $user->id);
+        elseif ($rol === 'auxiliar') $query->whereIn('id', \App\Services\AccesoExamen::asignaciones($user)->select('id_examen'));
+        else abort_unless($rol === 'admin', 403);
 
         if ($search = $request->query('search')) {
             $query->where('nombre', 'ilike', "%{$search}%");
@@ -96,7 +92,7 @@ class ExamenController extends Controller
             $query->where('fecha', '<=', $fechaHasta);
         }
 
-        $perPage = (int) $request->query('per_page', 10);
+        $perPage = max(1, min(100, (int) $request->query('per_page', 10)));
         $examenes = $query->orderBy('fecha', 'desc')->orderBy('hora_ini', 'asc')->paginate($perPage);
 
         return response()->json($examenes);
@@ -154,6 +150,7 @@ class ExamenController extends Controller
      */
     public function show(Request $request, string $id): JsonResponse
     {
+        \App\Services\AccesoExamen::buscar($id);
         $examen = Examen::with(['materia', 'aula', 'docente', 'normas'])->find($id);
 
         if (!$examen) {
@@ -161,7 +158,7 @@ class ExamenController extends Controller
         }
 
         // Validación de pertenencia/rol
-        if (!$this->validarAccesoExamen($request->user(), $examen, false)) {
+        if (!\App\Services\AccesoExamen::permite($request, $examen)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Acceso denegado: no tienes permisos para acceder a esta evaluación.',

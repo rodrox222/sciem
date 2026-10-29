@@ -4,8 +4,9 @@ namespace Database\Seeders;
 
 use App\Models\Estudiante;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class EstudianteSeeder extends Seeder
 {
@@ -21,8 +22,8 @@ class EstudianteSeeder extends Seeder
                 'apellido_paterno'         => 'Torrico',
                 'apellido_materno'         => 'Rojas',
                 'email_institucional'      => '202104512@est.umss.edu',
-                'primer_acceso_completado' => true,
-                'activo'                   => true,
+                'primer_acceso_completado' => DB::raw('true'),
+                'activo'                   => DB::raw('true'),
             ],
             [
                 'id'                       => (string) Str::uuid(),
@@ -33,32 +34,32 @@ class EstudianteSeeder extends Seeder
                 'apellido_paterno'         => 'Vargas',
                 'apellido_materno'         => 'Flores',
                 'email_institucional'      => '202209123@est.umss.edu',
-                'primer_acceso_completado' => true,
-                'activo'                   => true,
+                'primer_acceso_completado' => DB::raw('true'),
+                'activo'                   => DB::raw('true'),
             ],
             [
                 'id'                       => (string) Str::uuid(),
                 'codigo_sis'               => '202301641',
                 'ci'                       => '7654129',
-                'ci_extension'             => null,
+                'ci_extension'             => 'SC',
                 'nombre'                   => 'Rodrigo',
                 'apellido_paterno'         => 'Fernandez',
                 'apellido_materno'         => 'Gomez',
                 'email_institucional'      => '202301641@est.umss.edu',
-                'primer_acceso_completado' => false,
-                'activo'                   => true,
+                'primer_acceso_completado' => DB::raw('false'),
+                'activo'                   => DB::raw('true'),
             ],
             [
                 'id'                       => (string) Str::uuid(),
                 'codigo_sis'               => '20202020',
-                'ci'                       => '8765431',
+                'ci'                       => '8765432',
                 'ci_extension'             => 'CB',
                 'nombre'                   => 'geraldo',
                 'apellido_paterno'         => 'mamani',
                 'apellido_materno'         => 'crauz',
                 'email_institucional'      => '20202020@est.umss.edu',
-                'primer_acceso_completado' => true,
-                'activo'                   => true,
+                'primer_acceso_completado' => DB::raw('true'),
+                'activo'                   => DB::raw('true'),
             ],
         ];
 
@@ -74,6 +75,8 @@ class EstudianteSeeder extends Seeder
             $estudiante = Estudiante::firstOrNew(['codigo_sis' => $data['codigo_sis']]);
             $estudiante->fill($data);
             $estudiante->password = $data['password'];
+            $estudiante->primer_acceso_completado = $data['primer_acceso_completado'];
+            $estudiante->activo = $data['activo'];
             $estudiante->save();
         }
     }

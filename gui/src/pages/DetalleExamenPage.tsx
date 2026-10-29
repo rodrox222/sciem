@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { UserRoundCog } from 'lucide-react'
+import DetalleAuxiliaresTab from '@/components/examenes/DetalleAuxiliaresTab'
 import {
   ArrowLeft,
   LoaderCircle,
@@ -8,6 +10,7 @@ import {
   PencilLine,
   QrCode,
   ShieldAlert,
+  Activity,
   UserX,
 } from 'lucide-react'
 
@@ -26,6 +29,9 @@ import { DetalleEstudiantesTab } from '@/components/examenes/DetalleEstudiantesT
 import { DetalleEditarTab } from '@/components/examenes/DetalleEditarTab'
 import { DetalleEscanerTab } from '@/components/examenes/DetalleEscanerTab'
 import { DetalleExpulsionesTab } from '@/components/examenes/DetalleExpulsionesTab'
+import { DetalleMonitoreoTab } from '@/components/monitoreo/DetalleMonitoreoTab'
+import { EtapasExamen } from '@/components/monitoreo/EtapasExamen'
+import { permiteMonitoreoFrontend } from '@/components/monitoreo/permisoMonitoreo'
 import IntentosNoAutorizadosPage from '@/pages/IntentosNoAutorizadosPage'
 const estadoBadges: Record<ExamenEstado, string> = {
   Programado: 'border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy',
@@ -40,15 +46,22 @@ export default function DetalleExamenPage() {
 
   const role = (localStorage.getItem('user_role') ?? '').toLowerCase()
   const canManage = ['admin', 'administrador', 'docente', 'auxiliar'].includes(role)
+  const canEditExam = ['admin', 'administrador', 'docente'].includes(role)
+  const canManageAuxiliares = ['admin', 'administrador', 'docente'].includes(role)
   const canExpel = canManage
 
   const requestedTab = searchParams.get('tab') || 'info'
   const activeTab =
-    requestedTab === 'expulsiones' && !canExpel ? 'info' : requestedTab
+    (requestedTab === 'expulsiones' && !canExpel) ||
+    (requestedTab === 'editar' && !canEditExam) ? 'info' : requestedTab
 
   const [exam, setExam] = useState<Examen | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  const actualizarEstadoExamen = useCallback((estado: ExamenEstado) => {
+    setExam((actual) => actual && actual.estado !== estado ? { ...actual, estado } : actual)
+  }, [])
 
   const loadExam = useCallback(async () => {
     if (!id) return
@@ -120,7 +133,8 @@ export default function DetalleExamenPage() {
     )
   }
 
-  const canEdit = canManage && exam.estado === 'Programado'
+  const canMonitor = permiteMonitoreoFrontend(exam)
+  const canEdit = canEditExam && exam.estado === 'Programado'
 
   return (
     <div className="space-y-6">
@@ -159,8 +173,12 @@ export default function DetalleExamenPage() {
         </div>
       </header>
 
+      {/* Visible en todas las pestañas, no solo en Monitoreo. */}
+      <EtapasExamen exam={exam} />
+
       <Tabs
-        value={activeTab}
+        value={(activeTab === 'monitoreo' && !canMonitor) ||
+          (activeTab === 'editar' && !canEdit) ? 'info' : activeTab}
         onValueChange={(val) => setSearchParams({ tab: val })}
         className="space-y-6"
       >
@@ -179,7 +197,15 @@ export default function DetalleExamenPage() {
             <Users className="h-3.5 w-3.5" />
             Padrón de Estudiantes
           </TabsTrigger>
-
+{canManageAuxiliares && (
+  <TabsTrigger
+    value="auxiliares"
+    className="min-w-0 flex-none shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
+  >
+    <UserRoundCog className="h-3.5 w-3.5 text-sci-cyan" />
+    Auxiliares
+  </TabsTrigger>
+)}
           {canManage && (
             <TabsTrigger
               value="escaner"
@@ -187,6 +213,16 @@ export default function DetalleExamenPage() {
             >
               <QrCode className="h-3.5 w-3.5 text-sci-cyan" />
               Escanear Acceso
+            </TabsTrigger>
+          )}
+
+          {canMonitor && (
+            <TabsTrigger
+              value="monitoreo"
+              className="min-w-0 flex-none shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-2 py-2 text-center text-[11px] font-medium sm:gap-2 sm:px-3 sm:text-xs"
+            >
+              <Activity className="h-3.5 w-3.5 text-sci-cyan" />
+              Monitoreo
             </TabsTrigger>
           )}
 
@@ -202,7 +238,7 @@ export default function DetalleExamenPage() {
           {canManage && (
             <TabsTrigger
               value="intentos"
-              className="min-w-0 flex-1 cursor-pointer justify-center gap-1.5 whitespace-normal px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
+              className="min-w-0 flex-none shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
             >
               <ShieldAlert className="h-3.5 w-3.5 text-sci-amber" />
               Intentos no autorizados
@@ -226,16 +262,29 @@ export default function DetalleExamenPage() {
         <TabsContent value="estudiantes">
           <DetalleEstudiantesTab exam={exam} canManage={canManage} />
         </TabsContent>
-
+{canManageAuxiliares && (
+  <TabsContent value="auxiliares">
+    <DetalleAuxiliaresTab
+      examenId={exam.id}
+      puedeGestionar={canManageAuxiliares}
+    />
+  </TabsContent>
+)}
         {canManage && (
           <TabsContent value="escaner">
             <DetalleEscanerTab exam={exam} />
           </TabsContent>
         )}
 
+        {canMonitor && (
+          <TabsContent value="monitoreo">
+            <DetalleMonitoreoTab exam={exam} onEstadoChange={actualizarEstadoExamen} />
+          </TabsContent>
+        )}
+
         {canExpel && (
           <TabsContent value="expulsiones">
-            <DetalleExpulsionesTab exam={exam} />
+            <DetalleExpulsionesTab key={exam.id} exam={exam} />
           </TabsContent>
         )}
 

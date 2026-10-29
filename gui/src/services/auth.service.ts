@@ -1,15 +1,17 @@
 // src/services/auth.service.ts
 import { api } from './api';
 
+export interface User {
+  id: string | number;
+  nombre: string;
+  apellido?: string;
+  email: string;
+  rol: string;
+}
+
 export interface LoginResponse {
   token: string;
-  user: {
-    id: string | number;
-    nombre: string;
-    apellido?: string;
-    email: string;
-    rol: string;
-  };
+  user: User;
 }
 
 export interface ResetPasswordPayload {
@@ -24,9 +26,19 @@ export const authService = {
     const data = await api.post<LoginResponse>('/login', { email, password });
 
     localStorage.setItem('auth_token', data.token);
-    localStorage.setItem('user_role', data.user.rol);
-    localStorage.setItem('user_data', JSON.stringify(data.user));
     localStorage.setItem('sci_last_activity', Date.now().toString());
+
+    if (data.user) {
+      localStorage.setItem('user_role', data.user.rol || '');
+      localStorage.setItem(
+        'user_data',
+        JSON.stringify({
+          id: data.user.id,
+          nombre: data.user.nombre,
+          apellido: data.user.apellido,
+        })
+      );
+    }
 
     return data;
   },
@@ -44,6 +56,38 @@ export const authService = {
     }
   },
 
+  getCurrentUser: () => {
+    const role = localStorage.getItem('user_role') || '';
+    let name = role || 'Usuario';
+    let id: string | number | undefined = undefined;
+
+    try {
+      const raw = localStorage.getItem('user_data');
+      const data = raw ? JSON.parse(raw) : null;
+      if (data) {
+        if (data.nombre) {
+          name = `${data.nombre} ${data.apellido || ''}`.trim();
+        }
+        if (data.id) {
+          id = data.id;
+        }
+      }
+    } catch {
+      // Respaldo silencioso
+    }
+
+    return {
+      id,
+      role,
+      name,
+      isAuthenticated: Boolean(localStorage.getItem('auth_token')),
+    };
+  },
+
+  getMe: async (): Promise<User> => {
+    return api.get<User>('/me');
+  },
+
   requestPasswordReset: async (email: string): Promise<{ message: string }> => {
     return api.post<{ message: string }>('/forgot-password', { email: email.trim() });
   },
@@ -52,20 +96,7 @@ export const authService = {
     return api.post<{ message: string }>('/reset-password', payload);
   },
 
-  getCurrentUser: () => {
-    const role = localStorage.getItem('user_role') || '';
-    let name = role || 'Usuario';
-
-    try {
-      const raw = localStorage.getItem('user_data');
-      const data = raw ? JSON.parse(raw) : null;
-      if (data?.nombre) {
-        name = `${data.nombre} ${data.apellido || ''}`.trim();
-      }
-    } catch {
-      // Respaldo si el parseo falla
-    }
-
-    return { role, name, isAuthenticated: Boolean(localStorage.getItem('auth_token')) };
+  isAuthenticated: (): boolean => {
+    return Boolean(localStorage.getItem('auth_token'));
   },
 };

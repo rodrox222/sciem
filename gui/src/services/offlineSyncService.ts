@@ -1,11 +1,6 @@
 import axios from 'axios';
+import { apiUrl } from './apiUrl';
 import { db, guardarPadronLocal, type AsistenciaOffline } from '../db/offlineStorage';
-
-const rawUrl = (import.meta.env.VITE_API_URL?.trim() || 'http://192.168.1.17:8200')
-  .replace(/\/api\/?$/, '')
-  .replace(/\/$/, '');
-
-const API_URL = `${rawUrl}/api`;
 
 function obtenerTokenValido(paramToken?: string): string {
   if (paramToken && paramToken.trim() !== '' && paramToken !== 'undefined' && paramToken !== 'null') {
@@ -15,24 +10,33 @@ function obtenerTokenValido(paramToken?: string): string {
 }
 
 /**
- * Descarga la nómina y metadatos del examen para guardarlos en Dexie
+ * Descarga la nómina completa, prerrequisitos, normas y metadatos del examen para guardarlos en Dexie
  */
 export async function sincronizarDescargaExamen(idExamen: string, token: string) {
   const authToken = obtenerTokenValido(token);
 
-  const response = await axios.get(`${API_URL}/examenes/${idExamen}/descargar-padron`, {
+  const response = await axios.get(apiUrl(`/examenes/${idExamen}/descargar-padron`), {
     headers: {
       Authorization: `Bearer ${authToken}`,
       Accept: 'application/json',
     },
   });
 
-  const { estudiantes, examen } = response.data;
-  
-  // Se pasa la información temporal del examen para permitir validar la hora_fin sin internet
-  await guardarPadronLocal(idExamen, estudiantes || [], examen);
+  const { estudiantes, examen, prerrequisitos, normas, rango_asignado } = response.data;
 
-  return response.data;
+  // Persistir en Dexie: estudiantes, examen, prerrequisitos y normas
+  await guardarPadronLocal(
+    idExamen,
+    estudiantes || [],
+    examen,
+    prerrequisitos || [],
+    normas || []
+  );
+
+  return {
+    ...response.data,
+    rango_asignado,
+  };
 }
 
 /**
@@ -62,7 +66,7 @@ export async function sincronizarSubidaAsistencias(idExamen: string, token: stri
   };
 
   const response = await axios.post(
-    `${API_URL}/examenes/${idExamen}/sincronizar-asistencias`,
+    apiUrl(`/examenes/${idExamen}/sincronizar-asistencias`),
     payload,
     {
       headers: {

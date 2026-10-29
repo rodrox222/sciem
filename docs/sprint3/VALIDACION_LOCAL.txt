@@ -1,0 +1,68 @@
+npm --prefix gui run build
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> gui@0.0.0 build
+> tsc -b && vite build
+
+vite v8.2.2 building client environment for production...
+transforming...
+✓ 2175 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.93 kB │ gzip:   0.47 kB
+dist/assets/logo SSO-B0OhRZC5.svg           5.41 kB │ gzip:   2.45 kB
+dist/assets/logo_umss_SVG-7E6wuePv.svg     10.22 kB │ gzip:   3.61 kB
+dist/assets/index-DEdHn_iM.css            117.10 kB │ gzip:  19.38 kB
+dist/assets/index-ByIw6p0l.js           1,365.68 kB │ gzip: 390.73 kB
+
+✓ built in 1.31s
+[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+
+ESLint focalizado
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+
+php vendor/bin/phpunit -c phpunit.sprint3.xml
+PHPUnit 10.5.64 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.3.6
+Configuration: <checkout>/api/phpunit.sprint3.xml
+
+..........SSSSSSSS                                                18 / 18 (100%)
+
+Time: 00:00.276, Memory: 34.00 MB
+
+OK, but some tests were skipped!
+Tests: 18, Assertions: 40, Skipped: 8.
+
+
+node --test gui/tests/sprint3.test.cjs
+✔ horario Bolivia: medianoche, límites y examen terminado (82.952725ms)
+✔ monitoreo rechaza alumno en ambos estados y totales incompatibles (26.837643ms)
+✔ snapshot transporta revisión y cancelación, acepta cambios sin cambiar conteos (15.728713ms)
+✔ HU15 identificar solo usa GET y eliminar envía motivo, sin registrar ingreso (9.836222ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 410.437119
+
+
+php artisan test (suite de ejemplos existente)
+
+   PASS  Tests\Unit\ExampleTest
+  ✓ that true is true
+
+   WARN  Tests\Feature\ExampleTest
+  ! the application returns a successful response → file_get_contents(/… 0.13s
+
+  Tests:    1 warning, 1 passed (2 assertions)
+  Duration: 0.16s

@@ -17,14 +17,15 @@ export const NoticiasPage: React.FC = () => {
   const [noticiaEditando, setNoticiaEditando] = useState<Noticia | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
-  // Estados para el Modal de Confirmación
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [noticiaToDelete, setNoticiaToDelete] = useState<Noticia | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const userContext = authService.getCurrentUser();
   const isAuthenticated = userContext.isAuthenticated;
-  const currentUserId = (userContext as { id?: string }).id; 
+  
+  const currentUserId = (userContext as { id?: string; user?: { id?: string } }).id || (userContext as { id?: string; user?: { id?: string } }).user?.id; 
+  
   const normalizedRole = userContext.role.toLowerCase() === 'administrador' ? 'admin' : userContext.role.toLowerCase();
   
   const canPublishNews = isAuthenticated && (normalizedRole === 'admin' || normalizedRole === 'docente');
@@ -132,7 +133,8 @@ export const NoticiasPage: React.FC = () => {
           <>
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
               {noticias.map((noticia) => {
-                const isAuthor = noticia.autor.id === currentUserId;
+                // CORRECCIÓN: Comprobamos si el autor coincide con el currentUserId
+                const isAuthor = currentUserId ? noticia.autor?.id === currentUserId : false;
                 const canManageNotice = normalizedRole === 'admin' || (normalizedRole === 'docente' && isAuthor);
 
                 return (
@@ -141,7 +143,7 @@ export const NoticiasPage: React.FC = () => {
                     noticia={noticia} 
                     canManage={canManageNotice}
                     onEdit={handleEdit}
-                    onDelete={handleDeleteTrigger} // <--- CAMBIO AQUÍ
+                    onDelete={handleDeleteTrigger}
                   />
                 );
               })}
@@ -185,15 +187,15 @@ export const NoticiasPage: React.FC = () => {
       )}
 
       {/* Modal de Confirmación de Borrado */}
-        <ConfirmDialog
-          isOpen={isConfirmOpen}
-          title="Eliminar noticia"
-          description="Esta acción eliminará permanentemente la noticia seleccionada y ya no será visible para ningún usuario."
-          itemName={noticiaToDelete?.titulo}
-          onConfirm={handleConfirmDelete}
-          onCancel={() => setIsConfirmOpen(false)}
-          loading={isDeleting}
-        />
+      <ConfirmDialog
+        isOpen={isConfirmOpen}
+        title="Eliminar noticia"
+        description="Esta acción eliminará permanentemente la noticia seleccionada y ya no será visible para ningún usuario."
+        itemName={noticiaToDelete?.titulo}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setIsConfirmOpen(false)}
+        loading={isDeleting}
+      />
     </>
   );
 };

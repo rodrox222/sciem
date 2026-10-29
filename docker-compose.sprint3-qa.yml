@@ -1,0 +1,53 @@
+# Entorno separado: configuración QA explícita, sin data/pg_data del proyecto ni puertos públicos.
+services:
+  db-qa:
+    image: postgres:15.10-alpine
+    environment:
+      POSTGRES_DB: sciem_sprint3_test
+      POSTGRES_USER: sciem_qa
+      POSTGRES_PASSWORD: ${SCIEM_QA_DB_PASSWORD:?Defina una clave temporal de QA}
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sciem_qa -d sciem_sprint3_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  api-qa:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.sprint3-qa
+    working_dir: /app
+    volumes:
+      - ./api:/app:ro
+      - qa-vendor:/app/vendor
+      - qa-cache:/app/bootstrap/cache
+      - qa-storage:/app/storage
+    environment:
+      APP_ENV: testing
+      APP_DEBUG: "false"
+      LOG_CHANNEL: stderr
+      APP_KEY: ${SCIEM_QA_APP_KEY:?Defina una clave temporal Laravel de QA}
+      APP_TIMEZONE: America/La_Paz
+      APP_CONFIG_CACHE: /tmp/sciem-qa-config.php
+      APP_ROUTES_CACHE: /tmp/sciem-qa-routes.php
+      DB_URL: ""
+      DB_CONNECTION: pgsql
+      DB_HOST: db-qa
+      DB_PORT: "5432"
+      DB_DATABASE: sciem_sprint3_test
+      DB_USERNAME: sciem_qa
+      DB_PASSWORD: ${SCIEM_QA_DB_PASSWORD}
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      SCIEM_QA_ALLOW_WRITE: "1"
+      COMPOSER_ALLOW_SUPERUSER: "1"
+    depends_on:
+      db-qa:
+        condition: service_healthy
+    command: ["sh", "-c", "mkdir -p bootstrap/cache storage/framework/cache storage/framework/sessions storage/framework/views storage/logs && composer install --no-interaction --prefer-dist && php scripts/sprint3-test-bootstrap.php && php vendor/bin/phpunit -c phpunit.sprint3.xml --fail-on-skipped"]
+volumes:
+  qa-vendor:
+  qa-cache:
+  qa-storage:

@@ -22,30 +22,9 @@ class CheckRole
             return $r === 'administrador' ? 'admin' : $r;
         }, $roles);
 
-        // Verificar si el Token de Sanctum actual posee alguno de los roles permitidos
-        $hasAccess = false;
-        $rolEnToken = 'desconocido';
-
-        foreach ($allowedRoles as $role) {
-            if ($user->tokenCan("role:{$role}")) {
-                $hasAccess = true;
-                break;
-            }
-        }
-
-        if (!$hasAccess) {
-            // Extraer el rol actual del token solo para el mensaje de error (opcional)
-            $abilities = $user->currentAccessToken()->abilities ?? [];
-            foreach ($abilities as $ability) {
-                if (str_starts_with($ability, 'role:')) {
-                    $rolEnToken = str_replace('role:', '', $ability);
-                }
-            }
-
-            return response()->json([
-                'message'    => 'Acceso denegado. Su sesión actual no tiene permisos para esta acción.',
-                'rol_actual' => $rolEnToken,
-            ], 403);
+        $rol = \App\Services\RolOperativo::actual($request);
+        if (!$rol || !in_array($rol, $allowedRoles, true)) {
+            return response()->json(['message' => 'Sesión sin rol válido para esta acción. Inicie sesión nuevamente.', 'rol_actual' => $rol], 403);
         }
 
         return $next($request);

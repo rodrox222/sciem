@@ -76,7 +76,7 @@ class AuthController extends Controller
             $user->save();
         }
 
-        $abilities = array_map(fn($r) => "role:{$r}", $rolesDisponibles);
+        $abilities = ["role:{$rolFinal}"];
         $token = $user->createToken('auth_token', $abilities)->plainTextToken;
 
         $this->registrarLogAuth($request, 'LOGIN_EXITOSO', $user, $rolFinal, ['rol_seleccionado' => $rolFinal]);
@@ -113,6 +113,7 @@ class AuthController extends Controller
                 request: $request,
                 accion: 'LOGOUT',
                 user: $user,
+                rolFallback: \App\Services\RolOperativo::actual($request),
                 detalles: ['motivo' => 'Cierre de sesión voluntario']
             );
         }
@@ -187,6 +188,11 @@ class AuthController extends Controller
             return [$estudiante, 'estudiante'];
         }
 
+        if ($rolSugerido === 'auxiliar' || $rolSugerido === null) {
+            $auxiliar = Auxiliar::where('email', $emailLower)->first();
+            if ($auxiliar) return [$auxiliar, 'auxiliar'];
+        }
+
         return [null, null];
     }
 
@@ -210,7 +216,7 @@ class AuthController extends Controller
             $nombreCompleto = !empty($partes) ? implode(' ', $partes) : null;
         }
 
-        $rol = match ($user ? get_class($user) : null) {
+        $rol = $rolFallback ?? match ($user ? get_class($user) : null) {
             Admin::class      => 'admin',
             Docente::class    => 'docente',
             Estudiante::class => 'estudiante',

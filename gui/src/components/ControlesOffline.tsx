@@ -51,7 +51,17 @@ export const ControlesOffline: React.FC<Props> = ({ idExamen, token }) => {
     try {
       const data = await sincronizarDescargaExamen(idExamen, token);
       const total = data.total_estudiantes ?? data.estudiantes?.length ?? 0;
-      setMensaje(`Padrón descargado (${total} estudiantes listos offline).`);
+      const rango = data.rango_asignado;
+      const esDocente = Boolean(rango?.es_docente || data.rol === 'docente');
+
+      if (!esDocente && rango?.desde && rango?.hasta) {
+        // Mensaje exclusivo para el auxiliar con su lote asignado
+        setMensaje(`Padrón asignado descargado: ${total} estudiantes (desde ${rango.desde} hasta ${rango.hasta}).`);
+      } else {
+        // Mensaje para docente (nómina general completa)
+        setMensaje(`Nómina completa descargada: ${total} estudiantes listos offline.`);
+      }
+
       await actualizarContador();
     } catch (err: any) {
       setMensaje(err.response?.data?.message || 'Error al descargar nómina.');

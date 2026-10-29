@@ -12,10 +12,20 @@ use Illuminate\Support\Facades\DB;
 
 class HabilitacionExamenController extends Controller
 {
-    public function index(string $examenId): JsonResponse
+    public function index(Request $request, string $examenId): JsonResponse
     {
+        \App\Services\AccesoExamen::autorizar($request, \App\Services\AccesoExamen::buscar($examenId));
         $examen = Examen::with(['estudiantes' => function ($query) {
-            $query->select('estudiantes.id', 'codigo_sis', 'ci', 'ci_extension', 'nombre', 'apellido_paterno', 'apellido_materno', 'email_institucional');
+            $query->select(
+                'estudiantes.id', 
+                'codigo_sis', 
+                'ci', 
+                'ci_extension', 
+                'nombre', 
+                'apellido_paterno', 
+                'apellido_materno', 
+                'email_institucional'
+            )->withPivot('estado', 'motivo_estado', 'ajuste_manual', 'fecha_ajuste_manual');
         }])->findOrFail($examenId);
 
         $estudiantes = $examen->estudiantes->map(function ($estudiante) {
@@ -24,7 +34,7 @@ class HabilitacionExamenController extends Controller
                 'codigo_sis'          => $estudiante->codigo_sis,
                 'ci'                  => $estudiante->ci,
                 'ci_extension'        => $estudiante->ci_extension,
-                'nombre_completo'     => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} " . ($estudiante->apellido_materno ?? '')),
+                'nombre_completo'     => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
                 'email_institucional' => $estudiante->email_institucional,
                 'estado'              => $estudiante->pivot->estado,
                 'motivo_estado'       => $estudiante->pivot->motivo_estado,

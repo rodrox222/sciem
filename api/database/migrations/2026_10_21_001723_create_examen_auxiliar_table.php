@@ -12,9 +12,9 @@ return new class extends Migration
             $table->uuid('id')->primary();
             $table->uuid('id_examen');
             $table->uuid('id_auxiliar');
-            $table->enum('estado', ['Pendiente', 'Aceptada', 'Rechazada'])->default('Pendiente');
-            $table->timestamp('fecha_invitacion')->useCurrent();
-            $table->timestamp('fecha_respuesta')->nullable();
+
+            $table->enum('estado', ['Activo', 'Inactivo'])->default('Activo');
+            $table->timestamp('fecha_asignacion')->useCurrent();
             $table->timestamps();
 
             $table->unique(['id_examen', 'id_auxiliar'], 'unique_examen_auxiliar');

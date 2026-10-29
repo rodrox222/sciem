@@ -11,6 +11,10 @@ return new class extends Migration
         Schema::create('estudiante_examen', function (Blueprint $table) {
             $table->foreignUuid('id_examen')->constrained('examenes')->onDelete('cascade');
             $table->foreignUuid('id_estudiante')->constrained('estudiantes')->onDelete('cascade');
+            
+            // Auxiliar asignado para el control (referencia a la tabla estudiantes)
+            $table->foreignUuid('id_auxiliar')->nullable()->constrained('estudiantes')->nullOnDelete();
+            
             $table->enum('estado', ['Habilitado', 'Inhabilitado'])->default('Inhabilitado');
             $table->text('motivo_estado')->nullable();
             
@@ -23,6 +27,7 @@ return new class extends Migration
             $table->timestamp('updated_at')->nullable();
             
             $table->primary(['id_examen', 'id_estudiante']);
+            $table->index(['id_examen', 'id_auxiliar']);
         });
     }
 

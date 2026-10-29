@@ -27,13 +27,14 @@ class AuxiliarOfflineController extends Controller
         $esAuxiliarAsignado = DB::table('examen_auxiliar')
             ->where('id_examen', $idExamen)
             ->where('id_auxiliar', $user->id)
-            ->where('estado', 'Aceptada')
+            ->where('estado', 'Activo')
             ->exists();
 
         if (!$esDocente && !$esAuxiliarAsignado) {
             return response()->json(['message' => 'No tiene permisos para este examen.'], 403);
         }
 
+        // 1. Estudiantes inscritos en la evaluación
         $estudiantes = DB::table('estudiante_examen as ee')
             ->join('estudiantes as e', 'ee.id_estudiante', '=', 'e.id')
             ->where('ee.id_examen', $idExamen)
@@ -49,7 +50,44 @@ class AuxiliarOfflineController extends Controller
                 'ee.estado as estado_habilitacion',
                 'ee.fecha_ingreso',
             ])
+            ->orderBy('e.apellido_paterno', 'asc')
+            ->orderBy('e.apellido_materno', 'asc')
+            ->orderBy('e.nombre', 'asc')
             ->get();
+
+        // 2. Prerrequisitos de la tabla real prerrequisitos_examen
+        $prerrequisitos = DB::table('prerrequisitos_examen')
+            ->where('id_examen', $idExamen)
+            ->select([
+                'id',
+                'id_examen',
+                'titulo as nombre',
+                'descripcion',
+            ])
+            ->get();
+
+        // 3. Normas asociadas al examen mediante examen_norma
+        $normas = DB::table('examen_norma as en')
+            ->join('normas as n', 'en.id_norma', '=', 'n.id')
+            ->where('en.id_examen', $idExamen)
+            ->where('n.estado', 'Activo')
+            ->select([
+                'n.id',
+                'n.titulo',
+                'n.descripcion',
+                'n.tipo',
+            ])
+            ->get();
+
+        $primerEstudiante = $estudiantes->first();
+        $ultimoEstudiante = $estudiantes->last();
+
+        $rangoInfo = [
+            'es_docente'      => $esDocente,
+            'total_asignados' => $estudiantes->count(),
+            'desde'           => $primerEstudiante ? "{$primerEstudiante->apellido_paterno} {$primerEstudiante->nombre}" : null,
+            'hasta'           => $ultimoEstudiante ? "{$ultimoEstudiante->apellido_paterno} {$ultimoEstudiante->nombre}" : null,
+        ];
 
         return response()->json([
             'examen' => [
@@ -64,8 +102,13 @@ class AuxiliarOfflineController extends Controller
                 'aula'          => $examen->aula?->nombre,
                 'descargado_el' => now('America/La_Paz')->toIso8601String(),
             ],
-            'total_estudiantes' => $estudiantes->count(),
-            'estudiantes'       => $estudiantes,
+            'id_usuario_solicitante' => $user->id,
+            'rol'                    => $esDocente ? 'docente' : 'auxiliar',
+            'rango_asignado'         => $rangoInfo,
+            'total_estudiantes'      => $estudiantes->count(),
+            'estudiantes'            => $estudiantes,
+            'prerrequisitos'         => $prerrequisitos,
+            'normas'                 => $normas,
         ], 200);
     }
 
@@ -74,7 +117,7 @@ class AuxiliarOfflineController extends Controller
         $request->validate([
             'asistencias'                 => 'required|array|min:1',
             'asistencias.*.codigo_sis'    => 'required|string',
-            'asistencias.*.fecha_ingreso' => 'required',
+            'asistencias.*.fecha_ingreso' => 'required|date',
             'asistencias.*.resultado'     => 'required|in:PERMITIDO,DENEGADO',
             'asistencias.*.motivo'        => 'nullable|string',
         ]);
@@ -90,7 +133,7 @@ class AuxiliarOfflineController extends Controller
         $esAuxiliarAsignado = DB::table('examen_auxiliar')
             ->where('id_examen', $idExamen)
             ->where('id_auxiliar', $user->id)
-            ->where('estado', 'Aceptada')
+            ->where('estado', 'Activo')
             ->exists();
 
         if (!$esDocente && !$esAuxiliarAsignado) {
@@ -124,6 +167,15 @@ class AuxiliarOfflineController extends Controller
                         continue;
                     }
 
+                    $inscripcion = DB::table('estudiante_examen')->where('id_examen', $idExamen)->where('id_estudiante', $estudiante->id)->first();
+                    if (!$inscripcion || strcasecmp($inscripcion->estado, 'Habilitado') !== 0
+                        || \App\Models\Expulsion::where('id_examen', $idExamen)->where('id_estudiante', $estudiante->id)->exists()
+                        || !\App\Services\AccesoExamen::enHorario($examen, \Carbon\CarbonImmutable::instance($fechaIngreso))
+                        || $fechaIngreso->isFuture()) {
+                        $errores[] = ['codigo_sis' => $codigoSis, 'error' => 'Ingreso no conciliable: inscripción, habilitación, expulsión u horario inválidos.'];
+                        continue;
+                    }
+
                     $yaIngreso = LogAsistencia::where('id_examen', $idExamen)
                         ->where('id_estudiante', $estudiante->id)
                         ->where('resultado', 'PERMITIDO')
@@ -133,7 +185,7 @@ class AuxiliarOfflineController extends Controller
                         LogAsistencia::create([
                             'id_examen'            => $idExamen,
                             'id_estudiante'        => $estudiante->id,
-                            'codigo_sis_escaneado' => substr($codigoSis, 0, 20),
+                            'codigo_sis_escaneado' => substr($codigoSis, 0, 30),
                             'resultado'            => 'PERMITIDO',
                             'mensaje'              => $item['motivo'] ?? 'Ingreso offline autorizado.',
                             'payload_qr_recibido'  => ['modo' => 'OFFLINE_SYNC'],
@@ -152,7 +204,6 @@ class AuxiliarOfflineController extends Controller
                     $procesados++;
 
                 } else {
-                    // Mapeo seguro con la restricción logs_asistencias_resultado_check
                     $tipoIntento = substr(trim($item['motivo'] ?? 'NO_INSCRITO'), 0, 30);
 
                     $resultadoLog = match ($tipoIntento) {
@@ -164,12 +215,11 @@ class AuxiliarOfflineController extends Controller
                         default               => 'RECHAZADO_NO_INSCRITO',
                     };
 
-                    // Registro en logs_asistencias
                     try {
                         LogAsistencia::create([
                             'id_examen'            => $idExamen,
                             'id_estudiante'        => $estudiante?->id,
-                            'codigo_sis_escaneado' => substr($codigoSis, 0, 20),
+                            'codigo_sis_escaneado' => substr($codigoSis, 0, 30),
                             'resultado'            => $resultadoLog,
                             'mensaje'              => "Intento no autorizado offline: {$tipoIntento}",
                             'payload_qr_recibido'  => ['modo' => 'OFFLINE_SYNC', 'tipo_intento' => $tipoIntento],
@@ -179,7 +229,6 @@ class AuxiliarOfflineController extends Controller
                         \Log::warning("Error logs_asistencias en sincronización: " . $e->getMessage());
                     }
 
-                    // Registro formal en intentos_no_autorizados
                     $idIntento = (string) Str::uuid();
                     DB::table('intentos_no_autorizados')->insert([
                         'id'                       => $idIntento,
@@ -193,7 +242,6 @@ class AuxiliarOfflineController extends Controller
                         'updated_at'               => now('America/La_Paz'),
                     ]);
 
-                    // Auditoría en logs_auditoria (sin updated_at)
                     try {
                         LogAuditoria::create([
                             'user_type'         => get_class($user),
