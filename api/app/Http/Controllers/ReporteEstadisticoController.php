@@ -13,6 +13,7 @@ use Illuminate\Validation\ValidationException;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class ReporteEstadisticoController extends Controller
 {
@@ -30,7 +31,7 @@ class ReporteEstadisticoController extends Controller
             ], 403);
         }
 
-        $examen = Examen::find($idExamen);
+        $examen = \App\Services\AccesoExamen::buscar($idExamen);
 
         if (!$examen) {
             return response()->json([
@@ -56,7 +57,7 @@ $examenDentroDelRango =
     && (!isset($filtros['fecha_hasta']) || $fechaExamen <= $filtros['fecha_hasta']);
 
         // Asistencia y ausencia se calculan desde la nómina del examen.
-        $asistencia = DB::table('estudiante_examen')
+        $asistencia = \App\Services\AsistenciaExamen::nomina($examen->id)
             ->where('id_examen', $examen->id)
             ->when(!$examenDentroDelRango, fn ($query) => $query->whereRaw('1 = 0'))
             ->selectRaw('COUNT(*) AS total_inscritos')
@@ -112,7 +113,7 @@ $examenDentroDelRango =
         ], 403);
     }
 
-    $examen = Examen::find($idExamen);
+    $examen = \App\Services\AccesoExamen::buscar($idExamen);
 
     if (!$examen) {
         return response()->json([
@@ -131,6 +132,13 @@ $examenDentroDelRango =
     }
 
     $filtros = $this->validarFiltrosFecha($request);
+    $formato = $request->query('formato', 'xlsx');
+
+if (!in_array($formato, ['xlsx', 'pdf'], true)) {
+    return response()->json([
+        'message' => 'El formato debe ser xlsx o pdf.',
+    ], 422);
+}
     $fechaExamen = $examen->fecha?->format('Y-m-d');
 
     $examenDentroDelRango =
@@ -138,7 +146,7 @@ $examenDentroDelRango =
         && (!isset($filtros['fecha_hasta']) || $fechaExamen <= $filtros['fecha_hasta']);
 
     // Resumen de asistencia.
-    $asistencia = DB::table('estudiante_examen')
+    $asistencia = \App\Services\AsistenciaExamen::nomina($examen->id)
         ->where('id_examen', $examen->id)
         ->when(!$examenDentroDelRango, fn ($query) => $query->whereRaw('1 = 0'))
         ->selectRaw('COUNT(*) AS total_inscritos')
@@ -165,7 +173,7 @@ $examenDentroDelRango =
         ->first();
 
     // Detalle de estudiantes inscritos y su asistencia.
-    $estudiantes = DB::table('estudiante_examen as ee')
+    $estudiantes = \App\Services\AsistenciaExamen::nomina($examen->id)
         ->join('estudiantes as e', 'e.id', '=', 'ee.id_estudiante')
         ->where('ee.id_examen', $examen->id)
         ->when(!$examenDentroDelRango, fn ($query) => $query->whereRaw('1 = 0'))
@@ -206,7 +214,7 @@ $examenDentroDelRango =
         ->get();
 
     // Agrupar los ingresos por hora y completar las 24 franjas.
-    $resultadosFranjas = DB::table('estudiante_examen')
+    $resultadosFranjas = \App\Services\AsistenciaExamen::nomina($examen->id)
         ->where('id_examen', $examen->id)
         ->whereNotNull('fecha_ingreso')
         ->when(!$examenDentroDelRango, fn ($query) => $query->whereRaw('1 = 0'))
@@ -216,6 +224,208 @@ $examenDentroDelRango =
         ->orderBy('hora')
         ->get()
         ->keyBy('hora');
+
+        // Generar PDF si se solicita ese formato.
+    if ($formato === 'pdf') {
+        $escape = static fn ($valor) => htmlspecialchars(
+            (string) ($valor ?? '—'),
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8'
+        );
+
+        $filasResumen = [
+            ['Total inscritos', (int) $asistencia->total_inscritos],
+            ['Total asistentes', (int) $asistencia->total_asistentes],
+            ['Total ausentes', (int) $asistencia->total_ausentes],
+            ['Intentos de estudiantes inhabilitados', (int) $intentos->intentos_inhabilitados],
+            ['Intentos de personas no inscritas', (int) $intentos->intentos_no_inscritos],
+            ['Ingresos duplicados bloqueados', (int) $intentos->ingresos_duplicados_bloqueados],
+        ];
+
+        $htmlResumen = '';
+
+        foreach ($filasResumen as [$indicador, $cantidad]) {
+            $htmlResumen .= '<tr><td>' . $escape($indicador)
+                . '</td><td>' . $cantidad . '</td></tr>';
+        }
+
+        $htmlEstudiantes = '';
+
+        foreach ($estudiantes as $estudiante) {
+            $nombre = trim(
+                ($estudiante->nombre ?? '') . ' '
+                . ($estudiante->apellido_paterno ?? '') . ' '
+                . ($estudiante->apellido_materno ?? '')
+            );
+
+            $htmlEstudiantes .= '<tr>'
+                . '<td>' . $escape($estudiante->codigo_sis) . '</td>'
+                . '<td>' . $escape($estudiante->ci) . '</td>'
+                . '<td>' . $escape($nombre) . '</td>'
+                . '<td>' . $escape($estudiante->estado) . '</td>'
+                . '<td>' . ($estudiante->fecha_ingreso !== null ? 'Asistente' : 'Ausente') . '</td>'
+                . '<td>' . $escape($estudiante->fecha_ingreso) . '</td>'
+                . '</tr>';
+        }
+
+        $htmlIntentos = '';
+
+        foreach ($registrosIntentos as $intento) {
+            $nombre = trim(
+                ($intento->nombre ?? '') . ' '
+                . ($intento->apellido_paterno ?? '') . ' '
+                . ($intento->apellido_materno ?? '')
+            );
+
+            $htmlIntentos .= '<tr>'
+                . '<td>' . $escape($intento->resultado) . '</td>'
+                . '<td>' . $escape($intento->codigo_sis_escaneado) . '</td>'
+                . '<td>' . $escape($nombre) . '</td>'
+                . '<td>' . $escape($intento->mensaje) . '</td>'
+                . '<td>' . $escape($intento->fecha_escaneo) . '</td>'
+                . '</tr>';
+        }
+
+        $htmlFranjas = '';
+
+        for ($hora = 0; $hora < 24; $hora++) {
+            $htmlFranjas .= '<tr>'
+                . '<td>' . sprintf('%02d:00', $hora) . '</td>'
+                . '<td>' . sprintf('%02d:00', ($hora + 1) % 24) . '</td>'
+                . '<td>' . (int) ($resultadosFranjas->get($hora)->total_ingresos ?? 0) . '</td>'
+                . '</tr>';
+        }
+
+        $html = '<!DOCTYPE html>
+        <html lang="es">
+        <head>
+            <meta charset="UTF-8">
+            
+<style>
+    @page {
+        margin: 28px 30px 35px 30px;
+    }
+
+    body {
+        font-family: DejaVu Sans, sans-serif;
+        font-size: 9px;
+        line-height: 1.4;
+        color: #222;
+        background: #fff;
+    }
+
+    h1 {
+        font-size: 18px;
+        font-weight: normal;
+        text-align: center;
+        padding-bottom: 10px;
+        margin-bottom: 14px;
+        border-bottom: 1px solid #777;
+    }
+
+    h2 {
+        font-size: 12px;
+        font-weight: bold;
+        margin-top: 20px;
+        margin-bottom: 6px;
+        padding-bottom: 4px;
+        border-bottom: 0.5px solid #aaa;
+    }
+
+    p {
+        margin: 4px 0;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 7px;
+        margin-bottom: 12px;
+    }
+
+    thead {
+        display: table-header-group;
+    }
+
+    th {
+        font-weight: bold;
+        text-align: left;
+        padding: 5px 4px;
+        border-top: 0.7px solid #777;
+        border-bottom: 0.7px solid #777;
+        background: #fff;
+    }
+
+    td {
+        text-align: left;
+        padding: 4px;
+        border: none;
+        border-bottom: 0.4px solid #ccc;
+        vertical-align: top;
+    }
+
+    tr {
+        page-break-inside: avoid;
+    }
+
+    .pie {
+        margin-top: 22px;
+        padding-top: 6px;
+        border-top: 0.7px solid #777;
+        text-align: center;
+        font-size: 8px;
+        color: #555;
+    }
+</style>
+
+        </head>
+        <body>
+            <h1>Reporte estadístico del examen</h1>
+            <p><strong>Examen:</strong> ' . $escape($examen->nombre) . '</p>
+            <p><strong>Fecha:</strong> ' . $escape($fechaExamen) . '</p>
+            <p><strong>Zona horaria:</strong> America/La_Paz</p>
+            <p><strong>Fecha desde:</strong> ' . $escape($filtros['fecha_desde'] ?? 'Sin límite') . '</p>
+            <p><strong>Fecha hasta:</strong> ' . $escape($filtros['fecha_hasta'] ?? 'Sin límite') . '</p>
+
+            <h2>Resumen</h2>
+            <table>
+                <thead><tr><th>Indicador</th><th>Cantidad</th></tr></thead>
+                <tbody>' . $htmlResumen . '</tbody>
+            </table>
+
+            <h2>Detalle de asistencia</h2>
+            <table>
+                <thead><tr>
+                    <th>Código SIS</th><th>CI</th><th>Estudiante</th>
+                    <th>Estado</th><th>Asistencia</th><th>Fecha de ingreso</th>
+                </tr></thead>
+                <tbody>' . $htmlEstudiantes . '</tbody>
+            </table>
+
+            <h2>Intentos rechazados</h2>
+            <table>
+                <thead><tr>
+                    <th>Resultado</th><th>Código SIS</th><th>Estudiante</th>
+                    <th>Mensaje</th><th>Fecha del intento</th>
+                </tr></thead>
+                <tbody>' . $htmlIntentos . '</tbody>
+            </table>
+
+            <h2>Ingresos por franja horaria</h2>
+            <table>
+                <thead><tr><th>Desde</th><th>Hasta</th><th>Total de ingresos</th></tr></thead>
+                <tbody>' . $htmlFranjas . '</tbody>
+            </table>
+                    <div class="pie">
+                Reporte estadístico del examen · Zona horaria: America/La_Paz
+            </div>
+        </body>
+        </html>';
+
+        return Pdf::loadHTML($html)
+            ->setPaper('a4', 'landscape')
+            ->download('reporte_estadistico_' . $examen->id . '.pdf');
+    }
 
     // Crear el libro Excel.
     $spreadsheet = new Spreadsheet();
@@ -395,7 +605,7 @@ $examenDentroDelRango =
             ], 403);
         }
 
-        $examen = Examen::find($idExamen);
+        $examen = \App\Services\AccesoExamen::buscar($idExamen);
 
         if (!$examen) {
             return response()->json([
@@ -421,7 +631,7 @@ $examenDentroDelRango =
             && (!isset($filtros['fecha_hasta']) || $fechaExamen <= $filtros['fecha_hasta']);
 
         // Agrupar los ingresos efectivos por hora local de Bolivia.
-        $resultados = DB::table('estudiante_examen')
+        $resultados = \App\Services\AsistenciaExamen::nomina($examen->id)
             ->where('id_examen', $examen->id)
             ->when(!$examenDentroDelRango, fn ($query) => $query->whereRaw('1 = 0'))
             ->whereNotNull('fecha_ingreso')

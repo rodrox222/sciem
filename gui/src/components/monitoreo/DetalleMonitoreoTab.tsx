@@ -90,6 +90,8 @@ function MonitoreoContenido({ exam, onEstadoChange }: {
   const [revisionManual, setRevisionManual] = useState(0)
 
   useEffect(() => {
+    const controller = new AbortController()
+    let revisionDatos = ''
     let cancelado = false
     let timer: number | undefined
     let turno = 0
@@ -106,21 +108,14 @@ function MonitoreoContenido({ exam, onEstadoChange }: {
 
       if (!inicial) setActualizando(true)
       try {
-        const resumen = await monitoreoService.resumen(exam.id)
+        const snapshot = await monitoreoService.snapshot(exam.id, revisionDatos, controller.signal)
         if (cancelado) return
-        const conteosCambiaron = !ultimaVersion ||
-          ultimaVersion.resumen.inscritos !== resumen.inscritos ||
-          ultimaVersion.resumen.ingresados !== resumen.ingresados ||
-          ultimaVersion.resumen.ausentes !== resumen.ausentes
-
-        // Solo se consultan las dos listas si cambiaron los totales o en la primera carga.
-        if (conteosCambiaron) {
-          const listas = await monitoreoService.listas(exam.id)
-          if (cancelado) return
-          validarResumenYListas(resumen, listas)
-          ultimaVersion = { resumen, listas }
-          setDatos(ultimaVersion)
-        }
+        const listas = snapshot.listas ?? ultimaVersion?.listas
+        if (!listas) throw new Error('El servidor no devolvió las listas iniciales.')
+        validarResumenYListas(snapshot.resumen, listas)
+        ultimaVersion = { resumen: snapshot.resumen, listas }
+        revisionDatos = snapshot.revision
+        setDatos(ultimaVersion)
 
         turno += 1
         if (turno % 4 === 0) {
@@ -162,6 +157,7 @@ function MonitoreoContenido({ exam, onEstadoChange }: {
     const inicio = window.setTimeout(() => { void actualizar(true) }, 0)
     return () => {
       cancelado = true
+      controller.abort()
       window.clearTimeout(inicio)
       if (timer !== undefined) window.clearTimeout(timer)
     }

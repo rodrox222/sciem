@@ -37,7 +37,7 @@ function formatearFecha(fecha: string | null): string {
 
 function Indicador({ titulo, cantidad, icono, detalle, enlace }: {
   titulo: string
-  cantidad: number
+  cantidad: number | null
   icono: ReactNode
   detalle: string
   enlace?: string
@@ -49,8 +49,8 @@ function Indicador({ titulo, cantidad, icono, detalle, enlace }: {
         <span className="grid h-9 w-9 place-items-center rounded-xl bg-sci-blue/10 text-sci-navy" aria-hidden="true">{icono}</span>
       </CardHeader>
       <CardContent>
-        <p className="text-3xl font-extrabold tabular-nums text-sci-navy">{cantidad}</p>
-        <p className="mt-1 text-xs text-muted-foreground">{detalle}</p>
+        <p className="text-3xl font-extrabold tabular-nums text-sci-navy">{cantidad ?? 'No disponible'}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{cantidad === null ? 'No fue posible cargar esta métrica.' : detalle}</p>
       </CardContent>
     </Card>
   )
@@ -143,8 +143,8 @@ function ResumenPorRol({ data }: { data: DashboardResponse }) {
           <Indicador titulo="Mis exámenes" cantidad={valores.total_examenes} detalle="Asociados a tu usuario" icono={<BookOpenCheck className="h-5 w-5" />} />
           {data.rol === 'docente' && (
             <>
-              <Indicador titulo="Estudiantes inscritos" cantidad={valores.total_inscritos ?? 0} detalle="En tus exámenes" icono={<UsersRound className="h-5 w-5" />} />
-              <Indicador titulo="Ingresos registrados" cantidad={valores.total_ingresados ?? 0} detalle="Ingresos autorizados" icono={<ShieldCheck className="h-5 w-5" />} />
+              <Indicador titulo="Estudiantes inscritos" cantidad={valores.total_inscritos ?? null} detalle="En tus exámenes" icono={<UsersRound className="h-5 w-5" />} />
+              <Indicador titulo="Ingresos registrados" cantidad={valores.total_ingresados ?? null} detalle="Ingresos autorizados" icono={<ShieldCheck className="h-5 w-5" />} />
             </>
           )}
         </div>
@@ -153,7 +153,7 @@ function ResumenPorRol({ data }: { data: DashboardResponse }) {
         <h2 id="hu20-examenes" className="text-lg font-bold text-sci-navy">
           {data.rol === 'estudiante' ? 'Mis evaluaciones' : 'Exámenes asignados'}
         </h2>
-        <ListaExamenes examenes={exams} rol={data.rol} />
+        {data.errores_secciones?.examenes ? <p role="alert">{data.errores_secciones.examenes}</p> : <ListaExamenes examenes={exams} rol={data.rol} />}
       </section>
     </div>
   )

@@ -24,6 +24,8 @@ export interface ListasMonitoreo {
 }
 
 interface ResumenRespuesta {
+  revision: string
+  listas?: { ingresados: EstudianteRespuesta[]; ausentes: EstudianteRespuesta[] }
   examen: { id: string; nombre: string; fecha: string | null }
   resumen: {
     total_estudiantes: number
@@ -126,6 +128,15 @@ export function validarResumenYListas(resumen: ResumenMonitoreo, listas: ListasM
 }
 
 export const monitoreoService = {
+  async snapshot(examenId: string, revision: string, signal: AbortSignal) {
+    const params = new URLSearchParams({ incluir_listas: '1', revision })
+    const r = await api.get<ResumenRespuesta>(`/examenes/${encodeURIComponent(examenId)}/monitoreo?${params}`, { signal })
+    if (r.examen.id !== examenId) throw new Error('Respuesta de otro examen.')
+    return { revision: r.revision,
+      resumen: { inscritos: r.resumen.total_estudiantes, ingresados: r.resumen.total_ingresados, ausentes: r.resumen.total_ausentes },
+      listas: r.listas ? { ingresados: normalizarEstudiantes(r.listas.ingresados), ausentes: normalizarEstudiantes(r.listas.ausentes) } : undefined,
+    }
+  },
   async resumen(examenId: string): Promise<ResumenMonitoreo> {
     const respuesta = await api.get<ResumenRespuesta>(`/examenes/${encodeURIComponent(examenId)}/monitoreo`)
     if (String(respuesta.examen.id) !== examenId) {

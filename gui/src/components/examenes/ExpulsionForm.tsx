@@ -38,6 +38,8 @@ interface ExpulsionFormProps {
   estudiante: Pick<EstudianteInscritoExamen, 'id' | 'codigo_sis' | 'nombre_completo'>
   asistencia: AsistenciaExpulsion
   horarioPermitido: boolean
+  desfaseServidor?: number
+  onSubmittingChange?: (busy: boolean) => void
   onRegistered?: (registro: ExpulsionRegistrada) => void
 }
 
@@ -58,6 +60,8 @@ export function ExpulsionForm({
   estudiante,
   asistencia,
   horarioPermitido,
+  desfaseServidor = 0,
+  onSubmittingChange,
   onRegistered,
 }: ExpulsionFormProps) {
   const [motivo, setMotivo] = useState('')
@@ -86,7 +90,7 @@ export function ExpulsionForm({
     setError('')
 
     if (!motivoValido) return
-    const horario = verificarHorarioExpulsion(exam, new Date())
+    const horario = verificarHorarioExpulsion(exam, new Date(Date.now() + desfaseServidor))
     if (!horario.permitido) {
       setError(horario.mensaje)
       return
@@ -97,7 +101,7 @@ export function ExpulsionForm({
 
   const registerExpulsion = async () => {
     if (!motivoValido || submitting) return
-    const horario = verificarHorarioExpulsion(exam, new Date())
+    const horario = verificarHorarioExpulsion(exam, new Date(Date.now() + desfaseServidor))
     if (!horario.permitido) {
       setConfirmOpen(false)
       setError(horario.mensaje)
@@ -105,6 +109,7 @@ export function ExpulsionForm({
     }
 
     setSubmitting(true)
+    onSubmittingChange?.(true)
     setError('')
 
     try {
@@ -125,6 +130,7 @@ export function ExpulsionForm({
       }
     } finally {
       setSubmitting(false)
+      onSubmittingChange?.(false)
     }
   }
 

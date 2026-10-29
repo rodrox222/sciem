@@ -1,5 +1,7 @@
 import { api, apiDownload } from '@/services/api'
 
+export type FormatoReporte = 'xlsx' | 'pdf'
+
 export interface FiltrosReporte {
   fecha_desde: string
   fecha_hasta: string
@@ -38,10 +40,11 @@ export interface RespuestaFranjasReporte {
   franjas: FranjaReporte[]
 }
 
-export function queryReporte(filtros: FiltrosReporte): string {
+export function queryReporte(filtros: FiltrosReporte, formato?: FormatoReporte): string {
   const params = new URLSearchParams()
   if (filtros.fecha_desde) params.set('fecha_desde', filtros.fecha_desde)
   if (filtros.fecha_hasta) params.set('fecha_hasta', filtros.fecha_hasta)
+  if (formato) params.set('formato', formato)
   const query = params.toString()
   return query ? `?${query}` : ''
 }
@@ -55,7 +58,7 @@ export const reportesService = {
   franjas(examenId: string, filtros: FiltrosReporte, signal?: AbortSignal) {
     return api.get<RespuestaFranjasReporte>(`${ruta(examenId)}/franjas-horarias${queryReporte(filtros)}`, { signal })
   },
-  descargar(examenId: string, filtros: FiltrosReporte, signal?: AbortSignal) {
-    return apiDownload(`${ruta(examenId)}/descargar${queryReporte(filtros)}`, { signal })
+  descargar(examenId: string, filtros: FiltrosReporte, formato: FormatoReporte, signal?: AbortSignal) {
+    return apiDownload(`${ruta(examenId)}/descargar${queryReporte(filtros, formato)}`, { signal })
   },
 }

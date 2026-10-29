@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { UserRoundCog } from 'lucide-react'
+import DetalleAuxiliaresTab from '@/components/examenes/DetalleAuxiliaresTab'
 import {
   ArrowLeft,
   LoaderCircle,
@@ -44,11 +46,14 @@ export default function DetalleExamenPage() {
 
   const role = (localStorage.getItem('user_role') ?? '').toLowerCase()
   const canManage = ['admin', 'administrador', 'docente', 'auxiliar'].includes(role)
+  const canEditExam = ['admin', 'administrador', 'docente'].includes(role)
+  const canManageAuxiliares = ['admin', 'administrador', 'docente'].includes(role)
   const canExpel = canManage
 
   const requestedTab = searchParams.get('tab') || 'info'
   const activeTab =
-    requestedTab === 'expulsiones' && !canExpel ? 'info' : requestedTab
+    (requestedTab === 'expulsiones' && !canExpel) ||
+    (requestedTab === 'editar' && !canEditExam) ? 'info' : requestedTab
 
   const [exam, setExam] = useState<Examen | null>(null)
   const [loading, setLoading] = useState(true)
@@ -129,7 +134,7 @@ export default function DetalleExamenPage() {
   }
 
   const canMonitor = permiteMonitoreoFrontend(exam)
-  const canEdit = canManage && exam.estado === 'Programado'
+  const canEdit = canEditExam && exam.estado === 'Programado'
 
   return (
     <div className="space-y-6">
@@ -172,7 +177,8 @@ export default function DetalleExamenPage() {
       <EtapasExamen exam={exam} />
 
       <Tabs
-        value={activeTab === 'monitoreo' && !canMonitor ? 'info' : activeTab}
+        value={(activeTab === 'monitoreo' && !canMonitor) ||
+          (activeTab === 'editar' && !canEdit) ? 'info' : activeTab}
         onValueChange={(val) => setSearchParams({ tab: val })}
         className="space-y-6"
       >
@@ -191,7 +197,15 @@ export default function DetalleExamenPage() {
             <Users className="h-3.5 w-3.5" />
             Padrón de Estudiantes
           </TabsTrigger>
-
+{canManageAuxiliares && (
+  <TabsTrigger
+    value="auxiliares"
+    className="min-w-0 flex-none shrink-0 cursor-pointer justify-center gap-1.5 whitespace-nowrap px-2 py-2 text-center text-[11px] font-medium sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-xs"
+  >
+    <UserRoundCog className="h-3.5 w-3.5 text-sci-cyan" />
+    Auxiliares
+  </TabsTrigger>
+)}
           {canManage && (
             <TabsTrigger
               value="escaner"
@@ -248,7 +262,14 @@ export default function DetalleExamenPage() {
         <TabsContent value="estudiantes">
           <DetalleEstudiantesTab exam={exam} canManage={canManage} />
         </TabsContent>
-
+{canManageAuxiliares && (
+  <TabsContent value="auxiliares">
+    <DetalleAuxiliaresTab
+      examenId={exam.id}
+      puedeGestionar={canManageAuxiliares}
+    />
+  </TabsContent>
+)}
         {canManage && (
           <TabsContent value="escaner">
             <DetalleEscanerTab exam={exam} />
@@ -263,7 +284,7 @@ export default function DetalleExamenPage() {
 
         {canExpel && (
           <TabsContent value="expulsiones">
-            <DetalleExpulsionesTab exam={exam} />
+            <DetalleExpulsionesTab key={exam.id} exam={exam} />
           </TabsContent>
         )}
 

@@ -27,7 +27,6 @@ use App\Http\Controllers\AuxiliarOfflineController;
 use App\Models\Admin;
 use App\Models\Docente;
 use App\Models\Auxiliar;
-use Illuminate\Support\Facades\Artisan;
 use App\Http\Controllers\NoticiaController;
 
 // --- RUTAS PÚBLICAS ---
@@ -36,33 +35,27 @@ Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLink
 Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword']);
 Route::get('noticias', [NoticiaController::class, 'index']);
 
+// Comprobación ligera de conectividad para el temporizador de sesión.
+// No revela información interna ni requiere autenticación.
+Route::get('health', fn () => response()->noContent());
+
 Route::get('examenes', [ExamenController::class, 'index']);
 
 
-Route::get('/seed-render-now', function () {
-    Artisan::call('db:seed', ['--force' => true]);
-    return response()->json([
-        'output'         => Artisan::output(),
-        'total_docentes' => \App\Models\Docente::count(),
-        'docente'        => \App\Models\Docente::first(),
-    ]);
-});
+Route::pattern('idExamen', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}');
+Route::pattern('expulsionId', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}');
 
 // --- RUTAS PROTEGIDAS (Sanctum) ---
 Route::middleware('auth:sanctum')->group(function () {
-    Route::get('dashboard', [DashboardController::class, 'index']);
+    Route::get('dashboard', [DashboardController::class, 'index'])->middleware(\App\Http\Middleware\InstantaneaLectura::class);
     Route::post('/logout', [AuthController::class, 'logout']);
 
     // Perfil del usuario autenticado
     Route::get('/me', function (Request $request) {
         $user = $request->user();
 
-        $rol = match (get_class($user)) {
-            Admin::class    => 'admin',
-            Docente::class  => 'docente',
-            Auxiliar::class => 'auxiliar',
-            default         => null,
-        };
+        $rol = \App\Services\RolOperativo::actual($request);
+        abort_unless($rol, 403, 'Sesión inactiva o ambigua; vuelva a iniciar sesión.');
 
         return response()->json([
             'id'               => $user->id,
@@ -71,7 +64,7 @@ Route::middleware('auth:sanctum')->group(function () {
             'nombre'           => $user->nombre,
             'apellido_paterno' => $user->apellido_paterno,
             'apellido_materno' => $user->apellido_materno,
-            'email'            => $user->email ?? null,
+            'email'            => $user->email ?? $user->email_institucional ?? null,
             'rol'              => $rol,
             'activo'           => $user->activo,
             'ultimo_acceso'    => $user->ultimo_acceso,
@@ -191,13 +184,20 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('examenes/{idExamen}/estudiantes/carga-masiva', [CargaMasivaEstudianteController::class, 'storePorExamen']);
     });
 
-    // --- HU 9: PRERREQUISITOS Y HABILITACIÓN ---
+       // --- HU 9: PRERREQUISITOS Y HABILITACIÓN ---
+
+    // Consultas de estudiantes del examen y motivos de inhabilitación
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('examenes/{examen}/estudiantes', [HabilitacionExamenController::class, 'index']);
-        Route::get('examenes/{examen}/prerrequisitos', [PrerrequisitoController::class, 'index']);
         Route::get('examenes/{examen}/estudiantes/{estudiante}/motivo', [HabilitacionExamenController::class, 'motivoInhabilitacion']);
     });
 
+    // Consulta de prerrequisitos: también permite el acceso al estudiante
+    Route::middleware('role:admin,administrador,docente,auxiliar,estudiante')->group(function () {
+        Route::get('examenes/{examen}/prerrequisitos', [PrerrequisitoController::class, 'index']);
+    });
+
+    // Gestión de prerrequisitos y habilitación
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::post('examenes/{examen}/prerrequisitos', [PrerrequisitoController::class, 'store']);
         Route::patch('prerrequisitos/{prerrequisito}/estudiantes/{estudiante}', [PrerrequisitoController::class, 'toggleCumplimiento']);
@@ -217,25 +217,37 @@ Route::middleware('auth:sanctum')->group(function () {
             [ExpulsionController::class, 'index']
         );
 
+        Route::get('examenes/{id}/expulsiones/estudiantes', [ExpulsionController::class, 'estudiantes']);
+        Route::delete('examenes/{id}/expulsiones/{expulsionId}', [ExpulsionController::class, 'destroy']);
         Route::post(
             'examenes/{id}/expulsiones',
             [ExpulsionController::class, 'store']
         );
+        Route::patch(
+            'examenes/{id}/expulsiones/{expulsionId}',
+            [ExpulsionController::class, 'updateMotivo']
+        );
     });
 
-    Route::post('/examenes/{id}/registro-manual', [VerificacionController::class, 'registrarIngresoManual']);
-    Route::get('/examenes/{id}/asistencias', [VerificacionController::class, 'listarAsistencias']);
+    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
+        Route::post('/examenes/{id}/registro-manual', [VerificacionController::class, 'registrarIngresoManual']);
+});
 
+    Route::middleware('role:admin,administrador,docente')->group(function () {
+        Route::get('/examenes/{id}/asistencias', [VerificacionController::class, 'listarAsistencias']);
+    });
     // HU 13: REGISTRO Y CONSULTA DE INTENTOS NO CORRESPONDIENTES 
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('examenes/{id_examen}/intentos-no-autorizados', [IntentoNoAutorizadoController::class, 'index']);
         Route::post('examenes/{id_examen}/escanear-ingreso', [VerificacionController::class, 'verificarIngreso']);
     });
+
     // MONITOREO EN TIEMPO REAL (HU16) 
-    Route::middleware('role:admin,administrador,docente,auxiliar')
+    Route::middleware('role:admin,administrador,docente')
         ->get('examenes/{idExamen}/monitoreo', [MonitoreoController::class, 'resumen']);
-    Route::middleware('role:admin,administrador,docente,auxiliar')
+    Route::middleware('role:admin,administrador,docente')
     ->get('examenes/{idExamen}/monitoreo/estudiantes', [MonitoreoController::class, 'estudiantes']);
+
     // HU 17: REPORTES ESTADÍSTICOS
     Route::middleware('role:admin,administrador,docente')
     ->get(
@@ -309,3 +321,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('noticias/{id}', [NoticiaController::class, 'destroy']);
     });
 });
+// Sprint 3: serialize the existing producers with expulsions; preserve their routes.
+foreach (Route::getRoutes() as $route) {
+    if (in_array('POST', $route->methods()) || in_array('PATCH', $route->methods()) || in_array('DELETE', $route->methods())) {
+        if (preg_match('~^api/examenes/\{id\}/(verificar-ingreso|registro-manual|sincronizar-asistencias|expulsiones)(/.*)?$~', $route->uri())) {
+            $route->middleware(\App\Http\Middleware\OperacionExamen::class);
+        }
+    }
+    if ($route->uri() === 'api/examenes/{id_examen}/escanear-ingreso') $route->middleware(\App\Http\Middleware\OperacionExamen::class);
+    if (str_contains($route->uri(), '/monitoreo') || str_contains($route->uri(), '/reportes/estadisticas')) {
+        $route->middleware(\App\Http\Middleware\InstantaneaLectura::class);
+    }
+}
