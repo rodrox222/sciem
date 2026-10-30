@@ -265,6 +265,27 @@ Route::middleware('auth:sanctum')->group(function () {
         'examenes/{idExamen}/reportes/estadisticas/descargar',
         [ReporteEstadisticoController::class, 'descargar']
     );
+    Route::middleware('role:admin,administrador,docente')
+    ->get(
+        'examenes/{idExamen}/reportes/acta-disciplinaria/descargar',
+        [ReporteEstadisticoController::class, 'descargarActaDisciplinaria']
+    );
+    Route::middleware('role:admin,administrador,docente')
+    ->get(
+        'examenes/{idExamen}/reportes/auditoria-puerta/descargar',
+        [ReporteEstadisticoController::class, 'descargarAuditoriaPuerta']
+    );
+    Route::middleware('role:admin,administrador,docente')
+    ->get(
+        'examenes/{idExamen}/reportes/matriz-habilitacion-asistencia/descargar',
+        [ReporteEstadisticoController::class, 'descargarMatrizHabilitacionAsistencia']
+    );
+    
+    Route::middleware('role:admin,administrador,docente')
+    ->get(
+        'examenes/{idExamen}/reportes/estadisticas/graficos',
+        [ReporteEstadisticoController::class, 'graficosEstadisticos']
+    );
 
 
     // HU 18: MODULO DE ESTUDIANTES

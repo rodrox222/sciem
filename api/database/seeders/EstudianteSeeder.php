@@ -14,96 +14,65 @@ class EstudianteSeeder extends Seeder
     {
         $estudiantes = [
             [
-                'id'                       => (string) Str::uuid(),
-                'codigo_sis'               => '202104512',
-                'ci'                       => '8765431',
-                'ci_extension'             => 'CB',
-                'nombre'                   => 'Carlos',
-                'apellido_paterno'         => 'Torrico',
-                'apellido_materno'         => 'Rojas',
-                'email_institucional'      => '202104512@est.umss.edu',
-                'primer_acceso_completado' => DB::raw('true'),
-                'activo'                   => DB::raw('true'),
+                'codigo_sis'          => '202104512',
+                'nombre'              => 'Carlos',
+                'apellido_paterno'    => 'Torrico',
+                'apellido_materno'    => 'Rojas',
+                'email_institucional' => '202104512@est.umss.edu',
+                'foto_perfil_url'     => null,
             ],
             [
-                'id'                       => (string) Str::uuid(),
-                'codigo_sis'               => '202209123',
-                'ci'                       => '9123847',
-                'ci_extension'             => 'LP',
-                'nombre'                   => 'Mariana',
-                'apellido_paterno'         => 'Vargas',
-                'apellido_materno'         => 'Flores',
-                'email_institucional'      => '202209123@est.umss.edu',
-                'primer_acceso_completado' => DB::raw('true'),
-                'activo'                   => DB::raw('true'),
+                'codigo_sis'          => '202209123',
+                'nombre'              => 'Mariana',
+                'apellido_paterno'    => 'Vargas',
+                'apellido_materno'    => 'Flores',
+                'email_institucional' => '202209123@est.umss.edu',
+                'foto_perfil_url'     => null,
             ],
             [
-                'id'                       => (string) Str::uuid(),
-                'codigo_sis'               => '202301641',
-                'ci'                       => '7654129',
-                'ci_extension'             => 'SC',
-                'nombre'                   => 'Rodrigo',
-                'apellido_paterno'         => 'Fernandez',
-                'apellido_materno'         => 'Gomez',
-                'email_institucional'      => '202301641@est.umss.edu',
-                'primer_acceso_completado' => DB::raw('false'),
-                'activo'                   => DB::raw('true'),
+                'codigo_sis'          => '202301641',
+                'nombre'              => 'Rodrigo',
+                'apellido_paterno'    => 'Fernandez',
+                'apellido_materno'    => 'Gomez',
+                'email_institucional' => '202301641@est.umss.edu',
+                'foto_perfil_url'     => null,
             ],
             [
-                'id'                       => (string) Str::uuid(),
-                'codigo_sis'               => '20202020',
-                'ci'                       => '8765432',
-                'ci_extension'             => 'CB',
-                'nombre'                   => 'geraldo',
-                'apellido_paterno'         => 'mamani',
-                'apellido_materno'         => 'crauz',
-                'email_institucional'      => '20202020@est.umss.edu',
-                'primer_acceso_completado' => DB::raw('true'),
-                'activo'                   => DB::raw('true'),
+                'codigo_sis'          => '20202020',
+                'nombre'              => 'geraldos',
+                'apellido_paterno'    => 'mamani',
+                'apellido_materno'    => 'crauz',
+                'email_institucional' => '20202020@est.umss.edu',
+                'foto_perfil_url'     => null,
             ],
         ];
 
         foreach ($estudiantes as $data) {
-            $passwordPlano = $this->generarPasswordEstudiante(
+            $passwordPlano = Estudiante::generarPasswordPorDefecto(
                 $data['codigo_sis'],
                 $data['nombre'],
                 $data['apellido_paterno'],
                 $data['apellido_materno']
             );
-            $data['password'] = Hash::make($passwordPlano);
 
-            $estudiante = Estudiante::firstOrNew(['codigo_sis' => $data['codigo_sis']]);
-            $estudiante->fill($data);
-            $estudiante->password = $data['password'];
-            $estudiante->primer_acceso_completado = $data['primer_acceso_completado'];
-            $estudiante->activo = $data['activo'];
-            $estudiante->save();
+            DB::table('estudiantes')->updateOrInsert(
+                ['codigo_sis' => $data['codigo_sis']],
+                [
+                    'id'                       => DB::raw("COALESCE((SELECT id FROM estudiantes WHERE codigo_sis = '{$data['codigo_sis']}'), '" . Str::uuid() . "'::uuid)"),
+                    'ci'                       => null,
+                    'ci_extension'             => null,
+                    'nombre'                   => $data['nombre'],
+                    'apellido_paterno'         => $data['apellido_paterno'],
+                    'apellido_materno'         => $data['apellido_materno'],
+                    'email_institucional'      => $data['email_institucional'],
+                    'foto_perfil_url'          => null,
+                    'password'                 => Hash::make($passwordPlano),
+                    'primer_acceso_completado' => DB::raw('false'),
+                    'activo'                   => DB::raw('true'),
+                    'es_auxiliar'              => DB::raw('false'),
+                    'updated_at'               => now(),
+                ]
+            );
         }
-    }
-
-    /**
-     * Genera la contraseña combinando Código SIS + Iniciales de nombres y apellidos en mayúsculas
-     */
-    private function generarPasswordEstudiante(string $sis, string $nombres, string $paterno, ?string $materno): string
-    {
-        $iniciales = '';
-
-        foreach (preg_split('/\s+/', trim($nombres)) as $nombre) {
-            if ($nombre !== '') {
-                $iniciales .= mb_substr($nombre, 0, 1);
-            }
-        }
-
-        if (!empty($paterno)) {
-            $partesPaterno = preg_split('/\s+/', trim($paterno));
-            $iniciales .= mb_substr($partesPaterno[0], 0, 1);
-        }
-
-        if (!empty($materno)) {
-            $partesMaterno = preg_split('/\s+/', trim($materno));
-            $iniciales .= mb_substr($partesMaterno[0], 0, 1);
-        }
-
-        return $sis . mb_strtoupper($iniciales);
     }
 }

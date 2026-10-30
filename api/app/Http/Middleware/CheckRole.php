@@ -23,8 +23,17 @@ class CheckRole
         }, $roles);
 
         $rol = \App\Services\RolOperativo::actual($request);
+
+        // Si la ruta permite 'auxiliar' y el usuario es un estudiante con 'es_auxiliar = true'
+        if (in_array('auxiliar', $allowedRoles, true) && !empty($user->es_auxiliar)) {
+            $rol = 'auxiliar';
+        }
+
         if (!$rol || !in_array($rol, $allowedRoles, true)) {
-            return response()->json(['message' => 'Sesión sin rol válido para esta acción. Inicie sesión nuevamente.', 'rol_actual' => $rol], 403);
+            return response()->json([
+                'message' => 'Sesión sin rol válido para esta acción. Inicie sesión nuevamente.',
+                'rol_actual' => $rol
+            ], 403);
         }
 
         return $next($request);

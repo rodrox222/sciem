@@ -1,0 +1,6 @@
+# Reglas de Seguridad y Alcance
+- NUNCA uses comandos destructivos como 'rm', 'rmdir', 'git reset --hard', 'git clean' ni 'del /f'.
+- NUNCA elimines archivos de código existentes, únicamente realiza ediciones puntuales (diffs).
+- NO modifiques ningún archivo de configuración de base de datos ni los archivos .env.
+- Si necesitas borrar o renombrar un archivo, solicita confirmación explícita al usuario primero.
+- Trabaja exclusivamente dentro de la rama Git actual.

@@ -12,142 +12,144 @@ export interface UsuarioPerfil {
   ci_extension?: string | null
 }
 
+function extraerErroresBackend(error: unknown) {
+  if (typeof error === 'object' && error !== null) {
+    const err = error as {
+      response?: { data?: { message?: string; errors?: Record<string, string[]> } }
+      data?: { message?: string; errors?: Record<string, string[]> }
+      message?: string
+    }
+    const payload = err.response?.data || err.data
+    return {
+      message: payload?.message || err.message || 'Error al guardar el perfil.',
+      errors: payload?.errors || {},
+    }
+  }
+  return { message: 'Error de conexión con el servidor.', errors: {} }
+}
+
 export function usePerfilEstudiante(usuario: UsuarioPerfil | null) {
   const [ci, setCi] = useState('')
   const [ciExtension, setCiExtension] = useState('')
   const [perfilCompletado, setPerfilCompletado] = useState(false)
   const [guardandoPerfil, setGuardandoPerfil] = useState(false)
-  const [subiendoFoto, setSubiendoFoto] = useState(false)
-  const [mensajePerfil, setMensajePerfil] = useState('')
-  const [errorPerfil, setErrorPerfil] = useState('')
+
+  // Errores individuales por campo
+  const [errorCi, setErrorCi] = useState('')
+  const [errorExtension, setErrorExtension] = useState('')
+  const [errorFoto, setErrorFoto] = useState('')
   const [fotoCapturada, setFotoCapturada] = useState<File | null>(null)
 
   useEffect(() => {
-    setPerfilCompletado(usuario?.primer_acceso_completado === true)
+    setPerfilCompletado(Boolean(usuario?.primer_acceso_completado))
     setCi(usuario?.ci ?? '')
     setCiExtension(usuario?.ci_extension ?? '')
-  }, [usuario?.id])
+  }, [usuario?.id, usuario?.primer_acceso_completado])
 
-  const guardarPerfil = async () => {
-    if (!usuario?.id) {
-      setErrorPerfil('No se encontró el ID del estudiante.')
-      return
-    }
+  const guardarTodoElPerfil = async () => {
+    setErrorCi('')
+    setErrorExtension('')
+    setErrorFoto('')
 
+    let hayErrores = false
+
+    // Validación preliminar del CI
     if (!ci.trim()) {
-      setErrorPerfil('El CI es obligatorio.')
-      return
+      setErrorCi('El número de carnet de identidad es obligatorio.')
+      hayErrores = true
+    } else if (!/^[0-9]{5,10}$/.test(ci.trim())) {
+      setErrorCi('El CI debe contener entre 5 y 10 dígitos numéricos.')
+      hayErrores = true
     }
 
-    if (!/^[0-9]+$/.test(ci.trim())) {
-      setErrorPerfil('El CI debe contener solamente números.')
-      return
+    // Validación preliminar de Extensión
+    if (ciExtension.trim() && !/^[a-zA-Z0-9]{1,5}$/.test(ciExtension.trim())) {
+      setErrorExtension('El complemento debe ser alfanumérico (máximo 5 caracteres).')
+      hayErrores = true
     }
+
+    // Validación preliminar de Fotografía
+    if (!usuario?.foto_perfil_url && !fotoCapturada) {
+      setErrorFoto('Es obligatorio capturar una fotografía en vivo antes de guardar.')
+      hayErrores = true
+    }
+
+    if (hayErrores) return
 
     try {
       setGuardandoPerfil(true)
-      setErrorPerfil('')
-      setMensajePerfil('')
 
-      const respuesta = await estudiantesService.completarDatos({
+      // PASO 1: Guardar CI primero. Si falla aquí, se aborta y la foto NUNCA se sube
+      const resCi = await estudiantesService.completarDatos({
         ci: ci.trim(),
-        ci_extension: ciExtension || null,
+        ci_extension: ciExtension.trim() ? ciExtension.trim().toUpperCase() : null,
       })
 
-      const completado =
-        respuesta.data.primer_acceso_completado === true
-
-      setPerfilCompletado(completado)
-
-      const usuarioActualizado = {
-        ...usuario,
-        ci: respuesta.data.ci,
-        primer_acceso_completado: completado,
+      // PASO 2: Solo si el CI fue aceptado, subimos la foto
+      let nuevaFotoUrl = usuario?.foto_perfil_url ?? null
+      if (fotoCapturada) {
+        const resFoto = await estudiantesService.subirFoto(fotoCapturada)
+        nuevaFotoUrl = resFoto.data.foto_perfil_url
       }
 
-      localStorage.setItem(
-        'user_data',
-        JSON.stringify(usuarioActualizado),
-      )
+      // PASO 3: Guardar el objeto actualizado en localStorage
+      const usuarioActualizado = {
+        ...usuario,
+        ci: resCi.data.ci,
+        ci_extension: resCi.data.ci_extension,
+        foto_perfil_url: nuevaFotoUrl,
+        primer_acceso_completado: true,
+      }
 
-      setMensajePerfil(
-        completado
-          ? 'Perfil completado correctamente.'
-          : 'CI guardado. Ahora debes subir tu fotografía.',
-      )
+      localStorage.setItem('user_data', JSON.stringify(usuarioActualizado))
+      setPerfilCompletado(true)
     } catch (error) {
-      console.error('Error al guardar el perfil:', error)
-      setErrorPerfil(
-        'No se pudieron guardar los datos. Verifica el CI e inténtalo nuevamente.',
-      )
+      const { message, errors } = extraerErroresBackend(error)
+
+      // Mapear cada error del backend exactamente debajo de su input correspondiente
+      if (errors.ci?.[0]) {
+        setErrorCi(errors.ci[0])
+      }
+      if (errors.ci_extension?.[0]) {
+        setErrorExtension(errors.ci_extension[0])
+      }
+      if (errors.foto?.[0]) {
+        setErrorFoto(errors.foto[0])
+      }
+
+      if (!errors.ci && !errors.ci_extension && !errors.foto) {
+        // Fallback si vino un mensaje de error plano
+        if (message.toLowerCase().includes('extensión') || message.toLowerCase().includes('complemento')) {
+          setErrorExtension(message)
+        } else if (message.toLowerCase().includes('ci') || message.toLowerCase().includes('carnet')) {
+          setErrorCi(message)
+        } else {
+          setErrorFoto(message)
+        }
+      }
     } finally {
       setGuardandoPerfil(false)
     }
   }
 
-  const subirFotografia = async () => {
-    if (!usuario?.id || !fotoCapturada) {
-      setErrorPerfil('Primero debes tomar una fotografía con la cámara.')
-      return
-    }
-
-    try {
-      setSubiendoFoto(true)
-      setErrorPerfil('')
-      setMensajePerfil('')
-
-      const respuesta = await estudiantesService.subirFoto(fotoCapturada)
-
-      const completado =
-        respuesta.data.primer_acceso_completado === true
-
-      const usuarioActualizado = {
-        ...usuario,
-        foto_perfil_url: respuesta.data.foto_perfil_url,
-        ci: respuesta.data.ci,
-        ci_extension: respuesta.data.ci_extension,
-        primer_acceso_completado: completado,
-      }
-
-      localStorage.setItem(
-        'user_data',
-        JSON.stringify(usuarioActualizado),
-      )
-
-      setPerfilCompletado(completado)
-      setFotoCapturada(null)
-
-      setMensajePerfil(
-        completado
-          ? 'Fotografía registrada y perfil completado.'
-          : 'Fotografía registrada. Guarda tu CI para completar el perfil.',
-      )
-    } catch (error) {
-      console.error('Error al subir la fotografía:', error)
-      setErrorPerfil(
-        'No se pudo registrar la fotografía. Comprueba la conexión e inténtalo nuevamente.',
-      )
-    } finally {
-      setSubiendoFoto(false)
-    }
-  }
-
   return {
     ci,
-    setCi,
+    setCi: (v: string) => {
+      setCi(v)
+      if (errorCi) setErrorCi('')
+    },
     ciExtension,
-    setCiExtension,
+    setCiExtension: (v: string) => {
+      setCiExtension(v)
+      if (errorExtension) setErrorExtension('')
+    },
     perfilCompletado,
-    setPerfilCompletado,
     guardandoPerfil,
-    subiendoFoto,
-    mensajePerfil,
-    setMensajePerfil,
-    errorPerfil,
-    setErrorPerfil,
+    errorCi,
+    errorExtension,
+    errorFoto,
     fotoCapturada,
     setFotoCapturada,
-    guardarPerfil,
-    subirFotografia,
+    guardarTodoElPerfil,
   }
 }

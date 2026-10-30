@@ -14,8 +14,29 @@ class HabilitacionExamenController extends Controller
 {
     public function index(Request $request, string $examenId): JsonResponse
     {
-        \App\Services\AccesoExamen::autorizar($request, \App\Services\AccesoExamen::buscar($examenId));
-        $examen = Examen::with(['estudiantes' => function ($query) {
+        $user = $request->user();
+
+        // Obtener examen base
+        $examen = Examen::findOrFail($examenId);
+
+        // Determinar si es docente titular o admin
+        $esDocenteOAdmin = \App\Services\AccesoExamen::permite($request, $examen);
+
+        // Determinar si es auxiliar asignado
+        $tablaAuxiliar = DB::getSchemaBuilder()->hasTable('examen_auxiliares')
+            ? 'examen_auxiliares'
+            : 'examen_auxiliar';
+
+        $esAuxiliar = DB::table($tablaAuxiliar)
+            ->where('id_examen', $examen->id)
+            ->where('id_auxiliar', $user->id)
+            ->whereIn('estado', ['Activo', 'Aceptada'])
+            ->exists();
+
+        abort_unless($esDocenteOAdmin || $esAuxiliar, 403, 'Acceso denegado: no tienes permisos para ver el padrón de este examen.');
+
+        // Consultar estudiantes: si es auxiliar, filtrar por su id_auxiliar
+        $examen->load(['estudiantes' => function ($query) use ($esDocenteOAdmin, $esAuxiliar, $user) {
             $query->select(
                 'estudiantes.id', 
                 'codigo_sis', 
@@ -25,8 +46,14 @@ class HabilitacionExamenController extends Controller
                 'apellido_paterno', 
                 'apellido_materno', 
                 'email_institucional'
-            )->withPivot('estado', 'motivo_estado', 'ajuste_manual', 'fecha_ajuste_manual');
-        }])->findOrFail($examenId);
+            )
+            ->withPivot('estado', 'motivo_estado', 'ajuste_manual', 'fecha_ajuste_manual', 'id_auxiliar');
+
+            // Filtro por la columna asignada por DistribuyeAuxiliares
+            if (!$esDocenteOAdmin && $esAuxiliar) {
+                $query->wherePivot('id_auxiliar', $user->id);
+            }
+        }]);
 
         $estudiantes = $examen->estudiantes->map(function ($estudiante) {
             return [

@@ -14,6 +14,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
+
+// toma los 4 estudiantes del seeder estudiantes y pone al segundo parcial
+// toma 2 estudiantes 202104512 / 202209123 y pone 20202020 como inhabilitado, y el 202301641 no esta en el sistema
+// los 3 auxiliares se van a primer parcial y seegundo parcial
 class ExamenSeeder2 extends Seeder
 {
     use DistribuyeAuxiliares;
@@ -92,7 +96,7 @@ class ExamenSeeder2 extends Seeder
                     'apellido_paterno'         => $aux['apellido_paterno'],
                     'apellido_materno'         => $aux['apellido_materno'],
                     'password'                 => Hash::make('SMG43210'),
-                    'primer_acceso_completado' => DB::raw('true'),
+                    'primer_acceso_completado' => DB::raw('false'),
                     'activo'                   => DB::raw('true'),
                     'es_auxiliar'              => DB::raw('true'),
                     'created_at'               => now(),
@@ -124,7 +128,7 @@ class ExamenSeeder2 extends Seeder
             'estado'     => 'Programado',
             'fecha'      => $ahora->format('Y-m-d'),
             'hora_ini'   => $ahora->copy()->subMinutes(15)->format('H:i:s'),
-            'hora_fin'   => $ahora->copy()->addMinutes(20)->format('H:i:s'),
+            'hora_fin'   => $ahora->copy()->addMinutes(120)->format('H:i:s'),
         ]);
         $examenActivo->save();
 
@@ -140,7 +144,7 @@ class ExamenSeeder2 extends Seeder
             'estado'     => 'Programado',
             'fecha'      => $ahora->format('Y-m-d'),
             'hora_ini'   => $ahora->copy()->subMinutes(90)->format('H:i:s'),
-            'hora_fin'   => $ahora->copy()->addMinutes(18)->format('H:i:s'),
+            'hora_fin'   => $ahora->copy()->addMinutes(120)->format('H:i:s'),
         ]);
         $examenExpirado->save();
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Menu, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -51,8 +51,33 @@ export const Header: React.FC = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const { isAuthenticated, role, name: userName } = authService.getCurrentUser();
-  const normalizedRole = role.toLowerCase() === 'administrador' ? 'admin' : role.toLowerCase();
+  const { isAuthenticated, role: initialRole, name: userName } = authService.getCurrentUser();
+  const [activeRole, setActiveRole] = useState(
+    (localStorage.getItem('user_role') || initialRole).toLowerCase()
+  );
+
+  // Escuchar el cambio inmediato de rol desde el switch del Dashboard
+  useEffect(() => {
+    const handleRolCambiado = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      if (customEvent.detail) {
+        setActiveRole(customEvent.detail.toLowerCase());
+      } else {
+        const nuevo = localStorage.getItem('user_role');
+        if (nuevo) setActiveRole(nuevo.toLowerCase());
+      }
+    };
+
+    window.addEventListener('rolCambiado', handleRolCambiado);
+    window.addEventListener('storage', handleRolCambiado);
+
+    return () => {
+      window.removeEventListener('rolCambiado', handleRolCambiado);
+      window.removeEventListener('storage', handleRolCambiado);
+    };
+  }, []);
+
+  const normalizedRole = activeRole === 'administrador' ? 'admin' : activeRole;
   const navItems = NAV_ITEMS_BY_ROLE[normalizedRole] || NAV_ITEMS_BY_ROLE.docente;
 
   const goTo = (href: string) => {
@@ -124,7 +149,7 @@ export const Header: React.FC = () => {
                     {userName}
                   </span>
                   <span className="text-[11px] capitalize text-muted-foreground">
-                    {role}
+                    {activeRole}
                   </span>
                 </div>
                 <Button

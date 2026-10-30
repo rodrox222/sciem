@@ -347,7 +347,8 @@ class EstudianteController extends Controller
         $estudiante->ci_extension = !empty($data['ci_extension']) ? strtoupper(trim($data['ci_extension'])) : null;
 
         // Requiere obligatoriamente AMBOS: CI y Foto de perfil subida
-        $estudiante->primer_acceso_completado = !empty($estudiante->ci) && !empty($estudiante->foto_perfil_url);
+        $accesoCompleto = (!empty($estudiante->ci) && !empty($estudiante->foto_perfil_url));
+        $estudiante->primer_acceso_completado = DB::raw($accesoCompleto ? 'true' : 'false');
         $estudiante->save();
 
         return response()->json([
@@ -359,7 +360,7 @@ class EstudianteController extends Controller
                 'ci'                       => $estudiante->ci,
                 'ci_extension'             => $estudiante->ci_extension,
                 'foto_perfil_url'          => $estudiante->foto_perfil_url,
-                'primer_acceso_completado' => (bool) $estudiante->primer_acceso_completado,
+                'primer_acceso_completado' => $accesoCompleto,
             ],
         ], 200);
     }
@@ -409,7 +410,8 @@ class EstudianteController extends Controller
         $estudiante->foto_perfil_url = '/storage/' . $rutaAlmacenada;
 
         // Requiere obligatoriamente AMBOS: CI y Foto de perfil
-        $estudiante->primer_acceso_completado = !empty($estudiante->ci) && !empty($estudiante->foto_perfil_url);
+        $accesoCompleto = (!empty($estudiante->ci) && !empty($estudiante->foto_perfil_url));
+        $estudiante->primer_acceso_completado = DB::raw($accesoCompleto ? 'true' : 'false');
         $estudiante->save();
 
         $this->registrarAuditoria($request, 'ESTUDIANTE_FOTO_ACTUALIZADA', [
@@ -426,7 +428,7 @@ class EstudianteController extends Controller
                 'ci'                       => $estudiante->ci,
                 'ci_extension'             => $estudiante->ci_extension,
                 'foto_perfil_url'          => $estudiante->foto_perfil_url,
-                'primer_acceso_completado' => (bool) $estudiante->primer_acceso_completado,
+                'primer_acceso_completado' => $accesoCompleto,
             ],
         ], 200);
     }
