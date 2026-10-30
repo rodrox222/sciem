@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  BookOpenCheck, CalendarDays, ChevronRight, CircleAlert,
+  ArrowLeftRight, BookOpenCheck, CalendarDays, ChevronRight, CircleAlert,
   ClipboardList, DoorOpen, GraduationCap, RefreshCw,
   ShieldCheck, UsersRound,
 } from 'lucide-react'
@@ -160,7 +160,20 @@ function ResumenPorRol({ data }: { data: DashboardResponse }) {
 }
 
 export function DashboardUnificado() {
-  const rolLocal = normalizarRolDashboard(localStorage.getItem('user_role'))
+  const [rolActivo, setRolActivo] = useState<RolDashboard>(() => {
+    return normalizarRolDashboard(localStorage.getItem('user_role')) || 'estudiante'
+  })
+
+  // Detectar si el usuario tiene doble rol (es_auxiliar = true)
+  const [esUsuarioDual] = useState<boolean>(() => {
+    try {
+      const u = JSON.parse(localStorage.getItem('user_data') || '{}')
+      return Boolean(u.es_auxiliar || u.roles_disponibles?.includes('auxiliar'))
+    } catch {
+      return false
+    }
+  })
+
   const [revision, setRevision] = useState(0)
   const [respuesta, setRespuesta] = useState<DashboardResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -168,15 +181,25 @@ export function DashboardUnificado() {
 
   useEffect(() => {
     let activo = true
+    setLoading(true)
+    setError('')
+
     dashboardService.obtener()
       .then((data) => {
         if (!activo) return
-        if (!data.success || !data.secciones?.resumen || !rolLocal || data.rol !== rolLocal) {
-          setError('El servidor no autorizó este dashboard para el rol de tu sesión.')
+        if (!data.success || !data.secciones?.resumen) {
+          setError('El servidor no devolvió información válida para el dashboard.')
           setRespuesta(null)
           return
         }
-        setRespuesta(data)
+
+        // Si es usuario dual, adaptamos la visualización al rol seleccionado
+        const dataAdaptada: DashboardResponse = {
+          ...data,
+          rol: esUsuarioDual ? rolActivo : data.rol,
+        }
+
+        setRespuesta(dataAdaptada)
         setError('')
       })
       .catch((e: unknown) => {
@@ -190,7 +213,26 @@ export function DashboardUnificado() {
       })
       .finally(() => { if (activo) setLoading(false) })
     return () => { activo = false }
-  }, [revision, rolLocal])
+  }, [revision, rolActivo, esUsuarioDual])
+
+  const alternarModo = (nuevoRol: RolDashboard) => {
+    if (nuevoRol === rolActivo) return
+    setRolActivo(nuevoRol)
+    
+    localStorage.setItem('user_role', nuevoRol)
+
+    try {
+      const rawUser = localStorage.getItem('user_data')
+      if (rawUser) {
+        const parsed = JSON.parse(rawUser)
+        parsed.rol = nuevoRol
+        localStorage.setItem('user_data', JSON.stringify(parsed))
+      }
+    } catch {
+    }
+
+    window.dispatchEvent(new CustomEvent('rolCambiado', { detail: nuevoRol }))
+  }
 
   const reintentar = () => {
     setLoading(true)
@@ -205,12 +247,44 @@ export function DashboardUnificado() {
         <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-widest text-sci-cyan">Panel unificado de SCI</p>
           <h1 className="mt-1 break-words text-2xl font-extrabold text-sci-navy sm:text-3xl">
-            {respuesta ? `Dashboard de ${TITULOS[respuesta.rol]}` : 'Dashboard'}
+            {`Dashboard de ${TITULOS[rolActivo] || 'Usuario'}`}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Resumen del usuario autenticado, según los datos autorizados por el servidor.
           </p>
+
+          {/* Switch de modo para estudiantes que son auxiliares */}
+          {esUsuarioDual && (
+            <div className="mt-3 inline-flex items-center gap-1 rounded-xl border border-border bg-muted/50 p-1 shadow-2xs">
+              <span className="px-2.5 text-xs font-semibold text-muted-foreground">
+                Vista actual:
+              </span>
+              <button
+                type="button"
+                onClick={() => alternarModo('estudiante')}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                  rolActivo === 'estudiante'
+                    ? 'bg-card text-sci-navy shadow-xs border border-border'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Estudiante
+              </button>
+              <button
+                type="button"
+                onClick={() => alternarModo('auxiliar')}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                  rolActivo === 'auxiliar'
+                    ? 'bg-card text-sci-navy shadow-xs border border-border'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Auxiliar
+              </button>
+            </div>
+          )}
         </div>
+
         <Button type="button" variant="outline" onClick={reintentar} disabled={loading}>
           <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
           Actualizar
@@ -236,7 +310,7 @@ export function DashboardUnificado() {
 
       {!loading && respuesta && <ResumenPorRol data={respuesta} />}
 
-      {!loading && respuesta?.rol === 'estudiante' && (
+      {!loading && rolActivo === 'estudiante' && (
         <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
           Para generar tu QR, verificar habilitación o actualizar tu fotografía, visita{' '}
           <Link to="/estudiante" className="font-semibold text-sci-blue underline underline-offset-2">Mi módulo de estudiante</Link>.

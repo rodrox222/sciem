@@ -28,7 +28,7 @@ export const IdleTimer: React.FC = () => {
         </span>
 
         <h3 className="text-xl sm:text-2xl font-bold text-sci-navy tracking-tight mb-2">
-          ¿Sigues trabajando?
+          ¿Sigues ahí?
         </h3>
 
         <p className="text-xs text-muted-foreground max-w-[300px] leading-relaxed mb-6">

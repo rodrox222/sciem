@@ -1,0 +1,19 @@
+# Bloquear entornos y credenciales
+.env
+.env.*
+gui/.env
+api/.env
+
+# Bloquear llaves y certificados
+android/app/*.jks
+*.keystore
+
+# Bloquear dependencias y compilados
+node_modules/
+vendor/
+dist/
+build/
+android/app/build/
+
+# Bloquear control de versiones
+.git/

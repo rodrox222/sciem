@@ -15,7 +15,9 @@ import {
   X,
 } from 'lucide-react'
 import { estudiantesService } from '@/services/estudiantes.service'
+
 type UsuarioEstudiante = UsuarioPerfil
+
 export default function EstudianteDashboardPage() {
   const [camaraAbierta, setCamaraAbierta] = useState(false)
   const [errorCamara, setErrorCamara] = useState('')
@@ -27,6 +29,7 @@ export default function EstudianteDashboardPage() {
   const examenesPorPagina = 6
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
+
   // Cambio de contraseña
   const [passwordActual, setPasswordActual] = useState('')
   const [passwordNueva, setPasswordNueva] = useState('')
@@ -36,6 +39,7 @@ export default function EstudianteDashboardPage() {
   const [errorPassword, setErrorPassword] = useState('')
   const [mostrarPassword, setMostrarPassword] = useState(false)
   const [modalPasswordAbierto, setModalPasswordAbierto] = useState(false)
+
   const usuario: UsuarioEstudiante | null = (() => {
     try {
       const guardado = localStorage.getItem('user_data')
@@ -44,6 +48,7 @@ export default function EstudianteDashboardPage() {
       return null
     }
   })()
+
   const {
     examenes,
     cargando,
@@ -52,7 +57,9 @@ export default function EstudianteDashboardPage() {
   } = useMisExamenes({
     usuarioId: usuario?.id,
   })
+
   const perfil = usePerfilEstudiante(usuario)
+
   const examenesFiltrados = useMemo(() => {
     const termino = busquedaExamen.trim().toLocaleLowerCase('es')
 
@@ -69,17 +76,19 @@ export default function EstudianteDashboardPage() {
       ),
     )
   }, [examenes, busquedaExamen])
+
   const totalPaginas = Math.ceil(examenesFiltrados.length / examenesPorPagina)
 
   const examenesPaginados = useMemo(() => {
     const inicio = (paginaActual - 1) * examenesPorPagina
-
     return examenesFiltrados.slice(inicio, inicio + examenesPorPagina)
   }, [examenesFiltrados, paginaActual, examenesPorPagina])
+
   const limpiarBusqueda = () => {
     setBusquedaExamen('')
     setPaginaActual(1)
   }
+
   useEffect(() => {
     setPaginaActual(1)
   }, [busquedaExamen, examenesPorPagina])
@@ -89,6 +98,7 @@ export default function EstudianteDashboardPage() {
       setPaginaActual(Math.max(1, totalPaginas))
     }
   }, [paginaActual, totalPaginas])
+
   const {
     ci,
     setCi,
@@ -96,22 +106,20 @@ export default function EstudianteDashboardPage() {
     setCiExtension,
     perfilCompletado,
     guardandoPerfil,
-    subiendoFoto,
-    mensajePerfil,
-    setMensajePerfil,
-    errorPerfil,
-    setErrorPerfil,
+    errorFoto,
+    errorCi,
+    errorExtension,
+    guardarTodoElPerfil,
     fotoCapturada,
     setFotoCapturada,
-    guardarPerfil,
-    subirFotografia,
   } = perfil
+
   const nombreCompleto =
     [usuario?.nombre, usuario?.apellido].filter(Boolean).join(' ') ||
     'Estudiante'
+
   const abrirCamara = async () => {
     setErrorCamara('')
-    setMensajePerfil('')
     setFotoCapturada(null)
 
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -133,18 +141,20 @@ export default function EstudianteDashboardPage() {
 
       streamRef.current = stream
       setCamaraAbierta(true)
-    } catch (error) {
-      console.error('Error al abrir la cámara:', error)
+    } catch (err) {
+      console.error('Error al abrir la cámara:', err)
       setErrorCamara(
         'No se pudo abrir la cámara. Comprueba los permisos del navegador.',
       )
     }
   }
+
   const cerrarCamara = () => {
     streamRef.current?.getTracks().forEach((track) => track.stop())
     streamRef.current = null
     setCamaraAbierta(false)
   }
+
   useEffect(() => {
     if (!camaraAbierta) return
 
@@ -155,8 +165,8 @@ export default function EstudianteDashboardPage() {
 
     video.srcObject = stream
 
-    void video.play().catch((error) => {
-      console.error('No se pudo reproducir la cámara:', error)
+    void video.play().catch((err) => {
+      console.error('No se pudo reproducir la cámara:', err)
       setErrorCamara(
         'No se pudo mostrar la cámara. Comprueba los permisos del navegador.',
       )
@@ -166,6 +176,7 @@ export default function EstudianteDashboardPage() {
       video.srcObject = null
     }
   }, [camaraAbierta])
+
   const capturarFotografia = () => {
     const video = videoRef.current
     const canvas = canvasRef.current
@@ -221,6 +232,7 @@ export default function EstudianteDashboardPage() {
       streamRef.current?.getTracks().forEach((track) => track.stop())
     }
   }, [])
+
   const cambiarPassword = async () => {
     setMensajePassword('')
     setErrorPassword('')
@@ -262,15 +274,14 @@ export default function EstudianteDashboardPage() {
       setPasswordConfirmacion('')
       setMostrarPassword(false)
 
-      // Mostrar el mensaje de éxito y cerrar el modal después de 2 segundos.
       setTimeout(() => {
         setModalPasswordAbierto(false)
         setMensajePassword('')
       }, 2000)
-    } catch (error: unknown) {
-      console.error('Error al cambiar la contraseña:', error)
+    } catch (err: unknown) {
+      console.error('Error al cambiar la contraseña:', err)
 
-      const errorApi = error as {
+      const errorApi = err as {
         response?: {
           data?: {
             message?: string
@@ -293,83 +304,65 @@ export default function EstudianteDashboardPage() {
       setCambiandoPassword(false)
     }
   }
+
   return (
     <div className="space-y-6 p-4 md:p-6">
-      <section className="rounded-2xl border bg-card p-6 shadow-sm">
-        <div className="mb-5 flex items-center gap-3">
-          <div className="rounded-lg bg-primary/10 p-2 text-primary">
-            <UserRound size={22} />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-primary">
-              Módulo de estudiante
-            </p>
-            <h2 className="text-lg font-semibold">Mi perfil</h2>
-            <p className="text-sm text-muted-foreground">
-              {nombreCompleto}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {perfilCompletado
-                ? 'Tus datos personales están registrados.'
-                : 'Completa tus datos personales para continuar.'}
-            </p>
-          </div>
-        </div>
-        {perfilCompletado ? (
-          <div className="space-y-3">
-            <p className="text-sm text-green-700">
-              Perfil completado correctamente.
-            </p>
-
-            {usuario?.foto_perfil_url && (
+      {/* 
+        PRIMER ACCESO OBLIGATORIO:
+        Solo se muestra si el perfil NO está completado.
+        Una vez completado, este bloque desaparece y queda la vista normal.
+      */}
+      {!perfilCompletado ? (
+        <PerfilEstudiante
+          ci={ci}
+          ciExtension={ciExtension}
+          errorCi={errorCi}             
+          errorExtension={errorExtension} 
+          errorFoto={errorFoto}
+          guardandoPerfil={guardandoPerfil}
+          camaraAbierta={camaraAbierta}
+          fotoCapturada={fotoCapturada}
+          errorCamara={errorCamara}
+          videoRef={videoRef}
+          canvasRef={canvasRef}
+          onCiChange={setCi}
+          onCiExtensionChange={setCiExtension}
+          onGuardarTodo={guardarTodoElPerfil}
+          onAbrirCamara={abrirCamara}
+          onCapturarFotografia={capturarFotografia}
+          onCerrarCamara={cerrarCamara}
+          onDescartarFotografia={() => setFotoCapturada(null)}
+        />
+      ) : (
+        <section className="rounded-2xl border bg-card p-6 shadow-sm">
+          <div className="flex items-center gap-4">
+            {usuario?.foto_perfil_url ? (
               <img
                 src={usuario.foto_perfil_url}
                 alt="Fotografía del estudiante"
-                className="h-24 w-24 rounded-xl border object-cover"
+                className="h-16 w-16 rounded-full border object-cover shadow-sm"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none'
                 }}
               />
+            ) : (
+              <div className="rounded-full bg-primary/10 p-3 text-primary">
+                <UserRound size={28} />
+              </div>
             )}
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+                Estudiante regular
+              </p>
+              <h2 className="text-xl font-bold">{nombreCompleto}</h2>
+              <p className="text-sm text-muted-foreground">
+                CI: {usuario?.ci ? `${usuario.ci} ${usuario.ci_extension || ''}` : 'Sin CI registrado'}
+              </p>
+            </div>
           </div>
-        ) : (
-          <PerfilEstudiante
-            ci={ci}
-            ciExtension={ciExtension}
-            errorPerfil={errorPerfil}
-            mensajePerfil={mensajePerfil}
-            guardandoPerfil={guardandoPerfil}
-            camaraAbierta={camaraAbierta}
-            fotoCapturada={fotoCapturada}
-            subiendoFoto={subiendoFoto}
-            errorCamara={errorCamara}
-            videoRef={videoRef}
-            canvasRef={canvasRef}
-            onCiChange={(valor) => {
-              setCi(valor)
-              setErrorPerfil('')
-            }}
-            onCiExtensionChange={setCiExtension}
-            onGuardarPerfil={guardarPerfil}
-            onAbrirCamara={abrirCamara}
-            onCapturarFotografia={capturarFotografia}
-            onCerrarCamara={cerrarCamara}
-            onDescartarFotografia={() => setFotoCapturada(null)}
-            onSubirFotografia={subirFotografia}
-          />
-        )}
+        </section>
+      )}
 
-        {mensajePerfil && (
-          <p className="mt-4 rounded-lg bg-green-50 p-3 text-sm text-green-800">
-            {mensajePerfil}
-          </p>
-        )}
-        {errorPerfil && (
-          <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-            {errorPerfil}
-          </p>
-        )}
-      </section>
       <CambiarPasswordDialog
         passwordActual={passwordActual}
         passwordNueva={passwordNueva}
@@ -388,6 +381,8 @@ export default function EstudianteDashboardPage() {
         setErrorPassword={setErrorPassword}
         cambiarPassword={cambiarPassword}
       />
+
+      {/* Exámenes del estudiante */}
       <MisExamenes
         cargando={cargando}
         error={error}
@@ -395,10 +390,6 @@ export default function EstudianteDashboardPage() {
         onReintentar={() => void cargarExamenes()}
       >
         <div className="space-y-5">
-          {/* Encabezado y contador */}
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          </div>
-
           {/* Buscador */}
           <div className="relative">
             <Search
@@ -426,7 +417,8 @@ export default function EstudianteDashboardPage() {
               </button>
             )}
           </div>
-          {/* Tarjetas */}
+
+          {/* Tarjetas de Exámenes */}
           {examenesFiltrados.length > 0 ? (
             <>
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -504,7 +496,6 @@ export default function EstudianteDashboardPage() {
         </div>
       </MisExamenes>
 
-      {/* Canvas para la fotografía del perfil */}
       <canvas ref={canvasRef} className="hidden" />
     </div>
   )
