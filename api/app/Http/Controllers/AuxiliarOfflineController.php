@@ -34,8 +34,7 @@ class AuxiliarOfflineController extends Controller
             return response()->json(['message' => 'No tiene permisos para este examen.'], 403);
         }
 
-        // 1. Estudiantes inscritos en la evaluación
-        $estudiantes = DB::table('estudiante_examen as ee')
+        $todosEstudiantes = DB::table('estudiante_examen as ee')
             ->join('estudiantes as e', 'ee.id_estudiante', '=', 'e.id')
             ->where('ee.id_examen', $idExamen)
             ->select([
@@ -48,46 +47,50 @@ class AuxiliarOfflineController extends Controller
                 'e.apellido_materno',
                 'e.foto_perfil_url',
                 'ee.estado as estado_habilitacion',
+                'ee.motivo_estado',
                 'ee.fecha_ingreso',
+                'ee.id_auxiliar',
             ])
             ->orderBy('e.apellido_paterno', 'asc')
             ->orderBy('e.apellido_materno', 'asc')
             ->orderBy('e.nombre', 'asc')
             ->get();
 
-        // 2. Prerrequisitos de la tabla real prerrequisitos_examen
+        // 1. Docente descarga TODO el padrón completo
+        if ($esDocente) {
+            $estudiantesParaEscanear = $todosEstudiantes;
+            $otrosModulosSis = [];
+        } else {
+            // 2. Auxiliar descarga solo SUS estudiantes asignados
+            $estudiantesParaEscanear = $todosEstudiantes->filter(function ($item) use ($user) {
+                return $item->id_auxiliar === $user->id;
+            })->values();
+
+            // Lista ligera de códigos SIS del resto del examen para detectar "NO_ASIGNADO" offline
+            $otrosModulosSis = $todosEstudiantes->filter(function ($item) use ($user) {
+                return $item->id_auxiliar !== $user->id;
+            })->pluck('codigo_sis')->toArray();
+        }
+
+        // Expulsiones vigentes para validar offline igual que en el online
+        $expulsiones = DB::table('expulsiones')
+            ->where('id_examen', $idExamen)
+            ->pluck('id_estudiante')
+            ->toArray();
+
+        // Prerrequisitos
         $prerrequisitos = DB::table('prerrequisitos_examen')
             ->where('id_examen', $idExamen)
-            ->select([
-                'id',
-                'id_examen',
-                'titulo as nombre',
-                'descripcion',
-            ])
+            ->select(['id', 'id_examen', 'titulo as nombre', 'descripcion'])
             ->get();
 
-        // 3. Normas asociadas al examen mediante examen_norma
+        // Normas activas
         $normas = DB::table('examen_norma as en')
             ->join('normas as n', 'en.id_norma', '=', 'n.id')
             ->where('en.id_examen', $idExamen)
             ->where('n.estado', 'Activo')
-            ->select([
-                'n.id',
-                'n.titulo',
-                'n.descripcion',
-                'n.tipo',
-            ])
+            ->select(['n.id', 'n.titulo', 'n.descripcion', 'n.tipo'])
             ->get();
-
-        $primerEstudiante = $estudiantes->first();
-        $ultimoEstudiante = $estudiantes->last();
-
-        $rangoInfo = [
-            'es_docente'      => $esDocente,
-            'total_asignados' => $estudiantes->count(),
-            'desde'           => $primerEstudiante ? "{$primerEstudiante->apellido_paterno} {$primerEstudiante->nombre}" : null,
-            'hasta'           => $ultimoEstudiante ? "{$ultimoEstudiante->apellido_paterno} {$ultimoEstudiante->nombre}" : null,
-        ];
 
         return response()->json([
             'examen' => [
@@ -104,9 +107,11 @@ class AuxiliarOfflineController extends Controller
             ],
             'id_usuario_solicitante' => $user->id,
             'rol'                    => $esDocente ? 'docente' : 'auxiliar',
-            'rango_asignado'         => $rangoInfo,
-            'total_estudiantes'      => $estudiantes->count(),
-            'estudiantes'            => $estudiantes,
+            'total_general_examen'   => $todosEstudiantes->count(),
+            'total_asignados'        => $estudiantesParaEscanear->count(),
+            'estudiantes'            => $estudiantesParaEscanear,
+            'otros_modulos_sis'      => $otrosModulosSis,
+            'expulsados_ids'         => $expulsiones,
             'prerrequisitos'         => $prerrequisitos,
             'normas'                 => $normas,
         ], 200);
@@ -167,7 +172,31 @@ class AuxiliarOfflineController extends Controller
                         continue;
                     }
 
-                    $inscripcion = DB::table('estudiante_examen')->where('id_examen', $idExamen)->where('id_estudiante', $estudiante->id)->first();
+                    $inscripcion = DB::table('estudiante_examen')
+                        ->where('id_examen', $idExamen)
+                        ->where('id_estudiante', $estudiante->id)
+                        ->first();
+
+                    // Control de Asignación Estricta (Opción B)
+                    if (!$esDocente && isset($inscripcion->id_auxiliar) && $inscripcion->id_auxiliar !== $user->id) {
+                        $errores[] = [
+                            'codigo_sis' => $codigoSis,
+                            'error'      => 'Estudiante no asignado al módulo de este auxiliar.',
+                        ];
+
+                        // Registrar como intento no autorizado
+                        $this->registrarIntentoDirecto(
+                            $idExamen,
+                            $estudiante->id,
+                            'NO_ASIGNADO',
+                            $rolAuditor,
+                            $user,
+                            $codigoSis,
+                            $fechaIngreso
+                        );
+                        continue;
+                    }
+
                     if (!$inscripcion || strcasecmp($inscripcion->estado, 'Habilitado') !== 0
                         || \App\Models\Expulsion::where('id_examen', $idExamen)->where('id_estudiante', $estudiante->id)->exists()
                         || !\App\Services\AccesoExamen::enHorario($examen, \Carbon\CarbonImmutable::instance($fechaIngreso))
@@ -209,6 +238,7 @@ class AuxiliarOfflineController extends Controller
                     $resultadoLog = match ($tipoIntento) {
                         'INHABILITADO'        => 'RECHAZADO_INHABILITADO',
                         'REINGRESO_DUPLICADO' => 'RECHAZADO_YA_INGRESO',
+                        'NO_ASIGNADO'         => 'RECHAZADO_NO_ASIGNADO',
                         'NO_REGISTRADO',
                         'QR_INVALIDO',
                         'HORARIO_EXPIRADO'    => 'ERROR_DATOS_INVALIDOS',
@@ -229,42 +259,15 @@ class AuxiliarOfflineController extends Controller
                         \Log::warning("Error logs_asistencias en sincronización: " . $e->getMessage());
                     }
 
-                    $idIntento = (string) Str::uuid();
-                    DB::table('intentos_no_autorizados')->insert([
-                        'id'                       => $idIntento,
-                        'id_examen'                => $idExamen,
-                        'id_estudiante'            => $estudiante?->id,
-                        'tipo_intento'             => $tipoIntento,
-                        'registrado_por_user_type' => $rolAuditor,
-                        'registrado_por_user_id'   => $user->id,
-                        'fecha_hora'               => $fechaIngreso->toDateTimeString(),
-                        'created_at'               => now('America/La_Paz'),
-                        'updated_at'               => now('America/La_Paz'),
-                    ]);
-
-                    try {
-                        LogAuditoria::create([
-                            'user_type'         => get_class($user),
-                            'user_id'           => $user->id,
-                            'rol_en_el_momento' => $rolAuditor,
-                            'usuario_nombre'    => trim("{$user->nombre} {$user->apellido_paterno}"),
-                            'usuario_email'     => $user->email,
-                            'modulo'            => 'INTENTOS_NO_AUTORIZADOS',
-                            'accion'            => 'INTENTO_OFFLINE_SINCRONIZADO',
-                            'ip_origen'         => $request->ip() ?? '127.0.0.1',
-                            'user_agent'        => $request->userAgent() ?? 'App',
-                            'detalles'          => [
-                                'intento_id'    => $idIntento,
-                                'id_examen'     => $idExamen,
-                                'id_estudiante' => $estudiante?->id,
-                                'tipo_intento'  => $tipoIntento,
-                                'identificador' => $codigoSis,
-                            ],
-                            'created_at'        => now('America/La_Paz'),
-                        ]);
-                    } catch (\Exception $e) {
-                        \Log::warning("Error log_auditoria en sincronización: " . $e->getMessage());
-                    }
+                    $this->registrarIntentoDirecto(
+                        $idExamen,
+                        $estudiante?->id,
+                        $tipoIntento,
+                        $rolAuditor,
+                        $user,
+                        $codigoSis,
+                        $fechaIngreso
+                    );
 
                     $procesados++;
                 }
@@ -287,6 +290,54 @@ class AuxiliarOfflineController extends Controller
                 'message' => 'Error al procesar el lote de sincronización: ' . $e->getMessage(),
                 'error'   => $e->getMessage(),
             ], 500);
+        }
+    }
+
+    private function registrarIntentoDirecto(
+        string $idExamen,
+        ?string $idEstudiante,
+        string $tipoIntento,
+        string $rolAuditor,
+        $user,
+        string $codigoSis,
+        Carbon $fechaHora
+    ): void {
+        $idIntento = (string) Str::uuid();
+
+        DB::table('intentos_no_autorizados')->insert([
+            'id'                       => $idIntento,
+            'id_examen'                => $idExamen,
+            'id_estudiante'            => $idEstudiante,
+            'tipo_intento'             => $tipoIntento,
+            'registrado_por_user_type' => $rolAuditor,
+            'registrado_por_user_id'   => $user->id,
+            'fecha_hora'               => $fechaHora->toDateTimeString(),
+            'created_at'               => now('America/La_Paz'),
+            'updated_at'               => now('America/La_Paz'),
+        ]);
+
+        try {
+            LogAuditoria::create([
+                'user_type'         => get_class($user),
+                'user_id'           => $user->id,
+                'rol_en_el_momento' => $rolAuditor,
+                'usuario_nombre'    => trim("{$user->nombre} {$user->apellido_paterno}"),
+                'usuario_email'     => $user->email,
+                'modulo'            => 'INTENTOS_NO_AUTORIZADOS',
+                'accion'            => 'INTENTO_OFFLINE_SINCRONIZADO',
+                'ip_origen'         => request()->ip() ?? '127.0.0.1',
+                'user_agent'        => request()->userAgent() ?? 'App',
+                'detalles'          => [
+                    'intento_id'    => $idIntento,
+                    'id_examen'     => $idExamen,
+                    'id_estudiante' => $idEstudiante,
+                    'tipo_intento'  => $tipoIntento,
+                    'identificador' => $codigoSis,
+                ],
+                'created_at'        => now('America/La_Paz'),
+            ]);
+        } catch (\Exception $e) {
+            \Log::warning("Error log_auditoria en sincronización: " . $e->getMessage());
         }
     }
 }

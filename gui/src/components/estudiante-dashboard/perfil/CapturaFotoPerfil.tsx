@@ -1,35 +1,28 @@
-import { Camera, X } from 'lucide-react'
+import { Camera, RefreshCw, X } from 'lucide-react'
 
 interface CapturaFotoPerfilProps {
   camaraAbierta: boolean
   fotoCapturada: File | null
-  subiendoFoto: boolean
+  subiendoFoto?: boolean
   errorCamara: string
-  errorPerfil: string
-  mensajePerfil: string
   videoRef: React.RefObject<HTMLVideoElement | null>
   canvasRef: React.RefObject<HTMLCanvasElement | null>
   onAbrirCamara: () => void | Promise<void>
   onCapturarFotografia: () => void
   onCerrarCamara: () => void
   onDescartarFotografia: () => void
-  onSubirFotografia: () => void | Promise<void>
 }
 
 export default function CapturaFotoPerfil({
   camaraAbierta,
   fotoCapturada,
-  subiendoFoto,
   errorCamara,
-  errorPerfil,
-  mensajePerfil,
   videoRef,
   canvasRef,
   onAbrirCamara,
   onCapturarFotografia,
   onCerrarCamara,
   onDescartarFotografia,
-  onSubirFotografia,
 }: CapturaFotoPerfilProps) {
   return (
     <div className="mt-6 space-y-3 border-t pt-5">
@@ -59,7 +52,7 @@ export default function CapturaFotoPerfil({
             autoPlay
             playsInline
             muted
-            className="w-full rounded-xl border bg-black"
+            className="w-full rounded-xl border bg-black aspect-video object-cover"
           />
 
           <div className="flex flex-wrap gap-2">
@@ -87,49 +80,25 @@ export default function CapturaFotoPerfil({
       <canvas ref={canvasRef} className="hidden" />
 
       {fotoCapturada && (
-        <div className="space-y-3">
-          <p className="text-sm text-green-700">
-            Fotografía capturada correctamente.
+        <div className="flex items-center gap-4">
+          <p className="text-sm font-medium text-green-700">
+            ✓ Fotografía capturada correctamente
           </p>
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void onSubirFotografia()}
-              disabled={subiendoFoto}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
-            >
-              {subiendoFoto ? 'Subiendo fotografía...' : 'Guardar fotografía'}
-            </button>
-
-            <button
-              type="button"
-              onClick={onDescartarFotografia}
-              disabled={subiendoFoto}
-              className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm disabled:opacity-50"
-            >
-              <X size={16} />
-              Volver a tomar
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onDescartarFotografia}
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground underline"
+          >
+            <RefreshCw size={13} />
+            Volver a tomar
+          </button>
         </div>
       )}
 
       {errorCamara && (
         <p role="alert" className="text-sm text-red-700">
           {errorCamara}
-        </p>
-      )}
-
-      {errorPerfil && (
-        <p role="alert" className="text-sm text-red-700">
-          {errorPerfil}
-        </p>
-      )}
-
-      {mensajePerfil && (
-        <p role="status" className="text-sm text-green-700">
-          {mensajePerfil}
         </p>
       )}
     </div>

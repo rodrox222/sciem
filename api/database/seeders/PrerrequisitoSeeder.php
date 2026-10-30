@@ -55,7 +55,7 @@ class PrerrequisitoSeeder extends Seeder
                 'estado'     => 'Programado',
                 'fecha'      => $ahora->format('Y-m-d'),
                 'hora_ini'   => $ahora->copy()->subMinutes(10)->format('H:i:s'),
-                'hora_fin'   => $ahora->copy()->addHours(2)->format('H:i:s'),
+                'hora_fin'   => $ahora->copy()->addMinutes(30)->format('H:i:s'),
             ]
         );
 
@@ -114,7 +114,6 @@ class PrerrequisitoSeeder extends Seeder
             );
         }
 
-        // 1. Filtrar con whereRaw para evitar casteo numérico en Postgres
         $estudiantes = Estudiante::whereRaw('es_auxiliar is false')->orderBy('codigo_sis')->get();
 
         $req1 = 'aaaaaaaa-1111-1111-1111-111111111111';
@@ -126,7 +125,6 @@ class PrerrequisitoSeeder extends Seeder
             $this->asignarCumplimiento($req2, $estudiante->id, true, $docente->id);
             $this->asignarCumplimiento($req3, $estudiante->id, true, $docente->id);
 
-            // 2. Usar DB::raw('false') para ajuste_manual en Query Builder
             DB::table('estudiante_examen')->updateOrInsert(
                 ['id_examen' => $examen->id, 'id_estudiante' => $estudiante->id],
                 [
@@ -148,7 +146,6 @@ class PrerrequisitoSeeder extends Seeder
 
     private function asignarCumplimiento(string $prerrequisitoId, string $estudianteId, bool $cumplido, ?string $docenteId): void
     {
-        // 3. Forzar el literal SQL exacto para el campo cumplido
         DB::table('estudiante_prerrequisito')->updateOrInsert(
             [
                 'id_prerrequisito' => $prerrequisitoId,

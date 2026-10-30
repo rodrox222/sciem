@@ -277,11 +277,25 @@ export default function EstudianteDetalleExamenPage() {
       setMensajeQr('QR generado correctamente.')
       setFotoVerificacion(null)
       cerrarCamara()
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error al solicitar el QR:', error)
-      setErrorQr(
-        'No se pudo generar el QR. Verifica que estés habilitado para el examen e inténtalo nuevamente.',
-      )
+
+      let mensajeError = 'No se pudo generar el QR. Verifica tu estado e inténtalo nuevamente.'
+
+      if (typeof error === 'object' && error !== null) {
+        const err = error as {
+          response?: { data?: { message?: string } }
+          data?: { message?: string }
+          message?: string
+        }
+        mensajeError =
+          err.response?.data?.message ||
+          err.data?.message ||
+          err.message ||
+          mensajeError
+      }
+
+      setErrorQr(mensajeError)
     } finally {
       setSolicitandoQr(false)
     }
@@ -641,11 +655,6 @@ export default function EstudianteDetalleExamenPage() {
                   />
                 )}
 
-                {errorQr && (
-                  <p role="alert" className="text-sm text-destructive">
-                    {errorQr}
-                  </p>
-                )}
               </>
             )}
           </CardContent>

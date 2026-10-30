@@ -41,10 +41,28 @@ class VerificacionController extends Controller
         }
 
         $usuario = $request->user();
+        
+        // Detectar rol operativo considerando rol dual
         $rol = \App\Services\RolOperativo::actual($request);
+        if ((!$rol || $rol === 'estudiante') && !empty($usuario?->es_auxiliar)) {
+            $rol = 'auxiliar';
+        }
+
         $userId = $usuario?->id;
-        $esAuxiliar = $rol === 'auxiliar';
-        \App\Services\AccesoExamen::autorizar($request, $examen);
+        $esAuxiliar = ($rol === 'auxiliar');
+
+        // Validar acceso: nativo o si es auxiliar asignado en tabla pivote
+        $tieneAcceso = \App\Services\AccesoExamen::permite($request, $examen);
+        if (!$tieneAcceso && $esAuxiliar) {
+            $tablaAux = DB::getSchemaBuilder()->hasTable('examen_auxiliares') ? 'examen_auxiliares' : 'examen_auxiliar';
+            $tieneAcceso = DB::table($tablaAux)
+                ->where('id_examen', $examen->id)
+                ->where('id_auxiliar', $userId)
+                ->whereIn('estado', ['Activo', 'Aceptada'])
+                ->exists();
+        }
+        abort_unless($tieneAcceso, 403, 'Acceso denegado: no estás autorizado para escanear en esta evaluación.');
+
         if (str_contains($trimmedQr, '.') && !str_starts_with($trimmedQr, '{')) {
             \App\Services\IdentificadorQr::leer($trimmedQr, $idExamen);
         }

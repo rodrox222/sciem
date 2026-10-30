@@ -58,7 +58,7 @@ class ExamenController extends Controller
      */
     public function misExamenes(Request $request): JsonResponse
     {
-        /** @var \App\Models\Docente|\App\Models\Auxiliar|\App\Models\Admin $user */
+        /** @var \App\Models\Docente|\App\Models\Auxiliar|\App\Models\Admin|\App\Models\Estudiante $user */
         $user = $request->user();
 
         $query = Examen::with([
@@ -69,9 +69,26 @@ class ExamenController extends Controller
         ]);
 
         $rol = \App\Services\RolOperativo::actual($request);
-        if ($rol === 'docente') $query->where('id_docente', $user->id);
-        elseif ($rol === 'auxiliar') $query->whereIn('id', \App\Services\AccesoExamen::asignaciones($user)->select('id_examen'));
-        else abort_unless($rol === 'admin', 403);
+
+        // Si es estudiante con permiso de auxiliar, habilitar la vista de auxiliar
+        $esAuxiliar = ($rol === 'auxiliar') || ($user && !empty($user->es_auxiliar));
+
+        if ($rol === 'docente') {
+            $query->where('id_docente', $user->id);
+        } elseif ($esAuxiliar) {
+            $tablaAuxiliar = DB::getSchemaBuilder()->hasTable('examen_auxiliares')
+                ? 'examen_auxiliares'
+                : 'examen_auxiliar';
+
+            $asignacionesIds = DB::table($tablaAuxiliar)
+                ->where('id_auxiliar', $user->id)
+                ->whereIn('estado', ['Activo', 'Aceptada'])
+                ->pluck('id_examen');
+
+            $query->whereIn('id', $asignacionesIds);
+        } else {
+            abort_unless($rol === 'admin', 403, 'Acceso denegado: rol no autorizado.');
+        }
 
         if ($search = $request->query('search')) {
             $query->where('nombre', 'ilike', "%{$search}%");
@@ -157,8 +174,23 @@ class ExamenController extends Controller
             return response()->json(['message' => 'Examen no encontrado.'], 404);
         }
 
-        // Validación de pertenencia/rol
-        if (!\App\Services\AccesoExamen::permite($request, $examen)) {
+        $user = $request->user();
+
+        $tieneAcceso = \App\Services\AccesoExamen::permite($request, $examen);
+
+        if (!$tieneAcceso && $user && !empty($user->es_auxiliar)) {
+            $tablaAuxiliar = DB::getSchemaBuilder()->hasTable('examen_auxiliares')
+                ? 'examen_auxiliares'
+                : 'examen_auxiliar';
+
+            $tieneAcceso = DB::table($tablaAuxiliar)
+                ->where('id_examen', $examen->id)
+                ->where('id_auxiliar', $user->id)
+                ->whereIn('estado', ['Activo', 'Aceptada'])
+                ->exists();
+        }
+
+        if (!$tieneAcceso) {
             return response()->json([
                 'success' => false,
                 'message' => 'Acceso denegado: no tienes permisos para acceder a esta evaluación.',
@@ -270,11 +302,17 @@ class ExamenController extends Controller
             return $examen->id_docente === $user->id;
         }
 
-        if (!$soloEscritura && ($user instanceof Auxiliar || ($user->rol ?? '') === 'auxiliar')) {
-            return DB::table('examen_auxiliar')
+        $esAuxiliar = ($user instanceof Auxiliar) || (($user->rol ?? '') === 'auxiliar') || !empty($user->es_auxiliar);
+
+        if (!$soloEscritura && $esAuxiliar) {
+            $tablaAuxiliar = DB::getSchemaBuilder()->hasTable('examen_auxiliares')
+                ? 'examen_auxiliares'
+                : 'examen_auxiliar';
+
+            return DB::table($tablaAuxiliar)
                 ->where('id_examen', $examen->id)
                 ->where('id_auxiliar', $user->id)
-                ->where('estado', 'Aceptada')
+                ->whereIn('estado', ['Activo', 'Aceptada'])
                 ->exists();
         }
 

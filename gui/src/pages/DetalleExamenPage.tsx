@@ -48,6 +48,9 @@ export default function DetalleExamenPage() {
   const canManage = ['admin', 'administrador', 'docente', 'auxiliar'].includes(role)
   const canEditExam = ['admin', 'administrador', 'docente'].includes(role)
   const canManageAuxiliares = ['admin', 'administrador', 'docente'].includes(role)
+  
+  const canManageStudents = ['admin', 'administrador', 'docente'].includes(role)
+  
   const canExpel = canManage
 
   const requestedTab = searchParams.get('tab') || 'info'
@@ -260,7 +263,7 @@ export default function DetalleExamenPage() {
         </TabsContent>
 
         <TabsContent value="estudiantes">
-          <DetalleEstudiantesTab exam={exam} canManage={canManage} />
+          <DetalleEstudiantesTab exam={exam} canManage={canManageStudents} />
         </TabsContent>
 {canManageAuxiliares && (
   <TabsContent value="auxiliares">
