@@ -187,7 +187,7 @@ class UsersSeeder extends Seeder
                     'apellido_paterno'         => $aux['apellido_paterno'],
                     'apellido_materno'         => $aux['apellido_materno'],
                     'password'                 => Hash::make('SMG43210'),
-                    'primer_acceso_completado' => DB::raw('true'),
+                    'primer_acceso_completado' => DB::raw('false'),
                     'activo'                   => DB::raw('true'),
                     'es_auxiliar'              => DB::raw('true'),
                     'created_at'               => now(),

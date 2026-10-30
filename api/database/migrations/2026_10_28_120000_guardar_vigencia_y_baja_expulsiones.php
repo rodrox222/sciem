@@ -24,9 +24,12 @@ return new class extends Migration
         DB::statement('INSERT INTO expulsion_vigencias (id_examen, id_estudiante, id_expulsion)
             SELECT DISTINCT ON (id_examen, id_estudiante) id_examen, id_estudiante, id
             FROM expulsiones WHERE deleted_at IS NULL ORDER BY id_examen, id_estudiante, fecha_hora DESC, id DESC');
+        DB::statement("DROP INDEX IF EXISTS logs_auditoria_expulsion_id_idx");
         DB::statement("CREATE INDEX logs_auditoria_expulsion_id_idx ON logs_auditoria ((detalles->>'expulsion_id')) WHERE modulo = 'EXPULSIONES'");
+
         DB::unprepared(<<<'SQL'
-            CREATE FUNCTION sciem_expulsion_vigencia() RETURNS trigger AS $$
+            DROP TRIGGER IF EXISTS sciem_expulsion_vigencia_trigger ON expulsiones;
+            CREATE OR REPLACE FUNCTION sciem_expulsion_vigencia() RETURNS trigger AS $$
             DECLARE otra uuid;
             BEGIN
                 IF TG_OP = 'INSERT' THEN
@@ -54,7 +57,7 @@ return new class extends Migration
             CREATE TRIGGER sciem_expulsion_vigencia_trigger
             AFTER INSERT OR UPDATE OF deleted_at ON expulsiones
             FOR EACH ROW EXECUTE FUNCTION sciem_expulsion_vigencia();
-            SQL);
+        SQL);
     }
 
     public function down(): void

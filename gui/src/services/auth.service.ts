@@ -5,8 +5,14 @@ export interface User {
   id: string | number;
   nombre: string;
   apellido?: string;
-  email: string;
+  email?: string;
   rol: string;
+  codigo_sis?: string | null;
+  ci?: string | null;
+  ci_extension?: string | null;
+  foto_perfil_url?: string | null;
+  primer_acceso_completado?: boolean;
+  roles_disponibles?: string[];
 }
 
 export interface LoginResponse {
@@ -30,14 +36,7 @@ export const authService = {
 
     if (data.user) {
       localStorage.setItem('user_role', data.user.rol || '');
-      localStorage.setItem(
-        'user_data',
-        JSON.stringify({
-          id: data.user.id,
-          nombre: data.user.nombre,
-          apellido: data.user.apellido,
-        })
-      );
+      localStorage.setItem('user_data', JSON.stringify(data.user));
     }
 
     return data;
