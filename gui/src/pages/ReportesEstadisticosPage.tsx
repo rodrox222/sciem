@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { BalanceAsistencia, TarjetasEstadisticas } from '@/components/reportes/TarjetasEstadisticas'
 import { GraficoFranjas } from '@/components/reportes/GraficoFranjas'
+import { GraficosValidacion } from '@/components/reportes/GraficosValidacion'
 import { examenesService, type Examen } from '@/services/examenes.service'
 import { api, ApiError } from '@/services/api'
 import {
@@ -12,6 +13,9 @@ import {
   type FiltrosReporte,
   type RespuestaResumenReporte,
   type RespuestaFranjasReporte,
+  type RespuestaGraficosReporte,
+  type IntervaloFlujo,
+  type TipoDescargaReporte,
 } from '@/services/reportes.service'
 
 const SIN_FILTROS: FiltrosReporte = { fecha_desde: '', fecha_hasta: '' }
@@ -37,14 +41,16 @@ function formatoFecha(fecha: string | null | undefined): string {
     .format(new Date(`${dia}T00:00:00Z`))
 }
 
-function claveConsulta(examenId: string, filtros: FiltrosReporte): string {
-  return `${examenId}:${filtros.fecha_desde}:${filtros.fecha_hasta}`
+function claveConsulta(examenId: string, filtros: FiltrosReporte, intervalo: IntervaloFlujo): string {
+  return `${examenId}:${filtros.fecha_desde}:${filtros.fecha_hasta}:${intervalo}`
 }
 
 interface DatosReporte {
   clave: string
   resumen: RespuestaResumenReporte
   franjas: RespuestaFranjasReporte
+  graficos: RespuestaGraficosReporte | null
+  errorGraficos: string
 }
 
 export default function ReportesEstadisticosPage() {
@@ -62,9 +68,11 @@ export default function ReportesEstadisticosPage() {
   const [revision, setRevision] = useState(0)
   const [descargando, setDescargando] = useState(false)
   const [formatoDescarga, setFormatoDescarga] = useState('')
+  const [tipoDescarga, setTipoDescarga] = useState<TipoDescargaReporte>('completo')
+  const [intervalo, setIntervalo] = useState<IntervaloFlujo>(5)
   const [avisoDescarga, setAvisoDescarga] = useState<{ tipo: 'exito' | 'error'; mensaje: string } | null>(null)
 
-  const clave = claveConsulta(examenId, filtros)
+  const clave = claveConsulta(examenId, filtros, intervalo)
   const reporte = datos?.clave === clave ? datos : null
   const cargando = cargandoClave === clave
   const errorReporte = fallo?.clave === clave ? fallo.mensaje : ''
@@ -128,15 +136,23 @@ export default function ReportesEstadisticosPage() {
       setCargandoClave(consultaActual)
       setFallo(null)
       try {
-        const [resumen, franjas] = await Promise.all([
+        // Los cuatro graficos no deben bloquear el resumen y las descargas
+        // si su endpoint falla. Reportar la falla sin mostrar cifras inventadas.
+        const [resumen, franjas, resultadoGraficos] = await Promise.all([
           reportesService.resumen(examenId, filtros, controlador.signal),
           reportesService.franjas(examenId, filtros, controlador.signal),
+          reportesService.graficos(examenId, filtros, intervalo, controlador.signal).then(
+            (graficos): { graficos: RespuestaGraficosReporte | null; errorGraficos: string } => ({ graficos, errorGraficos: '' }),
+            (error): { graficos: RespuestaGraficosReporte | null; errorGraficos: string } => ({ graficos: null, errorGraficos: describirError(error) }),
+          ),
         ])
         if (controlador.signal.aborted) return
         if (String(resumen.examen.id) !== examenId || String(franjas.examen.id) !== examenId) {
           throw new Error('El servidor devolvió información de otro examen.')
         }
-        setDatos({ clave: consultaActual, resumen, franjas })
+        const graficos = resultadoGraficos.graficos && String(resultadoGraficos.graficos.examen.id) === examenId ? resultadoGraficos.graficos : null
+        const errorGraficos = resultadoGraficos.graficos && !graficos ? 'El servidor devolvió gráficos de otro examen.' : resultadoGraficos.errorGraficos
+        setDatos({ clave: consultaActual, resumen, franjas, graficos, errorGraficos })
       } catch (error) {
         if (!controlador.signal.aborted) {
           setDatos(null)
@@ -148,7 +164,7 @@ export default function ReportesEstadisticosPage() {
     }
     void cargar()
     return () => { controlador.abort() }
-  }, [clave, examenId, examenElegido, filtros, revision, cargandoExamenes])
+  }, [clave, examenId, examenElegido, filtros, intervalo, revision, cargandoExamenes])
 
   function aplicarFiltros(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -176,6 +192,7 @@ export default function ReportesEstadisticosPage() {
     setFiltros(SIN_FILTROS)
     setErrorFiltros('')
     setFormatoDescarga('')
+    setTipoDescarga('completo')
     setAvisoDescarga(null)
   }
 
@@ -188,7 +205,7 @@ export default function ReportesEstadisticosPage() {
     const limite = window.setTimeout(() => controlador.abort(), 60_000)
 
     try {
-      const respuesta = await reportesService.descargar(examenId, filtros, formato, controlador.signal)
+      const respuesta = await reportesService.descargar(examenId, filtros, formato, controlador.signal, tipoDescarga)
       const bytesFirma = formato === 'pdf' ? 5 : 4
       if (respuesta.blob.size < bytesFirma) {
         throw new Error('El servidor devolvió un archivo vacío o incompleto.')
@@ -206,7 +223,7 @@ export default function ReportesEstadisticosPage() {
       const nombreServidor = respuesta.filename?.trim() || ''
       const nombre = nombreServidor.toLowerCase().endsWith(`.${formato}`)
         ? nombreServidor
-        : `reporte_estadistico_${examenId}.${formato}`
+        : `${tipoDescarga === 'completo' ? 'reporte_estadistico' : tipoDescarga}_${examenId}.${formato}`
 
       const enlace = document.createElement('a')
       const archivoUrl = URL.createObjectURL(respuesta.blob)
@@ -345,8 +362,17 @@ export default function ReportesEstadisticosPage() {
             <h3 className="text-sm font-bold text-sci-navy dark:text-foreground">Descargar reporte</h3>
             <span className="text-xs text-muted-foreground">Datos y fechas de la consulta actual</span>
           </div>
-          <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-end">
-            <div className="min-w-0 flex-1">
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_auto] sm:items-end">
+            <div className="min-w-0">
+              <label htmlFor="tipo-reporte" className="mb-2 block text-xs font-semibold text-foreground">Contenido del reporte</label>
+              <select id="tipo-reporte" value={tipoDescarga} onChange={(event) => { setTipoDescarga(event.target.value as TipoDescargaReporte); setAvisoDescarga(null) }} disabled={!reporte || cargando || descargando} className="min-h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-sci-cyan disabled:opacity-60">
+                <option value="completo">Reporte estadístico completo</option>
+                <option value="acta">Acta de expulsiones y sanciones</option>
+                <option value="auditoria">Auditoría de anomalías en puerta</option>
+                <option value="matriz">Matriz de habilitación y asistencia</option>
+              </select>
+            </div>
+            <div className="min-w-0">
               <label htmlFor="formato-reporte" className="mb-2 block text-xs font-semibold text-foreground">Formato de archivo</label>
               <select
                 id="formato-reporte"
@@ -370,7 +396,7 @@ export default function ReportesEstadisticosPage() {
               {descargando ? 'Preparando descarga...' : 'Descargar reporte'}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">Selecciona PDF o Excel. La descarga conserva el examen y los filtros aplicados al reporte.</p>
+          <p className="text-xs text-muted-foreground">Descarga el reporte completo o un informe individual en PDF/Excel desde el servidor. Se conservan el examen y las fechas aplicadas. Los formatos CSV y hojas sueltas dentro del Excel completo no están habilitados por el backend.</p>
           {filtrosSinAplicar && <p className="text-xs font-semibold text-sci-blue" role="status">Aplica los cambios de fecha antes de descargar para asegurar que coincidan con las cifras en pantalla.</p>}
           {avisoDescarga && (
             <div
@@ -444,6 +470,12 @@ export default function ReportesEstadisticosPage() {
             <GraficoFranjas franjas={reporte.franjas.franjas} zonaHoraria={reporte.franjas.zona_horaria} />
             <BalanceAsistencia resumen={resumen} />
           </section>
+
+          {reporte.graficos ? (
+            <GraficosValidacion graficos={reporte.graficos} intervalo={intervalo} onIntervaloChange={(nuevo) => { setIntervalo(nuevo); setAvisoDescarga(null) }} />
+          ) : (
+            <Alert variant="destructive"><AlertTriangle aria-hidden="true" /><AlertTitle>No fue posible cargar los gráficos adicionales</AlertTitle><AlertDescription>{reporte.errorGraficos || 'Vuelve a intentar la consulta.'} El resumen y las descargas siguen disponibles.</AlertDescription><Button type="button" size="sm" variant="outline" className="mt-2" onClick={() => setRevision((actual) => actual + 1)}>Reintentar gráficos</Button></Alert>
+          )}
 
         </div>
       )}

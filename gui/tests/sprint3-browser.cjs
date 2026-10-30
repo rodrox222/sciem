@@ -187,6 +187,52 @@ async function apiJson(context, route, token = fixture.tokens.docente) {
     await screenshot(page, 'HU17-390');
     await page.setViewportSize({ width: 1366, height: 900 });
     await screenshot(page, 'HU17-desktop');
+    // Contratos de Klever: cuatro graficos reales, intervalos 5/10 y tres informes individuales.
+    for (const title of [
+      'Curva de flujo de entrada',
+      'Embudo de acceso y rendición',
+      'Cumplimiento de prerrequisitos',
+      'Distribución general de asistencia',
+    ]) {
+      await page.getByRole('heading', { name: title, exact: true }).waitFor();
+    }
+    await page.locator('#intervalo-validacion').selectOption('10');
+    await page.getByRole('heading', { name: 'Curva de flujo de entrada', exact: true }).waitFor();
+    await page.getByText('Escaneos cada 10 minutos', { exact: false }).waitFor();
+    await screenshot(page, 'HU17-graficos-cuatro');
+    // Antes de esperar un download del navegador, comprobar HTTP y registrar
+    // TODAS las fallas de los contratos de Klever en una sola ejecucion QA.
+    const rutasKlever = {
+      completo: 'estadisticas/descargar',
+      acta: 'acta-disciplinaria/descargar',
+      auditoria: 'auditoria-puerta/descargar',
+      matriz: 'matriz-habilitacion-asistencia/descargar',
+    };
+    const fallosBackend = [];
+    for (const [tipo, ruta] of Object.entries(rutasKlever)) {
+      await page.locator('#tipo-reporte').selectOption(tipo);
+      for (const formato of ['xlsx', 'pdf']) {
+        await page.locator('#formato-reporte').selectOption(formato);
+        const url = `${api}/examenes/${fixture.exam}/reportes/${ruta}?formato=${formato}`;
+        const verificacion = await context.request.get(url, { headers: { Authorization: `Bearer ${fixture.tokens.admin}` } });
+        if (!verificacion.ok()) {
+          const detalle = (await verificacion.text()).slice(0, 240);
+          const fallo = `${tipo} ${formato}: HTTP ${verificacion.status()} ${detalle}`;
+          fallosBackend.push(fallo);
+          console.error('HU17 BACKEND BLOCKER', fallo);
+          continue;
+        }
+        const descarga = page.waitForEvent('download');
+        await page.getByRole('button', { name: 'Descargar reporte', exact: true }).click();
+        const archivo = path.join(out, `HU17-${tipo}.${formato}`);
+        await (await descarga).saveAs(archivo);
+        const encabezado = fs.readFileSync(archivo).subarray(0, 5);
+        assert.ok(formato === 'pdf' ? encabezado.toString() === '%PDF-' : (encabezado[0] === 0x50 && encabezado[1] === 0x4b && encabezado[2] === 0x03 && encabezado[3] === 0x04), `HU17: firma invalida ${tipo} ${formato}`);
+      }
+    }
+    fs.writeFileSync(path.join(out, 'hu17-validacion-endpoints.json'), JSON.stringify({ fallosBackend }, null, 2));
+    assert.equal(fallosBackend.length, 0, `HU17: faltan contratos backend de Klever: ${fallosBackend.join(' | ')}`);
+    await page.locator('#tipo-reporte').selectOption('completo');
     for (const format of ['xlsx', 'pdf']) {
       await page.locator('#formato-reporte').selectOption(format);
       const download = page.waitForEvent('download');
