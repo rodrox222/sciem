@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  ArrowLeftRight, BookOpenCheck, CalendarDays, ChevronRight, CircleAlert,
+  BookOpenCheck, CalendarDays, ChevronRight, CircleAlert,
   ClipboardList, DoorOpen, GraduationCap, RefreshCw,
   ShieldCheck, UsersRound,
 } from 'lucide-react'
