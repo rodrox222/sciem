@@ -53,7 +53,8 @@ const addMinutes = (time: string, duration: number) => {
 const minutesBetween = (start: string, end: string) => {
   const [startHour, startMinute] = normalizeTime(start).split(':').map(Number)
   const [endHour, endMinute] = normalizeTime(end).split(':').map(Number)
-  return endHour * 60 + endMinute - (startHour * 60 + startMinute)
+  const diff = endHour * 60 + endMinute - (startHour * 60 + startMinute)
+  return diff > 0 ? diff : 60
 }
 
 export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
@@ -70,12 +71,25 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
     id_docente: exam.id_docente,
   })
 
-  const [materias, setMaterias] = useState<Materia[]>([])
-  const [aulas, setAulas] = useState<Aula[]>([])
+  // Inicializar materias y aulas con los datos existentes del examen para que nunca queden vacíos en offline
+  const [materias, setMaterias] = useState<Materia[]>(
+    exam.materia
+      ? [{ id: exam.id_materia, nombre: exam.materia.nombre, codigo: '', semestre: '' } as unknown as Materia]
+      : []
+  )
+  const [aulas, setAulas] = useState<Aula[]>([
+    {
+      id: exam.id_aula,
+      nombre: exam.aula?.nombre ?? 'Aula actual',
+      ubicacion: 'Ubicación registrada',
+      capacidad: 0,
+      estado: 'Disponible',
+    },
+  ])
   const [docentes, setDocentes] = useState<DocenteItem[]>([])
-  const [normas, setNormas] = useState<Norma[]>([])
+  const [normas, setNormas] = useState<Norma[]>(exam.normas ?? [])
   const [selectedNorms, setSelectedNorms] = useState<string[]>(
-    (exam.normas ?? []).map((n) => n.id),
+    (exam.normas ?? []).map((n) => n.id)
   )
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -84,42 +98,54 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
 
   const endTime = useMemo(
     () => addMinutes(form.hora_ini, Number(form.duracion)),
-    [form.duracion, form.hora_ini],
+    [form.duracion, form.hora_ini]
   )
 
   const loadDependencies = useCallback(async () => {
+    // Si estamos sin conexión, omitimos las peticiones a la API para evitar el error de red
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     setError('')
     try {
       const [subjects, rooms, rules, teachersRes] = await Promise.all([
-        materiasService.listAll(),
-        aulasService.list({ estado: 'Disponible', perPage: 100 }),
-        normasService.listAll({ tipo: 'General' }),
-        isAdmin ? examenesService.listDocentes() : Promise.resolve({ data: [] }),
+        materiasService.listAll().catch(() => []),
+        aulasService.list({ estado: 'Disponible', perPage: 100 }).catch(() => ({ data: [] })),
+        normasService.listAll({ tipo: 'General' }).catch(() => []),
+        isAdmin ? examenesService.listDocentes().catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
       ])
-      setMaterias(subjects)
-      setAulas(
-        rooms.data.some((r: Aula) => r.id === exam.id_aula)
-          ? rooms.data
-          : [
-              ...rooms.data,
-              {
-                id: exam.id_aula,
-                nombre: exam.aula?.nombre ?? 'Aula actual',
-                ubicacion: 'Ubicación registrada',
-                capacidad: 0,
-                estado: 'Disponible',
-              },
-            ],
-      )
-      setNormas(rules)
-      setDocentes(teachersRes.data)
+
+      if (subjects.length > 0) setMaterias(subjects)
+
+      const roomsList = rooms.data || []
+      if (roomsList.length > 0) {
+        setAulas(
+          roomsList.some((r: Aula) => r.id === exam.id_aula)
+            ? roomsList
+            : [
+                ...roomsList,
+                {
+                  id: exam.id_aula,
+                  nombre: exam.aula?.nombre ?? 'Aula actual',
+                  ubicacion: 'Ubicación registrada',
+                  capacidad: 0,
+                  estado: 'Disponible',
+                },
+              ]
+        )
+      }
+
+      if (rules.length > 0) setNormas(rules)
+      if (teachersRes.data?.length > 0) setDocentes(teachersRes.data)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar opciones de edición.')
+      console.warn('Advertencia cargando dependencias:', err)
     } finally {
       setLoading(false)
     }
-  }, [isAdmin, exam.id_aula])
+  }, [isAdmin, exam.id_aula, exam.aula?.nombre])
 
   useEffect(() => {
     void loadDependencies()
@@ -127,7 +153,7 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
 
   const toggleNorm = (id: string) => {
     setSelectedNorms((curr) =>
-      curr.includes(id) ? curr.filter((i) => i !== id) : [...curr, id],
+      curr.includes(id) ? curr.filter((i) => i !== id) : [...curr, id]
     )
   }
 
@@ -150,8 +176,9 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
         normas_ids: selectedNorms,
       }
 
-      await examenesService.update(exam.id, payload)
-      setSuccess('Evaluación actualizada correctamente.')
+      // El método update ya delega a Dexie cuando !navigator.onLine
+      const response = await examenesService.update(exam.id, payload)
+      setSuccess(response.message || 'Evaluación actualizada correctamente.')
       onUpdated()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al guardar cambios del examen.')
@@ -206,7 +233,9 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
                 className="h-10 w-full rounded-xl border border-border bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
               >
                 {materias.map((m) => (
-                  <option key={m.id} value={m.id}>{m.nombre}</option>
+                  <option key={m.id} value={m.id}>
+                    {m.nombre}
+                  </option>
                 ))}
               </select>
             </div>
@@ -221,7 +250,9 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
                 className="h-10 w-full rounded-xl border border-border bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
               >
                 {aulas.map((a) => (
-                  <option key={a.id} value={a.id}>{a.nombre} · {a.ubicacion}</option>
+                  <option key={a.id} value={a.id}>
+                    {a.nombre} {a.ubicacion ? `· ${a.ubicacion}` : ''}
+                  </option>
                 ))}
               </select>
             </div>
@@ -286,33 +317,35 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
             </div>
           </div>
 
-          <div className="pt-2">
-            <Label className="mb-2 block text-xs font-semibold">Normas generales aplicables</Label>
-            <div className="max-h-48 space-y-2 overflow-y-auto">
-              {normas.map((rule) => {
-                const selected = selectedNorms.includes(rule.id)
-                return (
-                  <button
-                    key={rule.id}
-                    type="button"
-                    onClick={() => toggleNorm(rule.id)}
-                    className={`flex w-full items-start gap-3 rounded-xl border p-2.5 text-left text-xs transition cursor-pointer ${
-                      selected ? 'border-sci-blue bg-sci-blue/5' : 'border-border bg-card'
-                    }`}
-                  >
-                    <span
-                      className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded border ${
-                        selected ? 'border-sci-blue bg-sci-blue text-white' : 'border-border'
+          {normas.length > 0 && (
+            <div className="pt-2">
+              <Label className="mb-2 block text-xs font-semibold">Normas generales aplicables</Label>
+              <div className="max-h-48 space-y-2 overflow-y-auto">
+                {normas.map((rule) => {
+                  const selected = selectedNorms.includes(rule.id)
+                  return (
+                    <button
+                      key={rule.id}
+                      type="button"
+                      onClick={() => toggleNorm(rule.id)}
+                      className={`flex w-full items-start gap-3 rounded-xl border p-2.5 text-left text-xs transition cursor-pointer ${
+                        selected ? 'border-sci-blue bg-sci-blue/5' : 'border-border bg-card'
                       }`}
                     >
-                      {selected && <Check className="h-3.5 w-3.5" />}
-                    </span>
-                    <span className="font-semibold text-sci-navy">{rule.titulo}</span>
-                  </button>
-                )
-              })}
+                      <span
+                        className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded border ${
+                          selected ? 'border-sci-blue bg-sci-blue text-white' : 'border-border'
+                        }`}
+                      >
+                        {selected && <Check className="h-3.5 w-3.5" />}
+                      </span>
+                      <span className="font-semibold text-sci-navy">{rule.titulo}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="flex justify-end pt-3">
             <Button

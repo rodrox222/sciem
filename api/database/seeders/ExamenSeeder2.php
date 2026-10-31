@@ -128,7 +128,7 @@ class ExamenSeeder2 extends Seeder
             'estado'     => 'Programado',
             'fecha'      => $ahora->format('Y-m-d'),
             'hora_ini'   => $ahora->copy()->subMinutes(15)->format('H:i:s'),
-            'hora_fin'   => $ahora->copy()->addMinutes(120)->format('H:i:s'),
+            'hora_fin'   => $ahora->copy()->addMinutes(12)->format('H:i:s'),
         ]);
         $examenActivo->save();
 
@@ -144,7 +144,7 @@ class ExamenSeeder2 extends Seeder
             'estado'     => 'Programado',
             'fecha'      => $ahora->format('Y-m-d'),
             'hora_ini'   => $ahora->copy()->subMinutes(90)->format('H:i:s'),
-            'hora_fin'   => $ahora->copy()->addMinutes(120)->format('H:i:s'),
+            'hora_fin'   => $ahora->copy()->addMinutes(12)->format('H:i:s'),
         ]);
         $examenExpirado->save();
 

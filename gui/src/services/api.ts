@@ -65,7 +65,8 @@ export async function apiRequest<T>(
       return apiRequest<T>(path, options, retries - 1);
     }
     throw new ApiError(
-      'No se pudo conectar con el servidor. Verifica que los contenedores de Docker estén activos.',
+      'No se pudo conectar con el servidor.',
+      //'No se pudo conectar con el servidor. Verifica que los contenedores de Docker estén activos.',
       0
     );
   }

@@ -177,14 +177,13 @@ class AuxiliarOfflineController extends Controller
                         ->where('id_estudiante', $estudiante->id)
                         ->first();
 
-                    // Control de Asignación Estricta (Opción B)
+                    // Control de Asignación Estricta
                     if (!$esDocente && isset($inscripcion->id_auxiliar) && $inscripcion->id_auxiliar !== $user->id) {
                         $errores[] = [
                             'codigo_sis' => $codigoSis,
                             'error'      => 'Estudiante no asignado al módulo de este auxiliar.',
                         ];
 
-                        // Registrar como intento no autorizado
                         $this->registrarIntentoDirecto(
                             $idExamen,
                             $estudiante->id,
@@ -201,16 +200,66 @@ class AuxiliarOfflineController extends Controller
                         || \App\Models\Expulsion::where('id_examen', $idExamen)->where('id_estudiante', $estudiante->id)->exists()
                         || !\App\Services\AccesoExamen::enHorario($examen, \Carbon\CarbonImmutable::instance($fechaIngreso))
                         || $fechaIngreso->isFuture()) {
-                        $errores[] = ['codigo_sis' => $codigoSis, 'error' => 'Ingreso no conciliable: inscripción, habilitación, expulsión u horario inválidos.'];
+                        $errores[] = [
+                            'codigo_sis' => $codigoSis,
+                            'error'      => 'Ingreso no conciliable: inhabilitado, expulsado u horario inválido.'
+                        ];
                         continue;
                     }
 
-                    $yaIngreso = LogAsistencia::where('id_examen', $idExamen)
+                    $ingresoPrevio = LogAsistencia::where('id_examen', $idExamen)
                         ->where('id_estudiante', $estudiante->id)
                         ->where('resultado', 'PERMITIDO')
-                        ->exists();
+                        ->first();
 
-                    if (!$yaIngreso) {
+                    if ($ingresoPrevio) {
+                        $fechaPrevio = Carbon::parse($ingresoPrevio->fecha_escaneo);
+
+                        // Si el registro actual ocurrió ANTES que el existente en servidor
+                        if ($fechaIngreso->lt($fechaPrevio)) {
+                            // Degradar el previo a CONFLICTO
+                            $ingresoPrevio->update([
+                                'resultado' => 'RECHAZADO_YA_INGRESO',
+                                'mensaje'   => 'Sustituido por ingreso offline cronológicamente anterior (R3).',
+                            ]);
+
+                            // Grabar el nuevo como el PERMITIDO válido
+                            LogAsistencia::create([
+                                'id_examen'            => $idExamen,
+                                'id_estudiante'        => $estudiante->id,
+                                'codigo_sis_escaneado' => substr($codigoSis, 0, 30),
+                                'resultado'            => 'PERMITIDO',
+                                'mensaje'              => 'Ingreso prioritario cronológico offline (R3).',
+                                'payload_qr_recibido'  => ['modo' => 'OFFLINE_SYNC_R3_GANADOR'],
+                                'fecha_escaneo'        => $fechaIngreso,
+                            ]);
+
+                            DB::table('estudiante_examen')
+                                ->where('id_examen', $idExamen)
+                                ->where('id_estudiante', $estudiante->id)
+                                ->update([
+                                    'fecha_ingreso' => $fechaIngreso,
+                                    'updated_at'    => now('America/La_Paz'),
+                                ]);
+                        } else {
+                            // El actual ocurrió DESPUÉS: se marca como CONFLICTO (R3)
+                            $this->registrarIntentoDirecto(
+                                $idExamen,
+                                $estudiante->id,
+                                'CONFLICTO_DUPLICADO_R3',
+                                $rolAuditor,
+                                $user,
+                                $codigoSis,
+                                $fechaIngreso
+                            );
+
+                            $errores[] = [
+                                'codigo_sis' => $codigoSis,
+                                'error'      => 'Conflicto (R3): Se conservó el primer ingreso y se marcó como conflicto para revisión.',
+                            ];
+                        }
+                    } else {
+                        // Ingreso normal único
                         LogAsistencia::create([
                             'id_examen'            => $idExamen,
                             'id_estudiante'        => $estudiante->id,
