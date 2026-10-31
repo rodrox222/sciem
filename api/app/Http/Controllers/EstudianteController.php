@@ -851,4 +851,18 @@ class EstudianteController extends Controller
             'message' => 'Contraseña actualizada exitosamente.',
         ], 200);
     }
+
+    // agrega un estudiante como auxiliar
+    public function toggleAuxiliar(string $id): \Illuminate\Http\JsonResponse
+    {
+        $estudiante = \App\Models\Estudiante::findOrFail($id);
+        $estudiante->es_auxiliar = !$estudiante->es_auxiliar;
+        $estudiante->save();
+
+        return response()->json([
+            'success'     => true,
+            'message'     => $estudiante->es_auxiliar ? 'Estudiante asignado como auxiliar.' : 'Rol de auxiliar retirado.',
+            'es_auxiliar' => (bool) $estudiante->es_auxiliar,
+        ]);
+    }
 }

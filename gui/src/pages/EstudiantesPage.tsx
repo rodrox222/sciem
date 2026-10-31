@@ -51,7 +51,8 @@ export default function EstudiantesPage() {
   const [success, setSuccess] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [associateModalOpen, setAssociateModalOpen] = useState(false)
- const [editingStudent, setEditingStudent] = useState<Estudiante | null>(null)
+  const [editingStudent, setEditingStudent] = useState<Estudiante | null>(null)
+
   const loadStudents = useCallback(async () => {
     setLoading(true)
     setError('')
@@ -63,7 +64,6 @@ export default function EstudiantesPage() {
           examenesService.get(examId),
         ])
 
-        // Normalizamos los estudiantes del examen a la interfaz Estudiante
         const mappedStudents: Estudiante[] = (studentResponse.estudiantes || []).map((st) => ({
           id: st.id,
           codigo_sis: st.codigo_sis,
@@ -466,40 +466,40 @@ export default function EstudiantesPage() {
       )}
 
       {modalOpen && examId && exam && (
-       <EstudianteFormModal
-  key={editingStudent?.id ?? 'new'}
-  estudiante={editingStudent}
-  examMode={Boolean(examId)}
-  onClose={() => setModalOpen(false)}
-  onSubmit={saveStudent}
- onBulkUpload={async (archivo) => {
-  if (!examId) return
+        <EstudianteFormModal
+          key={editingStudent?.id ?? 'new'}
+          estudiante={editingStudent}
+          examMode={Boolean(examId)}
+          onClose={() => setModalOpen(false)}
+          onSubmit={saveStudent}
+          onBulkUpload={async (archivo) => {
+            if (!examId) return
 
-  const response = await estudiantesService.cargaMasiva(examId, archivo)
+            const response = await estudiantesService.cargaMasiva(examId, archivo)
 
-  setSuccess(
-    response.message ||
-      `Carga masiva completada. Se registraron ${response.total_insertados} estudiantes.`,
-  )
+            setSuccess(
+              response.message ||
+                `Carga masiva completada. Se registraron ${response.total_insertados} estudiantes.`,
+            )
 
-  setModalOpen(false)
-  setPage(1)
-  await loadStudents()
-}}
-/>
+            setModalOpen(false)
+            setPage(1)
+            await loadStudents()
+          }}
+        />
       )}
       {associateModalOpen && examId && exam && (
-  <AsociarEstudiantesModal
-    examId={examId}
-    examName={exam.nombre}
-    onClose={() => setAssociateModalOpen(false)}
-    onSuccess={() => {
-      setAssociateModalOpen(false)
-      setPage(1)
-      void loadStudents()
-    }}
-  />
-)}
+        <AsociarEstudiantesModal
+          examId={examId}
+          examName={exam.nombre}
+          onClose={() => setAssociateModalOpen(false)}
+          onSuccess={() => {
+            setAssociateModalOpen(false)
+            setPage(1)
+            void loadStudents()
+          }}
+        />
+      )}
     </div>
   )
 }

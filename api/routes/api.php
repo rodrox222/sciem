@@ -175,6 +175,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('estudiantes', [EstudianteController::class, 'index']);
         Route::get('estudiantes/buscar', [EstudianteController::class, 'buscar']);
         Route::get('estudiantes/{identificador}', [EstudianteController::class, 'show']);
+        Route::middleware('role:admin,administrador,docente')->group(function () {
+            Route::patch('estudiantes/{id}/toggle-auxiliar', [EstudianteController::class, 'toggleAuxiliar']);
+        });
     });
 
     // --- INSCRIPCIÓN Y GESTIÓN EN EXAMEN ---

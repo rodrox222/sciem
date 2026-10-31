@@ -1,17 +1,21 @@
-import { useCallback, useEffect, useState } from 'react'
-import { toast } from 'sonner'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import {
-  UserPlus,
   Users,
-  Mail,
+  UserPlus,
   Trash2,
   RefreshCw,
   LoaderCircle,
   ShieldCheck,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react'
 
 import { auxiliaresService, type AuxiliarAsignado } from '@/services/auxiliares.service'
+import { estudiantesService, type Estudiante } from '@/services/estudiantes.service'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -22,165 +26,181 @@ interface DetalleAuxiliaresTabProps {
   puedeGestionar: boolean
 }
 
+const PER_PAGE = 8
+
+const fullName = (student: Estudiante) =>
+  [student.nombre, student.apellido_paterno, student.apellido_materno]
+    .filter(Boolean)
+    .join(' ')
+
 export default function DetalleAuxiliaresTab({
   examenId,
   puedeGestionar,
 }: DetalleAuxiliaresTabProps) {
+  // Estado de los auxiliares asignados a este examen
   const [auxiliares, setAuxiliares] = useState<AuxiliarAsignado[]>([])
-  const [email, setEmail] = useState('')
-  const [cargando, setCargando] = useState(true)
-  const [asignando, setAsignando] = useState(false)
+  const [cargandoAuxiliares, setCargandoAuxiliares] = useState(true)
   const [actualizando, setActualizando] = useState(false)
-const [auxiliarSeleccionado, setAuxiliarSeleccionado] =
-  useState<AuxiliarAsignado | null>(null)
+  const [auxiliarSeleccionado, setAuxiliarSeleccionado] = useState<AuxiliarAsignado | null>(null)
+  const [desvinculando, setDesvinculando] = useState(false)
 
-const [desvinculando, setDesvinculando] = useState(false)
+  // Mensajes de estado visuales
+  const [mensajeExito, setMensajeExito] = useState<string | null>(null)
+  const [mensajeError, setMensajeError] = useState<string | null>(null)
+
+  // Estado del padrón de estudiantes para selección
+  const [estudiantes, setEstudiantes] = useState<Estudiante[]>([])
+  const [totalEstudiantes, setTotalEstudiantes] = useState(0)
+  const [page, setPage] = useState(1)
+  const [lastPage, setLastPage] = useState(1)
+  const [searchInput, setSearchInput] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [cargandoEstudiantes, setCargandoEstudiantes] = useState(false)
+  const [asignandoId, setAsignandoId] = useState<string | null>(null)
+
+  // 1. Cargar auxiliares vinculados a este examen
   const cargarAuxiliares = useCallback(async (silencioso = false) => {
-    if (!silencioso) setCargando(true)
-
+    if (!silencioso) setCargandoAuxiliares(true)
     try {
       const respuesta = await auxiliaresService.listarPorExamen(examenId)
       setAuxiliares(respuesta.data ?? [])
     } catch (error: unknown) {
-      const mensaje =
+      setMensajeError(
         error instanceof Error
           ? error.message
           : 'No se pudieron cargar los auxiliares del examen.'
-
-      toast.error(mensaje)
+      )
     } finally {
-      setCargando(false)
+      setCargandoAuxiliares(false)
       setActualizando(false)
     }
   }, [examenId])
+
+  // 2. Cargar padrón general de estudiantes para asignar
+  const cargarEstudiantes = useCallback(async () => {
+    setCargandoEstudiantes(true)
+    try {
+      const response = await estudiantesService.list({
+        search: searchTerm,
+        page,
+        perPage: PER_PAGE,
+      })
+      setEstudiantes(response.data)
+      setTotalEstudiantes(response.total)
+      setLastPage(Math.max(response.last_page, 1))
+    } catch {
+      setMensajeError('No se pudo cargar la lista de estudiantes.')
+    } finally {
+      setCargandoEstudiantes(false)
+    }
+  }, [page, searchTerm])
 
   useEffect(() => {
     void cargarAuxiliares()
   }, [cargarAuxiliares])
 
-  const asignarAuxiliar = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  useEffect(() => {
+    void cargarEstudiantes()
+  }, [cargarEstudiantes])
 
-    const emailNormalizado = email.trim().toLowerCase()
-
-    if (!emailNormalizado) {
-      toast.error('Ingresa el correo institucional del auxiliar.')
-      return
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNormalizado)) {
-      toast.error('Ingresa un correo electrónico válido.')
-      return
-    }
-
-    setAsignando(true)
+  // Asignar estudiante seleccionado directamente
+  const handleAsignarEstudiante = async (student: Estudiante) => {
+    setAsignandoId(student.id)
+    setMensajeExito(null)
+    setMensajeError(null)
 
     try {
-      const respuesta = await auxiliaresService.asignar(examenId, emailNormalizado)
+      const identificador = student.email_institucional || student.codigo_sis
+      const respuesta = await auxiliaresService.asignar(examenId, identificador)
 
-      toast.success(respuesta.message || 'Auxiliar asignado correctamente.')
-      setEmail('')
+      setMensajeExito(respuesta.message || 'Auxiliar asignado exitosamente.')
+      await cargarAuxiliares(true)
+    } catch (error: any) {
+      const mensaje = error.response?.data?.message || error.message || 'No se pudo asignar al auxiliar.'
+      setMensajeError(mensaje)
+    } finally {
+      setAsignandoId(null)
+    }
+  }
+
+  // Desvincular auxiliar
+  const confirmarDesvinculacion = async () => {
+    if (!auxiliarSeleccionado) return
+
+    setDesvinculando(true)
+    setMensajeExito(null)
+    setMensajeError(null)
+
+    try {
+      const respuesta = await auxiliaresService.desvincular(
+        examenId,
+        auxiliarSeleccionado.id_auxiliar,
+      )
+
+      setMensajeExito(respuesta.message || 'Auxiliar desvinculado correctamente.')
+      setAuxiliarSeleccionado(null)
       await cargarAuxiliares(true)
     } catch (error: unknown) {
       const mensaje =
         error instanceof Error
           ? error.message
-          : 'No se pudo asignar al auxiliar.'
-
-      toast.error(mensaje)
+          : 'No se pudo desvincular al auxiliar.'
+      setMensajeError(mensaje)
     } finally {
-      setAsignando(false)
+      setDesvinculando(false)
     }
   }
 
-  const confirmarDesvinculacion = async () => {
-  if (!auxiliarSeleccionado) return
-
-  setDesvinculando(true)
-
-  try {
-    const respuesta = await auxiliaresService.desvincular(
-      examenId,
-      auxiliarSeleccionado.id_auxiliar,
-    )
-
-    toast.success(
-      respuesta.message || 'Auxiliar desvinculado correctamente.',
-    )
-
-    setAuxiliarSeleccionado(null)
-    await cargarAuxiliares(true)
-  } catch (error: unknown) {
-    const mensaje =
-      error instanceof Error
-        ? error.message
-        : 'No se pudo desvincular al auxiliar.'
-
-    toast.error(mensaje)
-  } finally {
-    setDesvinculando(false)
+  const aplicarBusqueda = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setPage(1)
+    setSearchTerm(searchInput.trim())
   }
-}
-  const actualizarLista = async () => {
-    setActualizando(true)
-    await cargarAuxiliares(true)
-  }
+
+  const idsAsignados = new Set(auxiliares.map((a) => a.id_auxiliar))
 
   return (
     <div className="space-y-6">
-      {puedeGestionar && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <UserPlus className="h-5 w-5" />
-              Asignar auxiliar
-            </CardTitle>
-            <CardDescription>
-              Ingresa el correo institucional de un estudiante registrado para asignarlo como auxiliar de este examen.
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent>
-            <form
-              onSubmit={asignarAuxiliar}
-              className="flex flex-col gap-3 sm:flex-row"
-            >
-              <div className="relative flex-1">
-                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="email"
-                  placeholder="auxiliar@institucion.edu"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  disabled={asignando}
-                  className="pl-9"
-                  maxLength={255}
-                  autoComplete="email"
-                />
-              </div>
-
-              <Button type="submit" disabled={asignando || !email.trim()}>
-                {asignando ? (
-                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <UserPlus className="mr-2 h-4 w-4" />
-                )}
-                {asignando ? 'Asignando...' : 'Asignar auxiliar'}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+      {/* Alertas de Notificación */}
+      {mensajeExito && (
+        <div className="rounded-xl border border-sci-cyan/30 bg-sci-cyan/10 p-3.5 text-xs font-semibold text-sci-navy flex items-center justify-between">
+          <span>{mensajeExito}</span>
+          <button
+            type="button"
+            onClick={() => setMensajeExito(null)}
+            className="text-muted-foreground hover:text-foreground ml-2"
+          >
+            ✕
+          </button>
+        </div>
       )}
 
+      {mensajeError && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3.5 text-xs font-semibold text-destructive flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{mensajeError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMensajeError(null)}
+            className="text-destructive hover:opacity-80 ml-2"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* 1. SECCIÓN SUPERIOR: AUXILIARES ASIGNADOS */}
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Auxiliares asignados
+            <CardTitle className="flex items-center gap-2 text-sci-navy">
+              <Users className="h-5 w-5 text-sci-navy" />
+              Auxiliares asignados al examen ({auxiliares.length})
             </CardTitle>
             <CardDescription>
-              Personas habilitadas como auxiliares para este examen.
+              Personas habilitadas para controlar puerta y escanear en esta evaluación.
             </CardDescription>
           </div>
 
@@ -188,8 +208,11 @@ const [desvinculando, setDesvinculando] = useState(false)
             type="button"
             variant="outline"
             size="icon"
-            onClick={actualizarLista}
-            disabled={actualizando || cargando}
+            onClick={() => {
+              setActualizando(true)
+              void cargarAuxiliares(true)
+            }}
+            disabled={actualizando || cargandoAuxiliares}
             aria-label="Actualizar lista de auxiliares"
             title="Actualizar lista"
           >
@@ -198,21 +221,21 @@ const [desvinculando, setDesvinculando] = useState(false)
         </CardHeader>
 
         <CardContent>
-          {cargando ? (
+          {cargandoAuxiliares ? (
             <div className="flex items-center justify-center gap-2 py-10 text-muted-foreground">
               <LoaderCircle className="h-5 w-5 animate-spin" />
               Cargando auxiliares...
             </div>
           ) : auxiliares.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed px-4 py-10 text-center">
-              <Users className="mb-3 h-10 w-10 text-muted-foreground" />
-              <p className="font-medium">Todavía no hay auxiliares asignados</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Los auxiliares que asignes aparecerán en esta lista.
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed px-4 py-8 text-center">
+              <Users className="mb-2 h-8 w-8 text-muted-foreground" />
+              <p className="font-semibold text-sm">No hay auxiliares vinculados a este examen</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Selecciona estudiantes del padrón inferior para asignarlos.
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               {auxiliares.map((auxiliar) => {
                 const nombre = [
                   auxiliar.nombre,
@@ -220,54 +243,41 @@ const [desvinculando, setDesvinculando] = useState(false)
                   auxiliar.apellido_materno,
                 ].filter(Boolean).join(' ')
 
-             const estaDesvinculando =
-  desvinculando && auxiliarSeleccionado?.id_auxiliar === auxiliar.id_auxiliar
-
                 return (
                   <div
                     key={auxiliar.id}
-                    className="flex flex-col gap-4 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3.5 shadow-xs"
                   >
-                    <div className="flex min-w-0 items-start gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sci-navy/10 text-sci-navy">
                         <ShieldCheck className="h-5 w-5" />
                       </div>
 
                       <div className="min-w-0">
-                        <p className="break-words font-medium">
+                        <p className="truncate font-bold text-xs text-sci-navy">
                           {nombre || 'Auxiliar'}
                         </p>
-                        <p className="break-all text-sm text-muted-foreground">
-                          {auxiliar.email_institucional}
+                        <p className="truncate text-[11px] text-muted-foreground">
+                          SIS: {auxiliar.codigo_sis} · {auxiliar.email_institucional}
                         </p>
-                        {auxiliar.codigo_sis && (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Código SIS: {auxiliar.codigo_sis}
-                          </p>
-                        )}
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between gap-3 sm:justify-end">
-                      <Badge variant="secondary" className="shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant="secondary" className="text-[10px]">
                         {auxiliar.estado}
                       </Badge>
 
                       {puedeGestionar && (
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          className="text-destructive hover:text-destructive"
+                          className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive cursor-pointer"
                           onClick={() => setAuxiliarSeleccionado(auxiliar)}
-                          disabled={estaDesvinculando}
+                          title="Desvincular del examen"
                         >
-                          {estaDesvinculando ? (
-                            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="mr-2 h-4 w-4" />
-                          )}
-                          Desvincular
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       )}
                     </div>
@@ -276,13 +286,177 @@ const [desvinculando, setDesvinculando] = useState(false)
               })}
             </div>
           )}
-            </CardContent>
+        </CardContent>
       </Card>
 
+      {/* 2. SECCIÓN INFERIOR: PADRÓN DE ESTUDIANTES PARA ASIGNAR */}
+      {puedeGestionar && (
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-sci-navy">
+                  <UserPlus className="h-5 w-5 text-sci-navy" />
+                  Agregar auxiliar desde el padrón
+                </CardTitle>
+                <CardDescription>
+                  Busca estudiantes y haz clic en &quot;Asignar Auxiliar&quot; para agregarlos al examen.
+                </CardDescription>
+              </div>
+
+              {/* Buscador */}
+              <form onSubmit={aplicarBusqueda} className="flex gap-2">
+                <div className="relative w-full sm:w-64">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Buscar por SIS, CI o nombre..."
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    className="h-8 pl-8 text-xs bg-background"
+                  />
+                </div>
+                <Button type="submit" variant="outline" size="sm" className="h-8 text-xs cursor-pointer">
+                  Buscar
+                </Button>
+              </form>
+            </div>
+          </CardHeader>
+
+          <CardContent>
+            {cargandoEstudiantes ? (
+              <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground text-xs">
+                <LoaderCircle className="h-4 w-4 animate-spin text-sci-cyan" />
+                Cargando estudiantes...
+              </div>
+            ) : (
+              <>
+                <div className="overflow-hidden rounded-xl border border-border">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-muted/50 text-muted-foreground font-semibold border-b border-border">
+                      <tr>
+                        <th className="px-4 py-2.5">Estudiante</th>
+                        <th className="px-4 py-2.5">Código SIS</th>
+                        <th className="px-4 py-2.5">Correo institucional</th>
+                        <th className="px-4 py-2.5 text-right">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {estudiantes.map((student) => {
+                        const yaAsignado = idsAsignados.has(student.id)
+                        const procesando = asignandoId === student.id
+
+                        return (
+                          <tr key={student.id} className="hover:bg-muted/30 transition-colors">
+                            <td className="px-4 py-2.5 font-bold text-sci-navy truncate">
+                              {fullName(student)}
+                            </td>
+                            <td className="px-4 py-2.5 text-muted-foreground">{student.codigo_sis}</td>
+                            <td className="px-4 py-2.5 text-muted-foreground truncate max-w-[200px]">
+                              {student.email_institucional}
+                            </td>
+                            <td className="px-4 py-2.5 text-right">
+                              {yaAsignado ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200">
+                                  <CheckCircle2 className="h-3 w-3" /> Asignado
+                                </span>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  disabled={procesando}
+                                  onClick={() => void handleAsignarEstudiante(student)}
+                                  className="h-7 px-2.5 text-[11px] font-semibold bg-sci-navy text-white hover:bg-sci-navy/90 cursor-pointer"
+                                >
+                                  {procesando ? (
+                                    <LoaderCircle className="h-3 w-3 animate-spin mr-1" />
+                                  ) : (
+                                    <UserPlus className="h-3 w-3 mr-1" />
+                                  )}
+                                  Asignar Auxiliar
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+
+                      {estudiantes.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
+                            No se encontraron estudiantes.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Paginación */}
+                {totalEstudiantes > 0 && (
+                  <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+                    <span>
+                      Página {page} de {lastPage} · {totalEstudiantes} estudiantes
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage((curr) => Math.max(1, curr - 1))}
+                        disabled={page <= 1}
+                        className="h-7 px-2 text-xs cursor-pointer gap-1"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" /> Anterior
+                      </Button>
+
+                      {Array.from({ length: Math.min(lastPage, 5) }, (_, i) => {
+                        let pageNum = i + 1
+                        if (lastPage > 5 && page > 3) {
+                          pageNum = page - 2 + i
+                          if (pageNum > lastPage) pageNum = lastPage - (4 - i)
+                        }
+
+                        return (
+                          <Button
+                            key={pageNum}
+                            type="button"
+                            variant={page === pageNum ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setPage(pageNum)}
+                            className={`h-7 w-7 p-0 text-xs cursor-pointer ${
+                              page === pageNum ? 'bg-sci-navy text-white' : ''
+                            }`}
+                          >
+                            {pageNum}
+                          </Button>
+                        )
+                      })}
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage((curr) => Math.min(lastPage, curr + 1))}
+                        disabled={page >= lastPage}
+                        className="h-7 px-2 text-xs cursor-pointer gap-1"
+                      >
+                        Siguiente <ChevronRight className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Confirmación de desvinculación */}
       <ConfirmDialog
         isOpen={auxiliarSeleccionado !== null}
-        title="Desvincular auxiliar"
-        description="¿Estás seguro de que deseas desvincular a este auxiliar del examen? Esta acción desactivará su asignación."
+        title="Desvincular auxiliar del examen"
+        description="¿Estás seguro de que deseas retirar a este auxiliar de esta evaluación? El padrón de estudiantes se redistribuirá automáticamente."
         itemName={
           auxiliarSeleccionado
             ? [
