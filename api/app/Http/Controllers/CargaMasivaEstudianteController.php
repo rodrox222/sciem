@@ -210,8 +210,8 @@ class CargaMasivaEstudianteController extends Controller
                         'apellido_materno'         => $datos['apellido_materno'],
                         'email_institucional'      => $datos['email_institucional'],
                         'password'                 => Hash::make($passwordPlano),
-                        'primer_acceso_completado' => false,
-                        'activo'                   => true,
+                        'primer_acceso_completado' => DB::raw('false'),
+                        'activo'                   => DB::raw('true'),
                         'created_at'               => now(),
                         'updated_at'               => now(),
                     ];
@@ -221,9 +221,9 @@ class CargaMasivaEstudianteController extends Controller
                 $lotePivote[] = [
                     'id_examen'                 => $idExamen,
                     'id_estudiante'             => $idEstudiante,
-                    'estado'                    => 'Habilitado', // <--- Habilitado por defecto
+                    'estado'                    => 'Habilitado',
                     'motivo_estado'             => null,
-                    'ajuste_manual'             => false,
+                    'ajuste_manual'             => DB::raw('false'),
                     'modificado_por_docente_id' => null,
                     'fecha_ajuste_manual'       => null,
                     'created_at'                => now(),
@@ -235,7 +235,7 @@ class CargaMasivaEstudianteController extends Controller
                     $lotePrerrequisitos[] = [
                         'id_prerrequisito'        => $idPrerreq,
                         'id_estudiante'           => $idEstudiante,
-                        'cumplido'                => true,
+                        'cumplido'                => DB::raw('true'),
                         'fecha_cumplimiento'      => now(),
                         'revisado_por_docente_id' => $user instanceof Docente ? $user->id : null,
                         'created_at'              => now(),

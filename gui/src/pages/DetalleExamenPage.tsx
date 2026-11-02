@@ -33,6 +33,7 @@ import { DetalleMonitoreoTab } from '@/components/monitoreo/DetalleMonitoreoTab'
 import { EtapasExamen } from '@/components/monitoreo/EtapasExamen'
 import { permiteMonitoreoFrontend } from '@/components/monitoreo/permisoMonitoreo'
 import IntentosNoAutorizadosPage from '@/pages/IntentosNoAutorizadosPage'
+
 const estadoBadges: Record<ExamenEstado, string> = {
   Programado: 'border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy',
   'En proceso': 'border-sci-amber/30 bg-sci-amber/10 text-sci-amber',
