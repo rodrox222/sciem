@@ -103,7 +103,7 @@ class HabilitacionExamenController extends Controller
         $examen->estudiantes()->updateExistingPivot($estudianteId, [
             'estado'                    => $estado,
             'motivo_estado'             => $motivo,
-            'ajuste_manual'             => true,
+            'ajuste_manual'             => DB::raw('true'),
             'modificado_por_docente_id' => $docenteId,
             'fecha_ajuste_manual'       => now(),
             'updated_at'                => now(),
