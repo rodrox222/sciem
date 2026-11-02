@@ -71,9 +71,8 @@ export default function UsuariosPage() {
   // ============================================================
   const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false)
   const [usuarioEstado, setUsuarioEstado] = useState<Usuario | null>(null)
-
   const [cambiandoEstado, setCambiandoEstado] = useState(false)
-  const [resultadoEstado, setResultadoEstado] = useState('')
+  const [errorEstado, setErrorEstado] = useState('')
 
   // ============================================================
   // CARGAR ROLES (Con caché en cliente)
@@ -207,7 +206,7 @@ export default function UsuariosPage() {
   // ============================================================
   const abrirConfirmacionEstado = (usuario: Usuario) => {
     setUsuarioEstado(usuario)
-    setResultadoEstado('')
+    setErrorEstado('')
     setMostrarConfirmacion(true)
   }
 
@@ -215,28 +214,38 @@ export default function UsuariosPage() {
     if (cambiandoEstado) return
     setMostrarConfirmacion(false)
     setUsuarioEstado(null)
-    setResultadoEstado('')
+    setErrorEstado('')
   }
 
   const cambiarEstadoUsuario = async () => {
     if (!usuarioEstado) return
 
+    const idTarget = usuarioEstado.id
+    const estaActualmenteActivo =
+      usuarioEstado.activo === true ||
+      (usuarioEstado.activo as unknown) === 1 ||
+      (usuarioEstado.activo as unknown) === '1'
+
     try {
       setCambiandoEstado(true)
+      setErrorEstado('')
 
-      if (usuarioEstado.activo) {
-        await usuariosService.desactivar(usuarioEstado.id)
-        setResultadoEstado('Usuario desactivado correctamente.')
+      if (estaActualmenteActivo) {
+        await usuariosService.desactivar(idTarget)
       } else {
-        await usuariosService.activar(usuarioEstado.id)
-        setResultadoEstado('Usuario activado correctamente.')
+        await usuariosService.activar(idTarget)
       }
 
-      await cargarUsuarios()
-    } catch (err) {
-      setResultadoEstado(
-        err instanceof Error ? err.message : 'Error al cambiar estado.',
+      setUsuarios((prev) =>
+        prev.map((u) => (u.id === idTarget ? { ...u, activo: !estaActualmenteActivo } : u))
       )
+      setMostrarConfirmacion(false)
+      setUsuarioEstado(null)
+
+      await cargarUsuarios()
+    } catch (err: unknown) {
+      const mensaje = err instanceof Error ? err.message : 'Error al procesar la operación.'
+      setErrorEstado(mensaje)
     } finally {
       setCambiandoEstado(false)
     }
@@ -346,34 +355,38 @@ export default function UsuariosPage() {
             }
           }}
           title={
-            resultadoEstado
-              ? 'Operación completada'
+            errorEstado
+              ? 'No se puede cambiar el estado'
               : usuarioEstado.activo
                 ? 'Desactivar usuario'
                 : 'Activar usuario'
           }
           description={
-            resultadoEstado
-              ? resultadoEstado
-              : usuarioEstado.activo
-                ? `¿Está seguro de desactivar la cuenta de ${[
-                    usuarioEstado.nombre,
-                    usuarioEstado.apellido_paterno,
-                    usuarioEstado.apellido_materno,
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}? No podrá ingresar al sistema.`
-                : `¿Desea habilitar nuevamente el acceso para ${[
-                    usuarioEstado.nombre,
-                    usuarioEstado.apellido_paterno,
-                    usuarioEstado.apellido_materno,
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}?`
+            errorEstado ? (
+              <span className="font-semibold text-sci-red">
+                {errorEstado}
+              </span>
+            ) : usuarioEstado.activo ? (
+              `¿Está seguro de desactivar la cuenta de ${[
+                usuarioEstado.nombre,
+                usuarioEstado.apellido_paterno,
+                usuarioEstado.apellido_materno,
+              ]
+                .filter(Boolean)
+                .join(' ')}? No podrá ingresar al sistema.`
+            ) : (
+              `¿Desea habilitar nuevamente el acceso para ${[
+                usuarioEstado.nombre,
+                usuarioEstado.apellido_paterno,
+                usuarioEstado.apellido_materno,
+              ]
+                .filter(Boolean)
+                .join(' ')}?`
+            )
           }
           confirmText={
-            resultadoEstado
-              ? 'Aceptar'
+            errorEstado
+              ? 'Entendido'
               : cambiandoEstado
                 ? 'Procesando...'
                 : usuarioEstado.activo
@@ -381,14 +394,10 @@ export default function UsuariosPage() {
                   : 'Activar'
           }
           cancelText="Cancelar"
-          onConfirm={
-            resultadoEstado
-              ? cerrarConfirmacionEstado
-              : cambiarEstadoUsuario
-          }
+          onConfirm={errorEstado ? cerrarConfirmacionEstado : cambiarEstadoUsuario}
           onCancel={cerrarConfirmacionEstado}
-          variant={usuarioEstado.activo ? 'destructive' : 'default'}
-          showCancel={!cambiandoEstado && !resultadoEstado}
+          variant={usuarioEstado.activo && !errorEstado ? 'destructive' : 'default'}
+          showCancel={!errorEstado && !cambiandoEstado}
         />
       )}
     </div>

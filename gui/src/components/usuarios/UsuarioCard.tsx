@@ -32,12 +32,17 @@ export function UsuarioCard({
 }: UsuarioCardProps) {
   const nombreCompleto = obtenerNombreCompleto(usuario)
 
+  const estaActivo =
+    usuario.activo === true ||
+    (usuario.activo as unknown) === 1 ||
+    (usuario.activo as unknown) === '1'
+
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xs transition hover:shadow-md">
       {/* Indicador de estado */}
       <div
         className={`h-1.5 ${
-          usuario.activo ? 'bg-sci-blue' : 'bg-sci-red'
+          estaActivo ? 'bg-sci-blue' : 'bg-sci-red'
         }`}
       />
 
@@ -69,12 +74,12 @@ export function UsuarioCard({
 
           <Badge
             className={
-              usuario.activo
+              estaActivo
                 ? 'border border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy hover:bg-sci-cyan/10'
                 : 'border border-sci-red/30 bg-sci-red/10 text-sci-red hover:bg-sci-red/10'
             }
           >
-            {usuario.activo ? 'Activo' : 'Inactivo'}
+            {estaActivo ? 'Activo' : 'Inactivo'}
           </Badge>
 
           {/* Acciones para escritorio */}
@@ -96,12 +101,12 @@ export function UsuarioCard({
               onClick={() => onCambiarEstado(usuario)}
               disabled={cambiandoEstado}
               className={`cursor-pointer ${
-                usuario.activo
+                estaActivo
                   ? 'text-sci-red hover:bg-sci-red/10'
                   : 'text-sci-blue hover:bg-sci-blue/10'
               }`}
             >
-              {usuario.activo ? 'Desactivar' : 'Activar'}
+              {estaActivo ? 'Desactivar' : 'Activar'}
             </Button>
           </div>
 
@@ -127,12 +132,12 @@ export function UsuarioCard({
                 <DropdownMenuItem
                   onClick={() => onCambiarEstado(usuario)}
                   className={
-                    usuario.activo
+                    estaActivo
                       ? 'text-sci-red focus:text-sci-red'
                       : 'text-sci-blue focus:text-sci-blue'
                   }
                 >
-                  {usuario.activo ? 'Desactivar' : 'Activar'}
+                  {estaActivo ? 'Desactivar' : 'Activar'}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
