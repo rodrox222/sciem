@@ -182,8 +182,8 @@ class UserController extends Controller
             return $error;
         }
 
-        $user->activo = DB::raw('false');
-        $user->save();
+        // Ejecutar update explícito en el query builder para garantizar la mutación en PostgreSQL
+        $user->newQuery()->where('id', $user->id)->update(['activo' => false]);
 
         try {
             $this->registrarLog($request, 'USUARIO_DESACTIVADO', [

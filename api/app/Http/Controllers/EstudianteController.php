@@ -218,17 +218,17 @@ class EstudianteController extends Controller
                 );
 
                 $estudiante = Estudiante::create([
-                    'codigo_sis'          => $data['codigo_sis'],
-                    'ci'                  => $data['ci'] ?? null,
-                    'ci_extension'        => $data['ci_extension'] ?? null,
-                    'nombre'              => $data['nombre'],
-                    'apellido_paterno'    => $data['apellido_paterno'],
-                    'apellido_materno'    => $data['apellido_materno'] ?? null,
-                    'email_institucional' => $data['email_institucional'],
-                    'password'            => $defaultPassword,
-                    'activo'              => true,
-                    'es_auxiliar'         => false,
-                    'primer_acceso_completado' => false,
+                    'codigo_sis'               => $data['codigo_sis'],
+                    'ci'                       => $data['ci'] ?? null,
+                    'ci_extension'             => $data['ci_extension'] ?? null,
+                    'nombre'                   => $data['nombre'],
+                    'apellido_paterno'         => $data['apellido_paterno'],
+                    'apellido_materno'         => $data['apellido_materno'] ?? null,
+                    'email_institucional'      => $data['email_institucional'],
+                    'password'                 => $defaultPassword,
+                    'activo'                   => DB::raw('true'),
+                    'es_auxiliar'              => DB::raw('false'),
+                    'primer_acceso_completado' => DB::raw('false'),
                 ]);
             } else {
                 $estudiante->update([
@@ -245,7 +245,7 @@ class EstudianteController extends Controller
                 $estudiante->id => [
                     'estado'        => $estado,
                     'motivo_estado' => null,
-                    'ajuste_manual' => false,
+                    'ajuste_manual' => DB::raw('false'),
                     'created_at'    => now(),
                 ],
             ]);
@@ -850,5 +850,19 @@ class EstudianteController extends Controller
             'success' => true,
             'message' => 'Contraseña actualizada exitosamente.',
         ], 200);
+    }
+
+    // agrega un estudiante como auxiliar
+    public function toggleAuxiliar(string $id): \Illuminate\Http\JsonResponse
+    {
+        $estudiante = \App\Models\Estudiante::findOrFail($id);
+        $estudiante->es_auxiliar = !$estudiante->es_auxiliar;
+        $estudiante->save();
+
+        return response()->json([
+            'success'     => true,
+            'message'     => $estudiante->es_auxiliar ? 'Estudiante asignado como auxiliar.' : 'Rol de auxiliar retirado.',
+            'es_auxiliar' => (bool) $estudiante->es_auxiliar,
+        ]);
     }
 }

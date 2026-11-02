@@ -1,6 +1,7 @@
 import { api } from './api'
 import type { PaginatedResponse } from '@/types/api'
 import type { Norma } from './normas.service'
+import { db, actualizarExamenOffline, type ExamenOfflineInfo } from '../db/offlineStorage'
 
 export type ExamenEstado = 'Programado' | 'En proceso' | 'Terminado'
 
@@ -100,23 +101,93 @@ let cachedDocentes: DocenteItem[] | null = null
 let pendingDocentesPromise: Promise<DocenteItem[]> | null = null
 
 export const examenesService = {
-  list(filters: ExamenFilters = {}) {
-    return api.get<PaginatedResponse<Examen>>(`/examenes${buildExamQuery(filters)}`)
+  /**
+   * Obtiene la lista general de exámenes. Si no hay conexión o falla la red, lee de Dexie.
+   */
+  async list(filters: ExamenFilters = {}): Promise<PaginatedResponse<Examen>> {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return this.listFromDexie(filters)
+    }
+
+    try {
+      const res = await api.get<PaginatedResponse<Examen>>(`/examenes${buildExamQuery(filters)}`)
+      return res
+    } catch (error) {
+      console.warn('Fallo de red al listar exámenes, recuperando desde almacenamiento local...', error)
+      return this.listFromDexie(filters)
+    }
   },
 
-  misExamenes(filters: ExamenFilters = {}) {
-    return api.get<PaginatedResponse<Examen>>(`/mis-examenes${buildExamQuery(filters)}`)
+  /**
+   * Obtiene los exámenes del usuario autenticado (docente/auxiliar). Con fallback offline a Dexie.
+   */
+  async misExamenes(filters: ExamenFilters = {}): Promise<PaginatedResponse<Examen>> {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return this.listFromDexie(filters)
+    }
+
+    try {
+      const res = await api.get<PaginatedResponse<Examen>>(`/mis-examenes${buildExamQuery(filters)}`)
+      return res
+    } catch (error) {
+      console.warn('Fallo de red en misExamenes, recuperando desde almacenamiento local...', error)
+      return this.listFromDexie(filters)
+    }
   },
 
-  get(id: string) {
-    return api.get<Examen>(`/examenes/${id}`)
+  /**
+   * Obtiene un examen por ID. Si está offline, lo busca en Dexie.
+   */
+  async get(id: string): Promise<Examen> {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return this.getFromDexie(id)
+    }
+
+    try {
+      return await api.get<Examen>(`/examenes/${id}`)
+    } catch (error) {
+      console.warn(`Fallo de red al obtener examen ${id}, buscando en Dexie...`, error)
+      return this.getFromDexie(id)
+    }
   },
 
   create(payload: ExamenPayload) {
     return api.post<ExamenMutationResponse>('/examenes', payload)
   },
 
-  update(id: string, payload: ExamenPayload) {
+  /**
+   * Actualiza el examen. Si está offline y es docente, lo persiste en Dexie y encolado para sincronización.
+   */
+  async update(id: string, payload: ExamenPayload): Promise<ExamenMutationResponse> {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const userRole = (localStorage.getItem('user_role') ?? '').toLowerCase()
+
+      if (userRole !== 'docente') {
+        throw new Error('Solo el docente responsable tiene permitido modificar la evaluación en modo offline.')
+      }
+
+      await actualizarExamenOffline(
+        id,
+        {
+          nombre: payload.nombre,
+          id_materia: payload.id_materia,
+          fecha: payload.fecha,
+          hora_ini: payload.hora_ini,
+          hora_fin: payload.hora_fin,
+          estado: payload.estado,
+        },
+        userRole
+      )
+
+      return {
+        message: 'Evaluación actualizada localmente (Modo Offline). Se sincronizará al recuperar la conexión.',
+        examen: {
+          id,
+          ...payload,
+        } as Examen,
+      }
+    }
+
     return api.put<ExamenMutationResponse>(`/examenes/${id}`, payload)
   },
 
@@ -175,5 +246,82 @@ export const examenesService = {
       `/examenes/${examId}/estudiantes/${estudianteId}/habilitacion`,
       payload,
     )
+  },
+
+  /**
+   * Transforma la lista de Dexie al formato paginado que espera la interfaz.
+   */
+  async listFromDexie(filters: ExamenFilters = {}): Promise<PaginatedResponse<Examen>> {
+    const examenesLocales = await db.examenes.toArray()
+
+    let items: Examen[] = examenesLocales.map((ex: ExamenOfflineInfo) => ({
+      id: ex.id_examen,
+      nombre: ex.nombre,
+      id_materia: ex.id_materia || '',
+      estado: (ex.estado as ExamenEstado) || 'Programado',
+      fecha: ex.fecha,
+      hora_ini: ex.hora_ini || '00:00',
+      hora_fin: ex.hora_fin || '00:00',
+      id_aula: '',
+      id_docente: ex.id_docente || '',
+      materia: ex.materia ? { id: ex.id_materia || '', nombre: ex.materia } : null,
+      aula: null,
+      docente: null,
+    }))
+
+    // Filtro por búsqueda de texto
+    if (filters.search?.trim()) {
+      const term = filters.search.trim().toLowerCase()
+      items = items.filter(
+        (e) =>
+          e.nombre.toLowerCase().includes(term) ||
+          e.materia?.nombre.toLowerCase().includes(term)
+      )
+    }
+
+    // Filtro por estado
+    if (filters.estado) {
+      items = items.filter((e) => e.estado === filters.estado)
+    }
+
+    // Filtro por fecha
+    if (filters.fecha) {
+      items = items.filter((e) => e.fecha.slice(0, 10) === filters.fecha)
+    }
+
+    return {
+      data: items,
+      total: items.length,
+      current_page: 1,
+      last_page: 1,
+      per_page: items.length || 15,
+      from: items.length > 0 ? 1 : 0,
+      to: items.length,
+    }
+  },
+
+  /**
+   * Recupera un examen específico desde Dexie por su ID.
+   */
+  async getFromDexie(id: string): Promise<Examen> {
+    const ex = await db.examenes.get(id)
+    if (!ex) {
+      throw new Error('La evaluación solicitada no se encuentra descargada en el almacenamiento local.')
+    }
+
+    return {
+      id: ex.id_examen,
+      nombre: ex.nombre,
+      id_materia: ex.id_materia || '',
+      estado: (ex.estado as ExamenEstado) || 'Programado',
+      fecha: ex.fecha,
+      hora_ini: ex.hora_ini || '00:00',
+      hora_fin: ex.hora_fin || '00:00',
+      id_aula: '',
+      id_docente: ex.id_docente || '',
+      materia: ex.materia ? { id: ex.id_materia || '', nombre: ex.materia } : null,
+      aula: null,
+      docente: null,
+    }
   },
 }

@@ -20,11 +20,26 @@ export interface EstudianteOffline {
 export interface ExamenOfflineInfo {
   id_examen: string
   nombre: string
+  id_materia?: string | null
   materia?: string | null
+  id_docente?: string | null
   fecha: string
   hora_ini?: string | null
   hora_fin?: string | null
   estado: string
+}
+
+export interface ExamenModificadoOffline {
+  id_examen: string
+  nombre?: string
+  id_materia?: string | null
+  fecha?: string
+  hora_ini?: string | null
+  hora_fin?: string | null
+  estado?: string
+  actualizado_por_rol: string
+  actualizado_el: string
+  sincronizado: boolean
 }
 
 export interface PrerrequisitoOffline {
@@ -64,6 +79,7 @@ export interface EstudianteEscaneadoInfo {
 export class SciemOfflineDatabase extends Dexie {
   estudiantes!: Table<EstudianteOffline, [string, string]>
   examenes!: Table<ExamenOfflineInfo, string>
+  examenes_modificados!: Table<ExamenModificadoOffline, string>
   prerrequisitos!: Table<PrerrequisitoOffline, string | number>
   normas!: Table<NormaOffline, string | number>
   asistencias_pendientes!: Table<AsistenciaOffline, number>
@@ -95,10 +111,18 @@ export class SciemOfflineDatabase extends Dexie {
       asistencias_pendientes: '++id, id_examen, id_estudiante, codigo_sis, fecha_ingreso, sincronizado, [id_examen+sincronizado]',
     })
 
-    // Versión 5: Clave primaria compuesta inmune a colisiones y soporte completo a todos los casos del controller
     this.version(5).stores({
       estudiantes: '[id_examen+codigo_sis], id_estudiante, codigo_sis, id_examen, id_auxiliar, estado_habilitacion, [id_examen+id_auxiliar]',
       examenes: 'id_examen, estado',
+      prerrequisitos: 'id, id_examen',
+      normas: 'id, id_examen',
+      asistencias_pendientes: '++id, id_examen, id_estudiante, codigo_sis, fecha_ingreso, resultado, motivo, sincronizado, [id_examen+sincronizado], [id_examen+codigo_sis]',
+    })
+
+    this.version(6).stores({
+      estudiantes: '[id_examen+codigo_sis], id_estudiante, codigo_sis, id_examen, id_auxiliar, estado_habilitacion, [id_examen+id_auxiliar]',
+      examenes: 'id_examen, estado',
+      examenes_modificados: 'id_examen, actualizado_el, sincronizado',
       prerrequisitos: 'id, id_examen',
       normas: 'id, id_examen',
       asistencias_pendientes: '++id, id_examen, id_estudiante, codigo_sis, fecha_ingreso, resultado, motivo, sincronizado, [id_examen+sincronizado], [id_examen+codigo_sis]',
@@ -123,7 +147,9 @@ export async function guardarPadronLocal(
     await db.examenes.put({
       id_examen: idExamen,
       nombre: infoExamen.nombre || 'Evaluación',
+      id_materia: (infoExamen as any).id_materia || null,
       materia: infoExamen.materia || null,
+      id_docente: (infoExamen as any).id_docente || null,
       fecha: infoExamen.fecha || new Date().toISOString().slice(0, 10),
       hora_ini: infoExamen.hora_ini,
       hora_fin: infoExamen.hora_fin,
@@ -175,15 +201,46 @@ export async function guardarPadronLocal(
   }
 }
 
+export async function actualizarExamenOffline(
+  idExamen: string,
+  datos: Partial<ExamenOfflineInfo>,
+  rolUsuario?: string
+): Promise<void> {
+  const rol = (rolUsuario || localStorage.getItem('user_role') || '').toLowerCase()
+  if (rol !== 'docente') {
+    throw new Error('Permiso denegado: únicamente el docente titular puede modificar los datos del examen en modo offline.')
+  }
+
+  const examenExistente = await db.examenes.get(idExamen)
+  if (!examenExistente) {
+    throw new Error('La evaluación académica no se encuentra descargada en el almacenamiento local.')
+  }
+
+  const timestamp = new Date().toISOString()
+
+  await db.examenes.update(idExamen, {
+    ...datos,
+  })
+
+  await db.examenes_modificados.put({
+    id_examen: idExamen,
+    ...datos,
+    actualizado_por_rol: 'docente',
+    actualizado_el: timestamp,
+    sincronizado: false,
+  })
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('examen-offline-actualizado'))
+  }
+}
+
 function notificarCambioOffline() {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('asistencia-offline-guardada'))
   }
 }
 
-/**
- * Validador offline exacto al VerificacionController de Laravel
- */
 export async function validarQrOffline(
   idExamen: string,
   codigoSis: string,
@@ -202,7 +259,6 @@ export async function validarQrOffline(
   const sisBuscado = String(codigoSis || '').trim()
   const timestamp = new Date().toISOString()
 
-  // 1. FORMATO ILEGIBLE / QR INVÁLIDO
   if (!sisBuscado && !idEstudianteToken) {
     await db.asistencias_pendientes.add({
       id_examen: idExamen,
@@ -220,7 +276,6 @@ export async function validarQrOffline(
     }
   }
 
-  // 2. EXAMEN FINALIZADO / VENTANA HORARIA VENCIDA
   const infoExamen = await db.examenes.get(idExamen)
   if (infoExamen) {
     const estadoLimpio = (infoExamen.estado || '').toLowerCase()
@@ -256,7 +311,6 @@ export async function validarQrOffline(
     }
   }
 
-  // Validación de expiración del token QR
   if (expiraAt && Math.floor(Date.now() / 1000) > expiraAt) {
     await db.asistencias_pendientes.add({
       id_examen: idExamen,
@@ -274,7 +328,6 @@ export async function validarQrOffline(
     }
   }
 
-  // 3. QR DE OTRA MATERIA O EXAMEN DISTINTO (Debe validarse antes de buscar en nómina local)
   const esExamenDistinto = Boolean(idExamenToken && idExamenToken !== idExamen)
   const esMateriaDistinta = Boolean(
     materiaToken &&
@@ -299,7 +352,6 @@ export async function validarQrOffline(
     }
   }
 
-  // Búsqueda en la nómina del examen activo
   let estudiante = await db.estudiantes
     .where('[id_examen+codigo_sis]')
     .equals([idExamen, sisBuscado])
@@ -312,7 +364,6 @@ export async function validarQrOffline(
       .first()
   }
 
-  // 4. NO INSCRITO / NO REGISTRADO EN EL EXAMEN
   if (!estudiante) {
     const existeEnOtraMateria = await db.estudiantes.where('codigo_sis').equals(sisBuscado).first()
 
@@ -344,7 +395,6 @@ export async function validarQrOffline(
     foto_url: estudiante.foto_perfil_url,
   }
 
-  // 5. REINGRESO DUPLICADO (Estudiante que ya ingresó)
   const ingresoLocal = await db.asistencias_pendientes
     .where({ id_examen: idExamen, codigo_sis: sisBuscado })
     .filter((item) => item.resultado === 'PERMITIDO')
@@ -371,7 +421,6 @@ export async function validarQrOffline(
     }
   }
 
-  // 6. CONTROL DE ASIGNACIÓN AL AUXILIAR (Fila ajena)
   if (idAuxiliarActual && estudiante.id_auxiliar && estudiante.id_auxiliar !== idAuxiliarActual) {
     await db.asistencias_pendientes.add({
       id_examen: idExamen,
@@ -391,7 +440,6 @@ export async function validarQrOffline(
     }
   }
 
-  // 7. ESTUDIANTE INHABILITADO
   if (estudiante.estado_habilitacion !== 'HABILITADO') {
     const motivo = estudiante.motivo_inhabilitacion || 'No cumple con los prerrequisitos asignados.'
     await db.asistencias_pendientes.add({
@@ -413,7 +461,6 @@ export async function validarQrOffline(
     }
   }
 
-  // 8. INGRESO AUTORIZADO (PERMITIDO)
   await db.asistencias_pendientes.add({
     id_examen: idExamen,
     id_estudiante: estudiante.id_estudiante,
@@ -424,7 +471,6 @@ export async function validarQrOffline(
     sincronizado: false,
   })
 
-  // Marcar como ingresado en Dexie
   await db.estudiantes
     .where('[id_examen+codigo_sis]')
     .equals([idExamen, sisBuscado])
