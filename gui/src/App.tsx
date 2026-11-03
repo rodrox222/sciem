@@ -60,7 +60,7 @@ export default function App() {
 
             {/* Exclusivo Estudiante */}
             <Route element={<ProtectedRoute allowedRoles={['estudiante']} />}>
-              <Route path="/estudiante" element={<EstudianteDashboardPage />} />
+              <Route path="/estudiante" element={<Navigate to="/dashboard" replace />} />
               <Route path="/estudiante/examenes/:id" element={<EstudianteDetalleExamenPage />} />
             </Route>
 

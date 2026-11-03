@@ -42,19 +42,23 @@ interface AsistenciaItem {
   metodo: 'QR' | 'MANUAL'
 }
 
+export interface EstudianteVerificadoPayload {
+  id?: string
+  nombre?: string
+  nombre_completo?: string
+  sis?: string
+  codigo_sis?: string
+  ci?: string | null
+  ci_extension?: string | null
+  foto_url?: string | null
+  foto_perfil_url?: string | null
+}
+
 interface VerificationResponse {
   success?: boolean
   message: string
   resultado: string
-  estudiante?: {
-    id?: string
-    nombre?: string
-    nombre_completo?: string
-    sis?: string
-    codigo_sis?: string
-    ci?: string | null
-    foto_url?: string | null
-  }
+  estudiante?: EstudianteVerificadoPayload
   detalles?: {
     materia?: string
     aula?: string
@@ -71,6 +75,11 @@ interface VerificationErrorPayload {
     motivo_inhabilitacion?: string
     primer_ingreso?: string
   }
+}
+
+type EstudianteRosterExtendido = EstudianteInscritoExamen & {
+  ci_extension?: string | null
+  foto_perfil_url?: string | null
 }
 
 const mapVerificationError = (error: unknown): ResultadoValidacionAcceso => {
@@ -234,7 +243,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
   const [loadingAsistencias, setLoadingAsistencias] = useState(false)
 
   // Roster y búsqueda para ingreso manual
-  const [roster, setRoster] = useState<EstudianteInscritoExamen[]>([])
+  const [roster, setRoster] = useState<EstudianteRosterExtendido[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [manualLoading, setManualLoading] = useState(false)
 
@@ -252,7 +261,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
       )
       setAsistencias(res.asistencias || [])
     } catch {
-      // Ignorar fallo silencioso si está offline
+      // Fallo silencioso si está offline
     } finally {
       setLoadingAsistencias(false)
     }
@@ -262,9 +271,9 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
   const loadRoster = useCallback(async () => {
     try {
       const res = await estudiantesService.listByExam(exam.id)
-      setRoster(res.estudiantes || [])
+      setRoster((res.estudiantes || []) as EstudianteRosterExtendido[])
     } catch {
-      // Ignorar fallo silencioso si está offline
+      // Fallo silencioso si está offline
     }
   }, [exam.id])
 
@@ -304,11 +313,22 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
           const resOffline = await procesarIngresoEscaneado(decodedText, exam.id, token)
 
           if (resOffline.success) {
+            const stOffline = (resOffline.estudiante || {}) as EstudianteVerificadoPayload
+            // Buscar también en el roster precargado si faltara algún campo
+            const stRoster = roster.find(
+              (r) =>
+                (stOffline.id && r.id === stOffline.id) ||
+                (stOffline.codigo_sis && r.codigo_sis === stOffline.codigo_sis)
+            )
+
             setValidationResult({
               estado: 'autorizado',
               estudiante: {
-                nombreCompleto: resOffline.estudiante?.nombre_completo,
-                codigoSis: resOffline.estudiante?.codigo_sis,
+                nombreCompleto: stOffline.nombre_completo || stRoster?.nombre_completo,
+                codigoSis: stOffline.codigo_sis || stRoster?.codigo_sis,
+                ci: (stOffline.ci ?? stRoster?.ci) ?? undefined,
+                ciExtension: (stOffline.ci_extension ?? stRoster?.ci_extension) ?? '',
+                fotoPerfilUrl: (stOffline.foto_perfil_url ?? stRoster?.foto_perfil_url) ?? null,
               },
               horaIngreso: resOffline.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
             })
@@ -343,11 +363,27 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
           { qr_data: decodedText }
         )
 
+        const stOnline = res.estudiante || {}
+        // Enlace de respaldo contra el padrón (roster)
+        const stRoster = roster.find(
+          (r) =>
+            (stOnline.id && r.id === stOnline.id) ||
+            r.codigo_sis === (stOnline.codigo_sis || stOnline.sis)
+        )
+
         setValidationResult({
           estado: 'autorizado',
           estudiante: {
-            nombreCompleto: res.estudiante?.nombre_completo || res.estudiante?.nombre,
-            codigoSis: res.estudiante?.codigo_sis || res.estudiante?.sis,
+            nombreCompleto:
+              stOnline.nombre_completo || stOnline.nombre || stRoster?.nombre_completo,
+            codigoSis: stOnline.codigo_sis || stOnline.sis || stRoster?.codigo_sis,
+            ci: (stOnline.ci ?? stRoster?.ci) ?? undefined,
+            ciExtension: (stOnline.ci_extension ?? stRoster?.ci_extension) ?? '',
+            fotoPerfilUrl:
+              stOnline.foto_perfil_url ||
+              stOnline.foto_url ||
+              stRoster?.foto_perfil_url ||
+              null,
           },
           horaIngreso: res.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
         })
@@ -368,11 +404,11 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
         setIsValidating(false)
       }
     },
-    [exam.id, token, loadAsistencias]
+    [exam.id, token, loadAsistencias, roster]
   )
 
   // Ingreso Manual Asistido sin QR
-  const handleIngresoManual = async (student: EstudianteInscritoExamen) => {
+  const handleIngresoManual = async (student: EstudianteRosterExtendido) => {
     setManualLoading(true)
     setValidationResult({ estado: 'pendiente' })
     setShowModal(true)
@@ -388,8 +424,11 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
         estudiante: {
           nombreCompleto: student.nombre_completo,
           codigoSis: student.codigo_sis,
+          ci: student.ci ?? undefined,
+          ciExtension: student.ci_extension ?? '',
+          fotoPerfilUrl: student.foto_perfil_url ?? null,
         },
-        horaIngreso: response.detalles?.hora_ingreso,
+        horaIngreso: response.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
       })
       setSearchQuery('')
       void loadAsistencias()
@@ -466,7 +505,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
   const filteredCandidates = searchQuery.trim()
     ? roster.filter((st) => {
         const query = searchQuery.toLowerCase()
-        const matchText = `${st.nombre_completo} ${st.codigo_sis} ${st.ci}`.toLowerCase()
+        const matchText = `${st.nombre_completo} ${st.codigo_sis} ${st.ci ?? ''}`.toLowerCase()
         const yaIngreso = asistencias.some((a) => a.estudiante_id === st.id)
         return matchText.includes(query) && !yaIngreso
       })
@@ -608,7 +647,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
                       <div>
                         <p className="font-bold text-sci-navy">{cand.nombre_completo}</p>
                         <p className="text-[11px] text-muted-foreground">
-                          SIS: {cand.codigo_sis} · CI: {cand.ci}
+                          SIS: {cand.codigo_sis} · CI: {cand.ci ?? 'Sin CI'}
                         </p>
                       </div>
 
@@ -756,7 +795,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
         </div>
       </div>
 
-      {/* Modal de Feedback usando el componente dedicado */}
+      {/* Modal de Feedback */}
       <ResultadoValidacionDialog
         open={showModal}
         resultado={validationResult}
