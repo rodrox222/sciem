@@ -187,7 +187,6 @@ class AuxiliarOfflineController extends Controller
                         ->where('id_estudiante', $estudiante->id)
                         ->first();
 
-                    // Control de Asignación Estricta
                     if (!$esDocente && isset($inscripcion->id_auxiliar) && $inscripcion->id_auxiliar !== $user->id) {
                         $errores[] = [
                             'codigo_sis' => $codigoSis,
@@ -225,15 +224,12 @@ class AuxiliarOfflineController extends Controller
                     if ($ingresoPrevio) {
                         $fechaPrevio = Carbon::parse($ingresoPrevio->fecha_escaneo);
 
-                        // Si el registro actual ocurrió ANTES que el existente en servidor
                         if ($fechaIngreso->lt($fechaPrevio)) {
-                            // Degradar el previo a CONFLICTO
                             $ingresoPrevio->update([
                                 'resultado' => 'RECHAZADO_YA_INGRESO',
                                 'mensaje'   => 'Sustituido por ingreso offline cronológicamente anterior (R3).',
                             ]);
 
-                            // Grabar el nuevo como el PERMITIDO válido
                             LogAsistencia::create([
                                 'id_examen'            => $idExamen,
                                 'id_estudiante'        => $estudiante->id,
@@ -252,7 +248,6 @@ class AuxiliarOfflineController extends Controller
                                     'updated_at'    => now('America/La_Paz'),
                                 ]);
                         } else {
-                            // El actual ocurrió DESPUÉS: se marca como CONFLICTO (R3)
                             $this->registrarIntentoDirecto(
                                 $idExamen,
                                 $estudiante->id,
@@ -269,7 +264,6 @@ class AuxiliarOfflineController extends Controller
                             ];
                         }
                     } else {
-                        // Ingreso normal único
                         LogAsistencia::create([
                             'id_examen'            => $idExamen,
                             'id_estudiante'        => $estudiante->id,

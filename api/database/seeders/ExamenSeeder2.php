@@ -20,30 +20,19 @@ class ExamenSeeder2 extends Seeder
 
     public function run(): void
     {
-        $materia = Materia::firstOrCreate(
-            ['nombre' => 'Introduccion a la programacion'],
-            ['id' => (string) Str::uuid()]
-        );
+        // Obtener la materia creada por MateriaSeeder
+        $materia = Materia::where('nombre', 'Introducción a la Programación')
+            ->orWhere('nombre', 'ilike', 'Introduccion a la programacion')
+            ->firstOrFail();
 
-        $aula691 = Aula::firstOrCreate(
-            ['nombre' => 'Aula 691B'],
-            [
-                'id'        => (string) Str::uuid(),
-                'ubicacion' => 'Edificio Nuevo FCyT - Planta Baja',
-                'estado'    => 'Disponible',
-                'capacidad' => 50,
-            ]
-        );
+        // Obtener las aulas creadas por AulaSeeder
+        $aula691 = Aula::where('nombre', 'Aula 691B')
+            ->orWhere('nombre', 'Aula 691-B')
+            ->firstOrFail();
 
-        $aula692 = Aula::firstOrCreate(
-            ['nombre' => 'Aula 692B'],
-            [
-                'id'        => (string) Str::uuid(),
-                'ubicacion' => 'Edificio Nuevo FCyT - Planta Baja',
-                'estado'    => 'Disponible',
-                'capacidad' => 50,
-            ]
-        );
+        $aula692 = Aula::where('nombre', 'Aula 692B')
+            ->orWhere('nombre', 'Aula 692-B')
+            ->firstOrFail();
 
         $docente = Docente::firstOrCreate(
             ['email' => 'docente@fcyt.umss.edu.bo'],

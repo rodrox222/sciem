@@ -17,9 +17,6 @@ use Illuminate\Support\Facades\Log;
 
 class UserController extends Controller
 {
-    /**
-     * Listar usuarios consultando las 3 tablas de forma unificada.
-     */
     public function index(Request $request): JsonResponse
     {
         $tipo = $request->query('tipo_usuario');
@@ -52,16 +49,13 @@ class UserController extends Controller
         $perPage = (int) $request->query('per_page', 10);
         $items = $coleccion->slice(($page - 1) * $perPage, $perPage)->values();
         $paginado = new LengthAwarePaginator($items, $coleccion->count(), $perPage, $page, [
-            'path' => LengthAwarePaginator::resolveCurrentPath(),
+            'path'  => LengthAwarePaginator::resolveCurrentPath(),
             'query' => $request->query(),
         ]);
 
         return response()->json($paginado);
     }
 
-    /**
-     * Crear un nuevo usuario compatible con el Pooler de PostgreSQL/Supabase
-     */
     public function store(StoreUserRequest $request): JsonResponse
     {
         $data = $request->validated();
@@ -76,7 +70,6 @@ class UserController extends Controller
             unset($data['email']);
         }
 
-        // Blindaje contra la emulación de PDO: inyectar el literal SQL directo
         $data['activo'] = $activoBool ? DB::raw('true') : DB::raw('false');
 
         $modelClass = $this->obtenerClaseModelo($tipo);
@@ -86,8 +79,9 @@ class UserController extends Controller
 
         try {
             $this->registrarLog($request, 'USUARIO_CREADO', [
-                'tipo_usuario' => $tipo,
+                'target_type'  => $tipo,
                 'target_id'    => (string) $user->id,
+                'tipo_usuario' => $tipo,
                 'ci'           => $user->ci,
                 'ci_extension' => $user->ci_extension ?? null,
                 'email'        => $user->email ?? null,
@@ -102,9 +96,6 @@ class UserController extends Controller
         ], 201);
     }
 
-    /**
-     * Ver el detalle de un usuario específico por su UUID
-     */
     public function show(string $id): JsonResponse
     {
         $res = $this->buscarPorId($id);
@@ -116,9 +107,6 @@ class UserController extends Controller
         return response()->json($this->formatearUsuario($res['user'], $res['tipo']));
     }
 
-    /**
-     * Actualizar datos de un usuario por su UUID
-     */
     public function update(UpdateUserRequest $request, string $id): JsonResponse
     {
         $res = $this->buscarPorId($id);
@@ -141,6 +129,17 @@ class UserController extends Controller
             unset($data['email']);
         }
 
+        $camposAfectados = array_keys($data);
+        $valoresAnteriores = [];
+
+        foreach ($camposAfectados as $campo) {
+            if ($campo === 'activo') {
+                $valoresAnteriores[$campo] = filter_var($user->activo, FILTER_VALIDATE_BOOLEAN);
+            } else {
+                $valoresAnteriores[$campo] = $user->{$campo};
+            }
+        }
+
         if (isset($data['activo'])) {
             $esActivo = filter_var($data['activo'], FILTER_VALIDATE_BOOLEAN);
             $data['activo'] = $esActivo ? DB::raw('true') : DB::raw('false');
@@ -150,9 +149,14 @@ class UserController extends Controller
 
         try {
             $this->registrarLog($request, 'USUARIO_ACTUALIZADO', [
-                'tipo_usuario'        => $tipoActual,
+                'target_type'         => $tipoActual,
                 'target_id'           => (string) $user->id,
-                'campos_actualizados' => array_keys($data),
+                'tipo_usuario'        => $tipoActual,
+                'campos_actualizados' => $camposAfectados,
+                'valores_anteriores'  => $valoresAnteriores,
+                'valores_nuevos'      => array_merge($data, [
+                    'activo' => isset($data['activo']) ? filter_var($request->input('activo'), FILTER_VALIDATE_BOOLEAN) : $user->activo
+                ]),
             ]);
         } catch (\Throwable $e) {
             Log::warning('No se pudo registrar log de auditoría al actualizar usuario: ' . $e->getMessage());
@@ -164,9 +168,6 @@ class UserController extends Controller
         ]);
     }
 
-    /**
-     * Desactivar usuario por su UUID
-     */
     public function destroy(Request $request, string $id): JsonResponse
     {
         $res = $this->buscarPorId($id);
@@ -182,14 +183,18 @@ class UserController extends Controller
             return $error;
         }
 
-        // Ejecutar update explícito en el query builder para garantizar la mutación en PostgreSQL
-        $user->newQuery()->where('id', $user->id)->update(['activo' => false]);
+        $estadoPrevio = filter_var($user->activo, FILTER_VALIDATE_BOOLEAN);
+
+        $user->newQuery()->where('id', $user->id)->update(['activo' => DB::raw('false')]);
 
         try {
             $this->registrarLog($request, 'USUARIO_DESACTIVADO', [
-                'tipo_usuario' => $tipo,
-                'target_id'    => (string) $user->id,
-                'motivo'       => 'Baja lógica desde módulo de usuarios',
+                'target_type'        => $tipo,
+                'target_id'          => (string) $user->id,
+                'tipo_usuario'       => $tipo,
+                'valores_anteriores' => ['activo' => $estadoPrevio],
+                'valores_nuevos'     => ['activo' => false],
+                'motivo'             => 'Baja lógica desde módulo de usuarios',
             ]);
         } catch (\Throwable $e) {
             Log::warning('No se pudo registrar log de auditoría al desactivar usuario: ' . $e->getMessage());
@@ -197,8 +202,6 @@ class UserController extends Controller
 
         return response()->json(['message' => 'Usuario desactivado exitosamente.']);
     }
-
-    // --- MÉTODOS AUXILIARES ---
 
     private function registrarLog(Request $request, string $accion, ?array $detalles = null): void
     {
@@ -268,7 +271,7 @@ class UserController extends Controller
             'apellido_paterno' => $u->apellido_paterno,
             'apellido_materno' => $u->apellido_materno,
             'email'            => $u->email ?? null,
-            'activo'           => (bool) $u->activo,
+            'activo'           => filter_var($u->activo, FILTER_VALIDATE_BOOLEAN),
             'tipo_usuario'     => $tipo,
             'ultimo_acceso'    => $u->ultimo_acceso,
             'created_at'       => $u->created_at,
@@ -302,7 +305,7 @@ class UserController extends Controller
             return response()->json(['message' => 'No puedes desactivar tu propia cuenta.'], 400);
         }
 
-        if ($tipo === 'admin' && $user->activo) {
+        if ($tipo === 'admin' && filter_var($user->activo, FILTER_VALIDATE_BOOLEAN)) {
             $adminsActivos = Admin::whereRaw('activo is true')->count();
             if ($adminsActivos <= 1) {
                 return response()->json([

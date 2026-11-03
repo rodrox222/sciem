@@ -27,9 +27,10 @@ class MonitoreoController extends Controller
         $ausentes = $rows->whereNull('fecha_ingreso')->values();
         $revision = hash('sha256', $rows->toJson());
         $result = [
-            'examen' => ['id' => $e->id, 'nombre' => $e->nombre, 'fecha' => $e->fecha?->format('Y-m-d')],
-            'resumen' => ['total_estudiantes' => $rows->count(), 'total_ingresados' => $ingresados->count(), 'total_ausentes' => $ausentes->count()],
-            'revision' => $revision, 'hora_servidor' => now('America/La_Paz')->toIso8601String(),
+            'examen'        => ['id' => $e->id, 'nombre' => $e->nombre, 'fecha' => $e->fecha?->format('Y-m-d')],
+            'resumen'       => ['total_estudiantes' => $rows->count(), 'total_ingresados' => $ingresados->count(), 'total_ausentes' => $ausentes->count()],
+            'revision'      => $revision,
+            'hora_servidor' => now('America/La_Paz')->toIso8601String(),
         ];
         if ($request->boolean('incluir_listas') && $request->query('revision') !== $revision) {
             $result['listas'] = ['ingresados' => $ingresados, 'ausentes' => $ausentes];
@@ -44,6 +45,12 @@ class MonitoreoController extends Controller
         [$e, $rows] = $this->datos($request, $idExamen);
         $filtered = ($estado === 'ingresados' ? $rows->whereNotNull('fecha_ingreso') : $rows->whereNull('fecha_ingreso'))->values();
 
-        return response()->json(['examen' => ['id' => $e->id, 'nombre' => $e->nombre], 'estado' => $estado, 'total' => $filtered->count(), 'estudiantes' => $filtered, 'revision' => hash('sha256', $rows->toJson())]);
+        return response()->json([
+            'examen'      => ['id' => $e->id, 'nombre' => $e->nombre],
+            'estado'      => $estado,
+            'total'       => $filtered->count(),
+            'estudiantes' => $filtered,
+            'revision'    => hash('sha256', $rows->toJson()),
+        ]);
     }
 }

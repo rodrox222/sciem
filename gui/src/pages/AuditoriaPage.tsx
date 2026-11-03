@@ -2,7 +2,16 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Download, RotateCcw, Search, ShieldAlert } from 'lucide-react'
+import {
+  Download,
+  RotateCcw,
+  Search,
+  ShieldAlert,
+  Undo2,
+  CheckCircle2,
+  AlertTriangle,
+  X,
+} from 'lucide-react'
 import React, { useCallback, useEffect, useState } from 'react'
 import { api } from '@/services/api'
 import type { PaginatedResponse } from '@/types/api'
@@ -43,6 +52,11 @@ export const AuditoriaPage: React.FC = () => {
   const [result, setResult] = useState<AuditoriaPaginatedResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
+
+  // Estado para el modal de reversión
+  const [logParaRevertir, setLogParaRevertir] = useState<LogAuditoria | null>(null)
+  const [revertiendo, setRevertiendo] = useState(false)
 
   const buildQuery = (pageNumber: number, perPage?: number) => {
     const params = new URLSearchParams()
@@ -85,6 +99,13 @@ export const AuditoriaPage: React.FC = () => {
   const handleBuscar = () => {
     setPage(1)
     fetchAuditoria(1)
+  }
+
+  const handleLimpiar = () => {
+    setFilters(initialFilters)
+    setPage(1)
+    setSuccessMsg(null)
+    api.get<AuditoriaPaginatedResponse>('/auditoria?page=1').then(setResult).catch(() => {})
   }
 
   const handleExportarCSV = async () => {
@@ -152,10 +173,39 @@ export const AuditoriaPage: React.FC = () => {
     }
   }
 
-  const handleLimpiar = () => {
-    setFilters(initialFilters)
-    setPage(1)
-    api.get<AuditoriaPaginatedResponse>('/auditoria?page=1').then(setResult).catch(() => {})
+  // Comprueba si un log específico califica para reversión compensatoria
+  const esReversible = (log: LogAuditoria): boolean => {
+    if (!log.detalles || typeof log.detalles !== 'object') return false
+    if (log.accion === 'REVERSION_EJECUTADA') return false
+    const detalles = log.detalles as Record<string, unknown>
+    return Boolean(
+      detalles.target_type &&
+      detalles.valores_anteriores &&
+      typeof detalles.valores_anteriores === 'object' &&
+      Object.keys(detalles.valores_anteriores as Record<string, unknown>).length > 0
+    )
+  }
+
+  // Ejecución de la reversión hacia el backend
+  const handleConfirmarReversion = async () => {
+    if (!logParaRevertir) return
+
+    setRevertiendo(true)
+    setError(null)
+    setSuccessMsg(null)
+
+    try {
+      await api.post(`/auditoria/${logParaRevertir.id}/revertir`, {})
+      setSuccessMsg(
+        `Se revirtió la acción "${logParaRevertir.accion}" (Log #${logParaRevertir.id}) al estado previo con éxito.`
+      )
+      setLogParaRevertir(null)
+      await fetchAuditoria(page)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'No se pudo aplicar la reversión del log.')
+    } finally {
+      setRevertiendo(false)
+    }
   }
 
   const fmtFecha = (iso: string) =>
@@ -171,9 +221,40 @@ export const AuditoriaPage: React.FC = () => {
           Auditoría del sistema
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Historial cronológico e inalterable de las operaciones realizadas en la plataforma SCI.
+          Historial cronológico de operaciones en la plataforma SCI con soporte de reversión compensatoria.
         </p>
       </div>
+
+      {/* Alertas informativas */}
+      {successMsg && (
+        <Alert className="bg-emerald-500/10 border-emerald-500/20 text-emerald-700 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+            <AlertDescription className="text-xs font-semibold">{successMsg}</AlertDescription>
+          </div>
+          <button
+            onClick={() => setSuccessMsg(null)}
+            className="text-emerald-700 hover:opacity-70 p-1 cursor-pointer"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </Alert>
+      )}
+
+      {error && (
+        <Alert className="bg-sci-red/10 border-sci-red/20 text-sci-red flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="h-4 w-4 text-sci-red shrink-0" />
+            <AlertDescription className="text-xs font-semibold">{error}</AlertDescription>
+          </div>
+          <button
+            onClick={() => setError(null)}
+            className="text-sci-red hover:opacity-70 p-1 cursor-pointer"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </Alert>
+      )}
 
       {/* Panel de Filtros */}
       <div className="bg-card border border-border rounded-2xl p-5 shadow-xs">
@@ -188,7 +269,7 @@ export const AuditoriaPage: React.FC = () => {
           </div>
           <div className="space-y-1.5 text-left">
             <Label htmlFor="f-accion" className="text-xs font-semibold text-foreground">Acción</Label>
-            <Input id="f-accion" value={filters.accion} onChange={(e) => handleFilterChange('accion', e.target.value)} placeholder="ej. LOGIN_EXITOSO" className="h-10 text-xs bg-background" />
+            <Input id="f-accion" value={filters.accion} onChange={(e) => handleFilterChange('accion', e.target.value)} placeholder="ej. USUARIO_ACTUALIZADO" className="h-10 text-xs bg-background" />
           </div>
           <div className="space-y-1.5 text-left">
             <Label htmlFor="f-modulo" className="text-xs font-semibold text-foreground">Módulo</Label>
@@ -231,17 +312,15 @@ export const AuditoriaPage: React.FC = () => {
         </div>
       </div>
 
-      {error && (
-        <Alert className="bg-sci-red/10 border-sci-red/20 text-sci-red">
-          <ShieldAlert className="h-4 w-4 text-sci-red" />
-          <AlertDescription className="ml-2 text-xs font-semibold">{error}</AlertDescription>
-        </Alert>
-      )}
-
       {/* Tabla de Logs */}
       <div className="bg-card border border-border rounded-2xl shadow-xs overflow-hidden">
-        <div className="px-5 py-3 border-b border-border text-xs text-muted-foreground">
-          {loading ? 'Cargando registros…' : result ? `Mostrando ${result.from ?? 0}–${result.to ?? 0} de ${result.total} eventos registrados` : '—'}
+        <div className="px-5 py-3 border-b border-border text-xs text-muted-foreground flex justify-between items-center">
+          <span>
+            {loading ? 'Cargando registros…' : result ? `Mostrando ${result.from ?? 0}–${result.to ?? 0} de ${result.total} eventos registrados` : '—'}
+          </span>
+          <span className="text-[11px] text-muted-foreground/80">
+            Los eventos con estado previo admiten reversión compensatoria.
+          </span>
         </div>
 
         <div className="overflow-x-auto">
@@ -254,40 +333,72 @@ export const AuditoriaPage: React.FC = () => {
                 <th className="px-4 py-3">Acción</th>
                 <th className="px-4 py-3">Módulo</th>
                 <th className="px-4 py-3">IP</th>
+                <th className="px-4 py-3 text-center">Reversión</th>
                 <th className="px-4 py-3 text-right">Detalles</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {result?.data.length ? (
-                result.data.map((log) => (
-                  <tr key={log.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{fmtFecha(log.created_at)}</td>
-                    <td className="px-4 py-3">
-                      <div className="font-bold text-sci-navy">{log.usuario_nombre ?? '—'}</div>
-                      {log.usuario_email && <div className="text-[11px] text-muted-foreground">{log.usuario_email}</div>}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{log.rol_en_el_momento ?? '—'}</td>
-                    <td className="px-4 py-3">
-                      <span className="inline-block px-2.5 py-0.5 rounded-full border border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy font-semibold text-[11px]">
-                        {log.accion}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{log.modulo ?? '—'}</td>
-                    <td className="px-4 py-3 text-muted-foreground font-mono">{log.ip_origen}</td>
-                    <td className="px-4 py-3 text-right">
-                      <details className="inline-block text-left">
-                        <summary className="text-sci-blue hover:underline cursor-pointer font-semibold">Ver</summary>
-                        <pre className="mt-1 text-[11px] bg-muted p-2 rounded-xl max-w-xs whitespace-pre-wrap break-words border border-border">
-                          {log.detalles ? JSON.stringify(log.detalles, null, 2) : '—'}
-                        </pre>
-                      </details>
-                    </td>
-                  </tr>
-                ))
+                result.data.map((log) => {
+                  const reversible = esReversible(log)
+                  const esReversion = log.accion === 'REVERSION_EJECUTADA'
+
+                  return (
+                    <tr key={log.id} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{fmtFecha(log.created_at)}</td>
+                      <td className="px-4 py-3">
+                        <div className="font-bold text-sci-navy">{log.usuario_nombre ?? '—'}</div>
+                        {log.usuario_email && <div className="text-[11px] text-muted-foreground">{log.usuario_email}</div>}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground capitalize">{log.rol_en_el_momento ?? '—'}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-block px-2.5 py-0.5 rounded-full border font-semibold text-[11px] ${
+                            esReversion
+                              ? 'border-amber-500/40 bg-amber-500/10 text-amber-800'
+                              : 'border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy'
+                          }`}
+                        >
+                          {log.accion}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{log.modulo ?? '—'}</td>
+                      <td className="px-4 py-3 text-muted-foreground font-mono">{log.ip_origen}</td>
+
+                      {/* Botón de acción Revertir */}
+                      <td className="px-4 py-3 text-center">
+                        {reversible ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setLogParaRevertir(log)}
+                            className="h-7 px-2.5 text-[11px] font-semibold text-amber-700 border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/15 cursor-pointer gap-1 transition-colors"
+                            title="Restaurar al estado anterior a este cambio"
+                          >
+                            <Undo2 className="h-3 w-3" />
+                            Revertir
+                          </Button>
+                        ) : (
+                          <span className="text-muted-foreground/40 text-[11px]">—</span>
+                        )}
+                      </td>
+
+                      {/* Detalles técnicos */}
+                      <td className="px-4 py-3 text-right">
+                        <details className="inline-block text-left">
+                          <summary className="text-sci-blue hover:underline cursor-pointer font-semibold">Ver</summary>
+                          <pre className="mt-1 text-[11px] bg-muted p-2 rounded-xl max-w-xs whitespace-pre-wrap break-words border border-border">
+                            {log.detalles ? JSON.stringify(log.detalles, null, 2) : '—'}
+                          </pre>
+                        </details>
+                      </td>
+                    </tr>
+                  )
+                })
               ) : (
                 !loading && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                    <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
                       No hay eventos de auditoría que coincidan con estos filtros.
                     </td>
                   </tr>
@@ -321,6 +432,81 @@ export const AuditoriaPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Modal de Confirmación de Reversión */}
+      {logParaRevertir && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-xl max-w-lg w-full space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-amber-500/10 text-amber-600 shrink-0">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Confirmar reversión de cambio</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Esta acción aplicará los valores previos del evento #{logParaRevertir.id} mediante una transacción compensatoria.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-muted/50 border border-border rounded-xl p-3 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Acción original:</span>
+                <span className="font-semibold">{logParaRevertir.accion}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Módulo:</span>
+                <span className="font-semibold">{logParaRevertir.modulo ?? '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Fecha del cambio:</span>
+                <span className="font-mono">{fmtFecha(logParaRevertir.created_at)}</span>
+              </div>
+              <div className="pt-2 border-t border-border/80">
+                <span className="text-muted-foreground block mb-1 font-semibold">Valores que se restaurarán:</span>
+                <pre className="p-2 bg-background rounded-lg border border-border/60 text-[11px] font-mono whitespace-pre-wrap max-h-36 overflow-y-auto">
+                  {JSON.stringify(
+                    (logParaRevertir.detalles as Record<string, unknown>)?.valores_anteriores ?? {},
+                    null,
+                    2
+                  )}
+                </pre>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground italic">
+              El historial no se borrará: se creará un nuevo registro de auditoría de tipo REVERSION_EJECUTADA para documentar la restauración.
+            </p>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-border">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={revertiendo}
+                onClick={() => setLogParaRevertir(null)}
+                className="cursor-pointer"
+              >
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                disabled={revertiendo}
+                onClick={handleConfirmarReversion}
+                className="bg-amber-600 hover:bg-amber-700 text-white cursor-pointer gap-1.5"
+              >
+                {revertiendo ? (
+                  'Restaurando...'
+                ) : (
+                  <>
+                    <Undo2 className="h-4 w-4" />
+                    Confirmar y Revertir
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

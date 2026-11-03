@@ -26,15 +26,12 @@ class EstudianteController extends Controller
 {
     use DistribuyeAuxiliares;
 
-    /**
-     * Listar todos los estudiantes registrados (excluyendo auxiliares si aplica o paginando normal).
-     */
     public function index(Request $request): JsonResponse
     {
         $query = Estudiante::query();
 
         if ($request->boolean('solo_alumnos', false)) {
-            $query->where('es_auxiliar', false);
+            $query->whereRaw('es_auxiliar is false');
         }
 
         if ($search = $request->query('search')) {
@@ -51,13 +48,10 @@ class EstudianteController extends Controller
         return response()->json($query->orderBy('apellido_paterno', 'asc')->paginate($perPage));
     }
 
-    /**
-     * Buscar estudiantes por nombre, código SIS, CI o QR (HU15).
-     */
     public function buscar(Request $request): JsonResponse
     {
         $request->validate([
-            'search' => 'nullable|string|max:255',
+            'search'  => 'nullable|string|max:255',
             'qr_data' => 'nullable|string|max:2000',
         ]);
 
@@ -99,9 +93,6 @@ class EstudianteController extends Controller
         ]);
     }
 
-    /**
-     * Registrar un estudiante en el padrón general.
-     */
     public function store(StoreEstudianteRequest $request): JsonResponse
     {
         $data = $request->validated();
@@ -118,6 +109,8 @@ class EstudianteController extends Controller
         $estudiante = Estudiante::create($data);
 
         $this->registrarAuditoria($request, 'ESTUDIANTE_CREADO', [
+            'target_type'   => 'estudiante',
+            'target_id'     => $estudiante->id,
             'estudiante_id' => $estudiante->id,
             'codigo_sis'    => $estudiante->codigo_sis,
             'ci'            => $estudiante->ci,
@@ -129,9 +122,6 @@ class EstudianteController extends Controller
         ], 201);
     }
 
-    /**
-     * Obtener estudiante por UUID o por Código SIS.
-     */
     public function show(string $identificador): JsonResponse
     {
         $estudiante = Estudiante::where('id', $identificador)
@@ -145,9 +135,6 @@ class EstudianteController extends Controller
         return response()->json($estudiante);
     }
 
-    /**
-     * Listar los estudiantes asignados a un examen específico con su auxiliar encargado.
-     */
     public function estudiantesPorExamen(Request $request, string $idExamen): JsonResponse
     {
         $examen = Examen::find($idExamen);
@@ -169,9 +156,6 @@ class EstudianteController extends Controller
         return response()->json($query->paginate(15));
     }
 
-    /**
-     * Inscribir estudiante al examen directamente y redistribuir carga entre auxiliares.
-     */
     public function inscribirAExamen(InscribirEstudianteExamenRequest $request, string $idExamen): JsonResponse
     {
         $examen = Examen::withCount('prerrequisitos')->find($idExamen);
@@ -204,6 +188,13 @@ class EstudianteController extends Controller
 
         $estadoPorDefecto = ($examen->prerrequisitos_count > 0) ? 'Inhabilitado' : 'Habilitado';
         $estado = $data['estado'] ?? $estadoPorDefecto;
+
+        $inscripcionPrevia = $estudianteExistente ? DB::table('estudiante_examen')
+            ->where('id_examen', $examen->id)
+            ->where('id_estudiante', $estudianteExistente->id)
+            ->first() : null;
+
+        $estadoAnterior = $inscripcionPrevia ? $inscripcionPrevia->estado : null;
 
         $estudiante = DB::transaction(function () use ($examen, $data, $estado) {
             $estudiante = Estudiante::where('codigo_sis', $data['codigo_sis'])->first();
@@ -246,6 +237,7 @@ class EstudianteController extends Controller
                     'motivo_estado' => null,
                     'ajuste_manual' => DB::raw('false'),
                     'created_at'    => now(),
+                    'updated_at'    => now(),
                 ],
             ]);
 
@@ -255,10 +247,13 @@ class EstudianteController extends Controller
         $this->redistribuirEstudiantesExamen($examen->id);
 
         $this->registrarAuditoria($request, 'ESTUDIANTE_INSCRITO_EXAMEN', [
-            'examen_id'     => $examen->id,
-            'estudiante_id' => $estudiante->id,
-            'codigo_sis'    => $estudiante->codigo_sis,
-            'estado'        => $estado,
+            'target_type'        => 'estudiante_examen',
+            'target_id'          => $estudiante->id,
+            'id_examen'          => $examen->id,
+            'id_estudiante'      => $estudiante->id,
+            'codigo_sis'         => $estudiante->codigo_sis,
+            'valores_anteriores' => $estadoAnterior ? ['estado' => $estadoAnterior] : null,
+            'valores_nuevos'     => ['estado' => $estado, 'ajuste_manual' => false],
         ]);
 
         return response()->json([
@@ -269,9 +264,6 @@ class EstudianteController extends Controller
         ], 200);
     }
 
-    /**
-     * Desvincular estudiante de un examen y rebalancear la carga restante.
-     */
     public function desvincularDeExamen(Request $request, string $idExamen, string $idEstudiante): JsonResponse
     {
         $examen = Examen::find($idExamen);
@@ -280,54 +272,30 @@ class EstudianteController extends Controller
             return response()->json(['message' => 'Examen no encontrado.'], 404);
         }
 
+        $pivote = DB::table('estudiante_examen')
+            ->where('id_examen', $idExamen)
+            ->where('id_estudiante', $idEstudiante)
+            ->first();
+
         $examen->estudiantes()->detach($idEstudiante);
 
         $this->redistribuirEstudiantesExamen($examen->id);
 
         $this->registrarAuditoria($request, 'ESTUDIANTE_DESVINCULADO_EXAMEN', [
-            'examen_id'     => $examen->id,
-            'estudiante_id' => $idEstudiante,
+            'target_type'        => 'estudiante_examen',
+            'target_id'          => $idEstudiante,
+            'id_examen'          => $idExamen,
+            'id_estudiante'      => $idEstudiante,
+            'valores_anteriores' => $pivote ? [
+                'estado'        => $pivote->estado,
+                'motivo_estado' => $pivote->motivo_estado,
+                'ajuste_manual' => filter_var($pivote->ajuste_manual, FILTER_VALIDATE_BOOLEAN),
+            ] : null,
         ]);
 
         return response()->json(['message' => 'Estudiante desvinculado del examen correctamente y carga rebalanceada.']);
     }
 
-    /**
-     * Registra auditoría centralizada.
-     */
-    private function registrarAuditoria(Request $request, string $accion, array $detalles = []): void
-    {
-        $user = $request->user();
-
-        $rol = match ($user ? get_class($user) : null) {
-            Admin::class      => 'admin',
-            Docente::class    => 'docente',
-            Auxiliar::class   => 'auxiliar',
-            Estudiante::class => 'estudiante',
-            default           => 'desconocido',
-        };
-
-        $nombreCompleto = $user 
-            ? trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}")
-            : 'Sistema';
-
-        LogAuditoria::create([
-            'user_type'         => $user ? get_class($user) : null,
-            'user_id'           => $user?->id,
-            'rol_en_el_momento' => $rol,
-            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : ($user->nombre ?? 'Sistema'),
-            'usuario_email'     => $user->email_institucional ?? $user->email ?? null,
-            'modulo'            => 'ESTUDIANTES',
-            'accion'            => $accion,
-            'ip_origen'         => $request->ip() ?? '127.0.0.1',
-            'user_agent'        => $request->userAgent(),
-            'detalles'          => $detalles,
-        ]);
-    }
-
-    /**
-     * Completar datos de perfil inicial del estudiante
-     */
     public function completarDatos(CompletarDatosEstudianteRequest $request): JsonResponse
     {
         /** @var Estudiante $estudiante */
@@ -342,13 +310,22 @@ class EstudianteController extends Controller
 
         $data = $request->validated();
 
+        $ciAnterior = $estudiante->ci;
+        $ciExtAnterior = $estudiante->ci_extension;
+
         $estudiante->ci           = trim($data['ci']);
         $estudiante->ci_extension = !empty($data['ci_extension']) ? strtoupper(trim($data['ci_extension'])) : null;
 
-        // Requiere obligatoriamente AMBOS: CI y Foto de perfil subida
         $accesoCompleto = (!empty($estudiante->ci) && !empty($estudiante->foto_perfil_url));
-        $estudiante->primer_acceso_completado = DB::raw($accesoCompleto ? 'true' : 'false');
+        $estudiante->primer_acceso_completado = $accesoCompleto ? DB::raw('true') : DB::raw('false');
         $estudiante->save();
+
+        $this->registrarAuditoria($request, 'ESTUDIANTE_DATOS_COMPLETADOS', [
+            'target_type'        => 'estudiante',
+            'target_id'          => $estudiante->id,
+            'valores_anteriores' => ['ci' => $ciAnterior, 'ci_extension' => $ciExtAnterior],
+            'valores_nuevos'     => ['ci' => $estudiante->ci, 'ci_extension' => $estudiante->ci_extension],
+        ]);
 
         return response()->json([
             'success' => true,
@@ -364,9 +341,6 @@ class EstudianteController extends Controller
         ], 200);
     }
 
-    /**
-     * HU18 Subir y almacenar fotografía facial oficial (Requerimiento estricto).
-     */
     public function subirFoto(Request $request): JsonResponse
     {
         /** @var Estudiante $estudiante */
@@ -394,7 +368,8 @@ class EstudianteController extends Controller
             'foto.max'      => 'La fotografía no debe superar los 3 MB de tamaño.',
         ]);
 
-        // Si ya tenía una foto previa, eliminarla
+        $fotoAnterior = $estudiante->foto_perfil_url;
+
         if ($estudiante->foto_perfil_url && Storage::disk('public')->exists(str_replace('/storage/', '', $estudiante->foto_perfil_url))) {
             Storage::disk('public')->delete(str_replace('/storage/', '', $estudiante->foto_perfil_url));
         }
@@ -402,20 +377,20 @@ class EstudianteController extends Controller
         $archivo = $request->file('foto');
         $nombreArchivo = 'estudiante_' . $estudiante->id . '_' . time() . '.' . $archivo->getClientOriginalExtension();
         
-        // Guardar en storage/app/public/fotos_estudiantes
         $rutaAlmacenada = $archivo->storeAs('fotos_estudiantes', $nombreArchivo, 'public');
 
-        // URL accesible públicamente sin problemas de auth en <img src="">
         $estudiante->foto_perfil_url = '/storage/' . $rutaAlmacenada;
 
-        // Requiere obligatoriamente AMBOS: CI y Foto de perfil
         $accesoCompleto = (!empty($estudiante->ci) && !empty($estudiante->foto_perfil_url));
-        $estudiante->primer_acceso_completado = DB::raw($accesoCompleto ? 'true' : 'false');
+        $estudiante->primer_acceso_completado = $accesoCompleto ? DB::raw('true') : DB::raw('false');
         $estudiante->save();
 
         $this->registrarAuditoria($request, 'ESTUDIANTE_FOTO_ACTUALIZADA', [
-            'estudiante_id' => $estudiante->id,
-            'codigo_sis'    => $estudiante->codigo_sis,
+            'target_type'        => 'estudiante',
+            'target_id'          => $estudiante->id,
+            'valores_anteriores' => ['foto_perfil_url' => $fotoAnterior],
+            'valores_nuevos'     => ['foto_perfil_url' => $estudiante->foto_perfil_url],
+            'codigo_sis'         => $estudiante->codigo_sis,
         ]);
 
         return response()->json([
@@ -468,21 +443,17 @@ class EstudianteController extends Controller
             ], 404);
         }
 
-        if (!Storage::disk('local')->exists($estudiante->foto_perfil_url)) {
+        $relPath = str_replace('/storage/', '', $estudiante->foto_perfil_url);
+        if (!Storage::disk('public')->exists($relPath)) {
             return response()->json([
                 'success' => false,
-                'message' => 'El archivo físico no existe en el servidor local.',
+                'message' => 'El archivo físico no existe en el almacenamiento.',
             ], 404);
         }
 
-        $rutaFisica = Storage::disk('local')->path($estudiante->foto_perfil_url);
-
-        return response()->file($rutaFisica);
+        return response()->file(Storage::disk('public')->path($relPath));
     }
 
-    /**
-     * HU18 Consultar exámenes inscritos y estado de habilitación.
-     */
     public function misExamenes(Request $request): JsonResponse
     {
         /** @var Estudiante $estudiante */
@@ -529,10 +500,6 @@ class EstudianteController extends Controller
         ], 200);
     }
 
-    /**
-     * HU18 Generar token firmado para el código QR dinámico.
-     * Valida de manera estricta el primer acceso completo y realiza la comparación facial.
-     */
     public function generarTokenQr(Request $request, string $idExamen): JsonResponse
     {
         /** @var Estudiante $estudiante */
@@ -562,7 +529,6 @@ class EstudianteController extends Controller
             ], 404);
         }
 
-        // Validación 1: Primer acceso completado
         if (empty($estudiante->ci) || empty($estudiante->foto_perfil_url)) {
             return response()->json([
                 'success'    => false,
@@ -571,7 +537,6 @@ class EstudianteController extends Controller
             ], 403);
         }
 
-        // Validación 2: Estado del examen
         if (in_array(strtolower($examen->estado), ['terminado', 'finalizado', 'concluido'])) {
             return response()->json([
                 'success'    => false,
@@ -580,7 +545,6 @@ class EstudianteController extends Controller
             ], 403);
         }
 
-        // Validación 3: Ventana horaria
         if ($examen->fecha && $examen->hora_fin) {
             $soloFecha = $examen->fecha instanceof \Carbon\Carbon 
                 ? $examen->fecha->format('Y-m-d') 
@@ -609,7 +573,6 @@ class EstudianteController extends Controller
             $timestampExpiracion = now()->addHours(2)->timestamp;
         }
 
-        // Validación 4: Inscripción en el examen
         $inscripcion = DB::table('estudiante_examen')
             ->where('id_estudiante', $estudiante->id)
             ->where('id_examen', $idExamen)
@@ -623,7 +586,6 @@ class EstudianteController extends Controller
             ], 404);
         }
 
-        // Validación 5: Si ya registró asistencia
         if (!empty($inscripcion->fecha_ingreso)) {
             return response()->json([
                 'success'    => false,
@@ -632,7 +594,6 @@ class EstudianteController extends Controller
             ], 403);
         }
 
-        // Validación 6: Estado de habilitación académica
         if (strtolower($inscripcion->estado ?? '') !== 'habilitado') {
             return response()->json([
                 'success'       => false,
@@ -642,7 +603,6 @@ class EstudianteController extends Controller
             ], 403);
         }
 
-        // Validación 7: Comparación biométrica facial obligatoria
         $request->validate([
             'foto_verificacion' => [
                 'required',
@@ -658,7 +618,6 @@ class EstudianteController extends Controller
             'foto_verificacion.max'      => 'La fotografía de captura no debe superar los 5 MB.',
         ]);
 
-        // Limpiar el prefijo '/storage/' para buscar en storage/app/public/
         $rutaRelativaPerfil = str_replace('/storage/', '', $estudiante->foto_perfil_url);
 
         if (!Storage::disk('public')->exists($rutaRelativaPerfil)) {
@@ -679,10 +638,8 @@ class EstudianteController extends Controller
         $rutaFotoPerfil = Storage::disk('public')->path($rutaRelativaPerfil);
         $rutaFotoCapturada = Storage::disk('public')->path($rutaCaptura);
 
-        // Validación de coincidencia facial
         $coincide = $this->compararFotografiasFaciales($rutaFotoPerfil, $rutaFotoCapturada);
 
-        // Ya se hizo la comparación, el archivo temporal se elimina del disco
         if (Storage::disk('public')->exists($rutaCaptura)) {
             Storage::disk('public')->delete($rutaCaptura);
         }
@@ -701,7 +658,6 @@ class EstudianteController extends Controller
             ], 403);
         }
 
-        // Generar Payload firmado
         $payload = [
             'id_estudiante' => $estudiante->id,
             'codigo_sis'    => $estudiante->codigo_sis,
@@ -736,16 +692,12 @@ class EstudianteController extends Controller
         ], 200);
     }
 
-    /**
-     * Compara la foto de perfil oficial contra la foto capturada en tiempo real.
-     */
     private function compararFotografiasFaciales(string $rutaPerfil, string $rutaCaptura): bool
     {
         if (!file_exists($rutaPerfil) || !file_exists($rutaCaptura)) {
             return false;
         }
 
-        // Crear instancias de GD según el tipo de archivo
         $imgPerfil = @imagecreatefromstring((string) file_get_contents($rutaPerfil));
         $imgCaptura = @imagecreatefromstring((string) file_get_contents($rutaCaptura));
 
@@ -753,7 +705,6 @@ class EstudianteController extends Controller
             return false;
         }
 
-        // Redimensionar ambas imágenes a una matriz pequeña normalizada (32x32)
         $tamanio = 32;
         $matrizPerfil = imagecreatetruecolor($tamanio, $tamanio);
         $matrizCaptura = imagecreatetruecolor($tamanio, $tamanio);
@@ -776,29 +727,21 @@ class EstudianteController extends Controller
                 $gC = ($rgbC >> 8) & 0xFF;
                 $bC = $rgbC & 0xFF;
 
-                // Distancia euclidiana de color por píxel normalizado
                 $distancia = sqrt(pow($rP - $rC, 2) + pow($gP - $gC, 2) + pow($bP - $bC, 2));
                 $diferenciaTotal += $distancia;
             }
         }
 
-        // Liberar recursos de memoria
         imagedestroy($imgPerfil);
         imagedestroy($imgCaptura);
         imagedestroy($matrizPerfil);
         imagedestroy($matrizCaptura);
 
-        // Diferencia media por píxel (0 a ~441)
         $diferenciaPromedio = $diferenciaTotal / $totalPixeles;
 
-        // Tolerancia: si la diferencia promedio de color/luminancia es mayor a 65, se rechaza
-        // (Una misma persona en ambiente similar suele rondar entre 15 y 45; otra persona o fondo distinto supera 70)
         return $diferenciaPromedio <= 65.0;
     }
 
-    /**
-     * Cambiar contraseña del estudiante autenticado.
-     */
     public function cambiarPassword(Request $request): JsonResponse
     {
         /** @var Estudiante $estudiante */
@@ -841,6 +784,8 @@ class EstudianteController extends Controller
         $estudiante->save();
 
         $this->registrarAuditoria($request, 'ESTUDIANTE_PASSWORD_ACTUALIZADA', [
+            'target_type'   => 'estudiante',
+            'target_id'     => $estudiante->id,
             'estudiante_id' => $estudiante->id,
             'codigo_sis'    => $estudiante->codigo_sis,
         ]);
@@ -851,17 +796,56 @@ class EstudianteController extends Controller
         ], 200);
     }
 
-    // agrega un estudiante como auxiliar
-    public function toggleAuxiliar(string $id): \Illuminate\Http\JsonResponse
+    public function toggleAuxiliar(Request $request, string $id): JsonResponse
     {
-        $estudiante = \App\Models\Estudiante::findOrFail($id);
-        $estudiante->es_auxiliar = !$estudiante->es_auxiliar;
+        $estudiante = Estudiante::findOrFail($id);
+        $estadoAnterior = (bool) $estudiante->es_auxiliar;
+        $nuevoEstado = !$estadoAnterior;
+
+        $estudiante->es_auxiliar = $nuevoEstado ? DB::raw('true') : DB::raw('false');
         $estudiante->save();
+
+        $this->registrarAuditoria($request, 'ESTUDIANTE_ROL_AUXILIAR_MODIFICADO', [
+            'target_type'        => 'estudiante',
+            'target_id'          => $estudiante->id,
+            'valores_anteriores' => ['es_auxiliar' => $estadoAnterior],
+            'valores_nuevos'     => ['es_auxiliar' => $nuevoEstado],
+        ]);
 
         return response()->json([
             'success'     => true,
-            'message'     => $estudiante->es_auxiliar ? 'Estudiante asignado como auxiliar.' : 'Rol de auxiliar retirado.',
-            'es_auxiliar' => (bool) $estudiante->es_auxiliar,
+            'message'     => $nuevoEstado ? 'Estudiante asignado como auxiliar.' : 'Rol de auxiliar retirado.',
+            'es_auxiliar' => $nuevoEstado,
+        ]);
+    }
+
+    private function registrarAuditoria(Request $request, string $accion, array $detalles = []): void
+    {
+        $user = $request->user();
+
+        $rol = match ($user ? get_class($user) : null) {
+            Admin::class      => 'admin',
+            Docente::class    => 'docente',
+            Auxiliar::class   => 'auxiliar',
+            Estudiante::class => 'estudiante',
+            default           => 'desconocido',
+        };
+
+        $nombreCompleto = $user 
+            ? trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}")
+            : 'Sistema';
+
+        LogAuditoria::create([
+            'user_type'         => $user ? get_class($user) : null,
+            'user_id'           => $user?->id,
+            'rol_en_el_momento' => $rol,
+            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : ($user->nombre ?? 'Sistema'),
+            'usuario_email'     => $user->email_institucional ?? $user->email ?? null,
+            'modulo'            => 'ESTUDIANTES',
+            'accion'            => $accion,
+            'ip_origen'         => $request->ip() ?? '127.0.0.1',
+            'user_agent'        => $request->userAgent(),
+            'detalles'          => $detalles,
         ]);
     }
 }
