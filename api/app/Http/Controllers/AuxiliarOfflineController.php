@@ -18,7 +18,12 @@ class AuxiliarOfflineController extends Controller
     {
         $user = $request->user();
 
-        $examen = Examen::with(['materia:id,nombre', 'aula:id,nombre'])->find($idExamen);
+        $examen = Examen::with([
+            'materia:id,nombre',
+            'aula:id,nombre,ubicacion',
+            'docente:id,nombre,apellido_paterno,apellido_materno',
+        ])->find($idExamen);
+
         if (!$examen) {
             return response()->json(['message' => 'Examen no encontrado.'], 404);
         }
@@ -86,18 +91,29 @@ class AuxiliarOfflineController extends Controller
             ->select(['n.id', 'n.titulo', 'n.descripcion', 'n.tipo'])
             ->get();
 
+        $docenteNombre = $examen->docente
+            ? trim("{$examen->docente->nombre} {$examen->docente->apellido_paterno} {$examen->docente->apellido_materno}")
+            : 'Docente titular';
+
         return response()->json([
             'examen' => [
-                'id'            => $examen->id,
-                'id_examen'     => $examen->id,
-                'nombre'        => $examen->nombre ?? 'Examen',
-                'fecha'         => $examen->fecha ? substr((string)$examen->fecha, 0, 10) : null,
-                'hora_ini'      => $examen->hora_ini,
-                'hora_fin'      => $examen->hora_fin,
-                'estado'        => $examen->estado ?? 'Activo',
-                'materia'       => $examen->materia?->nombre,
-                'aula'          => $examen->aula?->nombre,
-                'descargado_el' => now('America/La_Paz')->toIso8601String(),
+                'id'             => $examen->id,
+                'id_examen'      => $examen->id,
+                'nombre'         => $examen->nombre ?? 'Examen',
+                'fecha'          => $examen->fecha ? substr((string)$examen->fecha, 0, 10) : null,
+                'hora_ini'       => substr((string)$examen->hora_ini, 0, 5),
+                'hora_fin'       => substr((string)$examen->hora_fin, 0, 5),
+                'estado'         => $examen->estado ?? 'Activo',
+                // UUIDs requeridos para la base de datos PostgreSQL
+                'id_materia'     => $examen->id_materia,
+                'materia'        => $examen->materia?->nombre,
+                'id_aula'        => $examen->id_aula,
+                'aula'           => $examen->aula?->nombre ?? 'Aula asignada',
+                'aula_nombre'    => $examen->aula?->nombre ?? 'Aula asignada',
+                'id_docente'     => $examen->id_docente,
+                'docente'        => $docenteNombre,
+                'docente_nombre' => $docenteNombre,
+                'descargado_el'  => now('America/La_Paz')->toIso8601String(),
             ],
             'id_usuario_solicitante' => $user->id,
             'rol'                    => $esDocente ? 'docente' : 'auxiliar',

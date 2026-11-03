@@ -34,6 +34,8 @@ import { EtapasExamen } from '@/components/monitoreo/EtapasExamen'
 import { permiteMonitoreoFrontend } from '@/components/monitoreo/permisoMonitoreo'
 import IntentosNoAutorizadosPage from '@/pages/IntentosNoAutorizadosPage'
 
+import { ControlesOffline } from '@/components/ControlesOffline'
+
 const estadoBadges: Record<ExamenEstado, string> = {
   Programado: 'border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy',
   'En proceso': 'border-sci-amber/30 bg-sci-amber/10 text-sci-amber',
@@ -80,6 +82,8 @@ export default function DetalleExamenPage() {
       setLoading(false)
     }
   }, [id])
+
+  const token = localStorage.getItem('auth_token') ?? localStorage.getItem('token') ?? ''
 
   useEffect(() => {
     if (!id) return
@@ -143,16 +147,16 @@ export default function DetalleExamenPage() {
   return (
     <div className="space-y-6">
       <header className="space-y-3">
-    <Button
-  type="button"
-  variant="ghost"
-  size="sm"
-  onClick={() => navigate('/examenes')}
-  className="h-auto cursor-pointer gap-1 p-0 text-xs font-semibold text-sci-blue hover:text-sci-navy"
->
-  <ArrowLeft className="h-4 w-4" />
-  Volver a exámenes
-</Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate('/examenes')}
+          className="h-auto cursor-pointer gap-1 p-0 text-xs font-semibold text-sci-blue hover:text-sci-navy"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Volver a exámenes
+        </Button>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -175,6 +179,13 @@ export default function DetalleExamenPage() {
             </p>
           </div>
         </div>
+
+        {/* Controles Offline accesibles en todas las pestañas */}
+        {canManage && (
+          <div className="pt-1">
+            <ControlesOffline idExamen={exam.id} token={token} />
+          </div>
+        )}
       </header>
 
       {/* Visible en todas las pestañas, no solo en Monitoreo. */}
