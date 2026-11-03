@@ -188,16 +188,15 @@ class EstudianteController extends Controller
 
         $estudianteExistente = Estudiante::where('codigo_sis', $data['codigo_sis'])->first();
         if ($estudianteExistente) {
-            // Evitar que un auxiliar asignado al examen se inscriba a rendir la misma prueba
-            $esAuxiliar = DB::table('examen_auxiliar')
+            $esAuxiliarEnEsteExamen = DB::table('examen_auxiliar')
                 ->where('id_examen', $examen->id)
                 ->where('id_auxiliar', $estudianteExistente->id) 
                 ->exists();
 
-            if ($esAuxiliar || $estudianteExistente->es_auxiliar) {
+            if ($esAuxiliarEnEsteExamen) {
                 return response()->json([
                     'success'    => false,
-                    'message'    => 'Conflicto de roles: este usuario está designado como auxiliar y no puede inscribirse como estudiante examinando.',
+                    'message'    => 'Conflicto de roles: este usuario ya está asignado como auxiliar en este examen y no puede rendirlo.',
                     'error_type' => 'ROL_DUPLICADO_AUXILIAR',
                 ], 422);
             }
