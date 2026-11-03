@@ -27,7 +27,6 @@ import {
 } from '@/services/estudiantes.service'
 import type { Examen } from '@/services/examenes.service'
 
-import { ControlesOffline } from '@/components/ControlesOffline'
 import { procesarIngresoEscaneado } from '@/services/verificacionScannerService'
 
 const READER_ID = 'qr-camera-stream-unique'
@@ -43,19 +42,23 @@ interface AsistenciaItem {
   metodo: 'QR' | 'MANUAL'
 }
 
+export interface EstudianteVerificadoPayload {
+  id?: string
+  nombre?: string
+  nombre_completo?: string
+  sis?: string
+  codigo_sis?: string
+  ci?: string | null
+  ci_extension?: string | null
+  foto_url?: string | null
+  foto_perfil_url?: string | null
+}
+
 interface VerificationResponse {
   success?: boolean
   message: string
   resultado: string
-  estudiante?: {
-    id?: string
-    nombre?: string
-    nombre_completo?: string
-    sis?: string
-    codigo_sis?: string
-    ci?: string | null
-    foto_url?: string | null
-  }
+  estudiante?: EstudianteVerificadoPayload
   detalles?: {
     materia?: string
     aula?: string
@@ -72,6 +75,11 @@ interface VerificationErrorPayload {
     motivo_inhabilitacion?: string
     primer_ingreso?: string
   }
+}
+
+type EstudianteRosterExtendido = EstudianteInscritoExamen & {
+  ci_extension?: string | null
+  foto_perfil_url?: string | null
 }
 
 const mapVerificationError = (error: unknown): ResultadoValidacionAcceso => {
@@ -235,7 +243,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
   const [loadingAsistencias, setLoadingAsistencias] = useState(false)
 
   // Roster y búsqueda para ingreso manual
-  const [roster, setRoster] = useState<EstudianteInscritoExamen[]>([])
+  const [roster, setRoster] = useState<EstudianteRosterExtendido[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [manualLoading, setManualLoading] = useState(false)
 
@@ -253,7 +261,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
       )
       setAsistencias(res.asistencias || [])
     } catch {
-      // Ignorar fallo silencioso si está offline
+      // Fallo silencioso si está offline
     } finally {
       setLoadingAsistencias(false)
     }
@@ -263,9 +271,9 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
   const loadRoster = useCallback(async () => {
     try {
       const res = await estudiantesService.listByExam(exam.id)
-      setRoster(res.estudiantes || [])
+      setRoster((res.estudiantes || []) as EstudianteRosterExtendido[])
     } catch {
-      // Ignorar fallo silencioso si está offline
+      // Fallo silencioso si está offline
     }
   }, [exam.id])
 
@@ -292,83 +300,115 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
 
   // Proceso de escaneo con soporte híbrido Online/Offline
   const handleScan = useCallback(
-  async (decodedText: string) => {
-    if (isPausedRef.current) return
+    async (decodedText: string) => {
+      if (isPausedRef.current) return
 
-    isPausedRef.current = true
-    setValidationResult(null)
-    setIsValidating(true)
+      isPausedRef.current = true
+      setValidationResult(null)
+      setIsValidating(true)
 
-    try {
-      // Intentar validar directamente contra la API de Laravel
-      const res = await api.post<VerificationResponse>(
-        `/examenes/${exam.id}/verificar-ingreso`,
-        { qr_data: decodedText }
-      )
+      // Función auxiliar para resolver con el motor offline de Dexie
+      const ejecutarOffline = async () => {
+        try {
+          const resOffline = await procesarIngresoEscaneado(decodedText, exam.id, token)
 
-      // Si fue exitoso (200 OK)
-      setValidationResult({
-        estado: 'autorizado',
-        estudiante: {
-          nombreCompleto: res.estudiante?.nombre_completo || res.estudiante?.nombre,
-          codigoSis: res.estudiante?.codigo_sis || res.estudiante?.sis,
-        },
-        horaIngreso: res.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
-      })
-      void loadAsistencias()
-      setShowModal(true)
-    } catch (error: any) {
-      // Solo cortamos si el servidor SÍ respondió con un código HTTP real (400, 403, 409)
-      const tieneRespuestaDelServidor = Boolean(error?.status && error.status >= 400)
+          if (resOffline.success) {
+            const stOffline = (resOffline.estudiante || {}) as EstudianteVerificadoPayload
+            // Buscar también en el roster precargado si faltara algún campo
+            const stRoster = roster.find(
+              (r) =>
+                (stOffline.id && r.id === stOffline.id) ||
+                (stOffline.codigo_sis && r.codigo_sis === stOffline.codigo_sis)
+            )
 
-      if (tieneRespuestaDelServidor && error instanceof ApiError) {
-        setValidationResult(mapVerificationError(error))
+            setValidationResult({
+              estado: 'autorizado',
+              estudiante: {
+                nombreCompleto: stOffline.nombre_completo || stRoster?.nombre_completo,
+                codigoSis: stOffline.codigo_sis || stRoster?.codigo_sis,
+                ci: (stOffline.ci ?? stRoster?.ci) ?? undefined,
+                ciExtension: (stOffline.ci_extension ?? stRoster?.ci_extension) ?? '',
+                fotoPerfilUrl: (stOffline.foto_perfil_url ?? stRoster?.foto_perfil_url) ?? null,
+              },
+              horaIngreso: resOffline.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
+            })
+            void loadAsistencias()
+          } else {
+            const codigoError = resOffline.codigo || resOffline.detalles?.codigo
+
+            setValidationResult(
+              mapOfflineResultToDialog({
+                codigo: codigoError,
+                mensaje: resOffline.mensaje,
+                estudiante: resOffline.estudiante,
+                detalles: resOffline.detalles,
+              })
+            )
+          }
+        } catch (offlineErr) {
+          setValidationResult(mapVerificationError(offlineErr))
+        }
         setShowModal(true)
+      }
+
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        await ejecutarOffline()
+        setIsValidating(false)
         return
       }
 
-      // Si no hubo respuesta del servidor (sin Wi-Fi / red caída)
-      console.warn('Sin conexión al servidor. Procesando escaneo en modo offline...')
-
       try {
-        const resOffline = await procesarIngresoEscaneado(decodedText, exam.id, token)
+        const res = await api.post<VerificationResponse>(
+          `/examenes/${exam.id}/verificar-ingreso`,
+          { qr_data: decodedText }
+        )
 
-        if (resOffline.success) {
-          setValidationResult({
-            estado: 'autorizado',
-            estudiante: {
-              nombreCompleto: resOffline.estudiante?.nombre_completo,
-              codigoSis: resOffline.estudiante?.codigo_sis,
-            },
-            horaIngreso: resOffline.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
-          })
-          void loadAsistencias()
-        } else {
-          // Extrae el código ya sea de primer nivel o de detalles
-          const codigoError = resOffline.codigo || resOffline.detalles?.codigo
+        const stOnline = res.estudiante || {}
+        // Enlace de respaldo contra el padrón (roster)
+        const stRoster = roster.find(
+          (r) =>
+            (stOnline.id && r.id === stOnline.id) ||
+            r.codigo_sis === (stOnline.codigo_sis || stOnline.sis)
+        )
 
-          setValidationResult(
-            mapOfflineResultToDialog({
-              codigo: codigoError,
-              mensaje: resOffline.mensaje,
-              estudiante: resOffline.estudiante,
-              detalles: resOffline.detalles,
-            })
-          )
+        setValidationResult({
+          estado: 'autorizado',
+          estudiante: {
+            nombreCompleto:
+              stOnline.nombre_completo || stOnline.nombre || stRoster?.nombre_completo,
+            codigoSis: stOnline.codigo_sis || stOnline.sis || stRoster?.codigo_sis,
+            ci: (stOnline.ci ?? stRoster?.ci) ?? undefined,
+            ciExtension: (stOnline.ci_extension ?? stRoster?.ci_extension) ?? '',
+            fotoPerfilUrl:
+              stOnline.foto_perfil_url ||
+              stOnline.foto_url ||
+              stRoster?.foto_perfil_url ||
+              null,
+          },
+          horaIngreso: res.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
+        })
+        void loadAsistencias()
+        setShowModal(true)
+      } catch (error: any) {
+        const tieneRespuestaDelServidor = Boolean(error?.status && error.status >= 400)
+
+        if (tieneRespuestaDelServidor && error instanceof ApiError) {
+          setValidationResult(mapVerificationError(error))
+          setShowModal(true)
+          return
         }
-      } catch (offlineErr) {
-        setValidationResult(mapVerificationError(offlineErr))
+
+        console.warn('Fallo de red en la API. Recurriendo a validación offline...')
+        await ejecutarOffline()
+      } finally {
+        setIsValidating(false)
       }
-      setShowModal(true)
-    } finally {
-      setIsValidating(false)
-    }
-  },
-  [exam.id, token, loadAsistencias]
-)
+    },
+    [exam.id, token, loadAsistencias, roster]
+  )
 
   // Ingreso Manual Asistido sin QR
-  const handleIngresoManual = async (student: EstudianteInscritoExamen) => {
+  const handleIngresoManual = async (student: EstudianteRosterExtendido) => {
     setManualLoading(true)
     setValidationResult({ estado: 'pendiente' })
     setShowModal(true)
@@ -384,8 +424,11 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
         estudiante: {
           nombreCompleto: student.nombre_completo,
           codigoSis: student.codigo_sis,
+          ci: student.ci ?? undefined,
+          ciExtension: student.ci_extension ?? '',
+          fotoPerfilUrl: student.foto_perfil_url ?? null,
         },
-        horaIngreso: response.detalles?.hora_ingreso,
+        horaIngreso: response.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
       })
       setSearchQuery('')
       void loadAsistencias()
@@ -462,7 +505,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
   const filteredCandidates = searchQuery.trim()
     ? roster.filter((st) => {
         const query = searchQuery.toLowerCase()
-        const matchText = `${st.nombre_completo} ${st.codigo_sis} ${st.ci}`.toLowerCase()
+        const matchText = `${st.nombre_completo} ${st.codigo_sis} ${st.ci ?? ''}`.toLowerCase()
         const yaIngreso = asistencias.some((a) => a.estudiante_id === st.id)
         return matchText.includes(query) && !yaIngreso
       })
@@ -604,7 +647,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
                       <div>
                         <p className="font-bold text-sci-navy">{cand.nombre_completo}</p>
                         <p className="text-[11px] text-muted-foreground">
-                          SIS: {cand.codigo_sis} · CI: {cand.ci}
+                          SIS: {cand.codigo_sis} · CI: {cand.ci ?? 'Sin CI'}
                         </p>
                       </div>
 
@@ -633,9 +676,6 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
 
         {/* Columna Derecha: Controles Offline, Control de Sesión y Estudiantes en Sala (5 cols) */}
         <div className="space-y-4 lg:col-span-5">
-          {/* Bloque de Gestión Offline (HU-21) */}
-          <ControlesOffline idExamen={exam.id} token={token} />
-
           {/* Tarjeta de Control de Sesión */}
           <Card className="rounded-2xl border-border bg-card shadow-xs">
             <CardContent className="space-y-3 p-5 text-xs">
@@ -755,7 +795,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
         </div>
       </div>
 
-      {/* Modal de Feedback usando el componente dedicado */}
+      {/* Modal de Feedback */}
       <ResultadoValidacionDialog
         open={showModal}
         resultado={validationResult}

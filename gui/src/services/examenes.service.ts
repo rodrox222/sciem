@@ -159,10 +159,10 @@ export const examenesService = {
    * Actualiza el examen. Si está offline y es docente, lo persiste en Dexie y encolado para sincronización.
    */
   async update(id: string, payload: ExamenPayload): Promise<ExamenMutationResponse> {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    const guardarLocal = async () => {
       const userRole = (localStorage.getItem('user_role') ?? '').toLowerCase()
 
-      if (userRole !== 'docente') {
+      if (userRole !== 'docente' && userRole !== 'admin' && userRole !== 'administrador') {
         throw new Error('Solo el docente responsable tiene permitido modificar la evaluación en modo offline.')
       }
 
@@ -171,6 +171,8 @@ export const examenesService = {
         {
           nombre: payload.nombre,
           id_materia: payload.id_materia,
+          id_aula: payload.id_aula,         
+          id_docente: payload.id_docente,   
           fecha: payload.fecha,
           hora_ini: payload.hora_ini,
           hora_fin: payload.hora_fin,
@@ -180,7 +182,7 @@ export const examenesService = {
       )
 
       return {
-        message: 'Evaluación actualizada localmente (Modo Offline). Se sincronizará al recuperar la conexión.',
+        message: 'Modificación guardada localmente en offline.',
         examen: {
           id,
           ...payload,
@@ -188,7 +190,30 @@ export const examenesService = {
       }
     }
 
-    return api.put<ExamenMutationResponse>(`/examenes/${id}`, payload)
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return await guardarLocal()
+    }
+
+    try {
+      return await api.put<ExamenMutationResponse>(`/examenes/${id}`, payload)
+    } catch (error: any) {
+      const mensaje = String(error?.message || '').toLowerCase()
+      const sinConexion =
+        !error.status ||
+        error.status === 0 ||
+        mensaje.includes('network') ||
+        mensaje.includes('conectar') ||
+        mensaje.includes('failed to fetch') ||
+        error.code === 'ERR_NETWORK' ||
+        error.code === 'ECONNABORTED'
+
+      if (sinConexion) {
+        console.warn('Servidor inaccesible, guardando modificaciones del examen en Dexie...')
+        return await guardarLocal()
+      }
+
+      throw error
+    }
   },
 
   delete(id: string) {
@@ -262,11 +287,11 @@ export const examenesService = {
       fecha: ex.fecha,
       hora_ini: ex.hora_ini || '00:00',
       hora_fin: ex.hora_fin || '00:00',
-      id_aula: '',
+      id_aula: ex.id_aula || '',
       id_docente: ex.id_docente || '',
       materia: ex.materia ? { id: ex.id_materia || '', nombre: ex.materia } : null,
-      aula: null,
-      docente: null,
+      aula: ex.id_aula ? { id: ex.id_aula, nombre: ex.aula_nombre || 'Aula asignada' } : null,
+      docente: ex.id_docente ? { id: ex.id_docente, nombre: ex.docente_nombre || 'Docente titular' } : null,
     }))
 
     // Filtro por búsqueda de texto
@@ -317,11 +342,11 @@ export const examenesService = {
       fecha: ex.fecha,
       hora_ini: ex.hora_ini || '00:00',
       hora_fin: ex.hora_fin || '00:00',
-      id_aula: '',
+      id_aula: ex.id_aula || '',
       id_docente: ex.id_docente || '',
       materia: ex.materia ? { id: ex.id_materia || '', nombre: ex.materia } : null,
-      aula: null,
-      docente: null,
+      aula: ex.id_aula ? { id: ex.id_aula, nombre: ex.aula_nombre || 'Aula asignada' } : null,
+      docente: ex.id_docente ? { id: ex.id_docente, nombre: ex.docente_nombre || 'Docente titular' } : null,
     }
   },
 }

@@ -29,6 +29,7 @@ interface QrPayload {
   codigo_sis?: string;
   sis?: string;
   id_examen?: string;
+  materia?: string;
   expira_at?: number;
   timestamp?: number;
 }
@@ -36,12 +37,12 @@ interface QrPayload {
 function extraerDatosQr(qrRaw: string): {
   codigoSis: string;
   idExamenToken?: string;
-  expiraAt?: number;
   idEstudianteToken?: string;
+  materiaToken?: string;
 } {
   const trimmed = qrRaw.trim();
 
-  // Caso 1: Token HMAC Base64 (HU-18)
+  // Caso 1: Token Base64 / JWT
   if (trimmed.includes('.')) {
     try {
       const base64Part = trimmed.split('.')[0];
@@ -51,10 +52,10 @@ function extraerDatosQr(qrRaw: string): {
         codigoSis: parsed.codigo_sis || parsed.sis || '',
         idExamenToken: parsed.id_examen,
         idEstudianteToken: parsed.id_estudiante,
-        expiraAt: parsed.expira_at,
+        materiaToken: parsed.materia,
       };
     } catch {
-      // Si falla la decodificación Base64/JSON, no es un token válido
+      // Ignorar fallo de decodificación
     }
   }
 
@@ -66,20 +67,19 @@ function extraerDatosQr(qrRaw: string): {
         codigoSis: parsed.codigo_sis || parsed.sis || '',
         idExamenToken: parsed.id_examen,
         idEstudianteToken: parsed.id_estudiante,
-        expiraAt: parsed.expira_at,
+        materiaToken: parsed.materia,
       };
     } catch {
       // Ignorar fallo de parseo
     }
   }
 
-  // Caso 3: Código SIS en texto plano (en la UMSS son estrictamente numéricos de 8 a 10 dígitos)
-  const esNumeroSis = /^\d{8,10}$/.test(trimmed);
+  // Caso 3: Código SIS numérico en texto plano
+  const esNumeroSis = /^\d{5,15}$/.test(trimmed);
   if (esNumeroSis) {
     return { codigoSis: trimmed };
   }
 
-  // Caso 4: Si es una URL, datos bancarios o cualquier otro formato ajeno
   return { codigoSis: '' };
 }
 
@@ -87,9 +87,9 @@ export async function procesarIngresoEscaneado(
   qrData: string,
   idExamen: string,
   token: string,
-  idAuxiliarActual?: string // Parámetro para delimitar el módulo
+  idAuxiliarActual?: string
 ): Promise<ResultadoEscaneo> {
-  const { codigoSis, idExamenToken, expiraAt, idEstudianteToken } = extraerDatosQr(qrData);
+  const { codigoSis, idExamenToken, idEstudianteToken, materiaToken } = extraerDatosQr(qrData);
 
   const hayConexion = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
@@ -126,30 +126,44 @@ export async function procesarIngresoEscaneado(
         };
       }
 
-      // Si se agota el tiempo de espera o se cae el servidor, resuelve offline
-      return resolverOffline(idExamen, codigoSis, idExamenToken, expiraAt, idEstudianteToken, idAuxiliarActual);
+      // Si falla la red, resuelve offline
+      return resolverOffline(idExamen, codigoSis, idExamenToken, idEstudianteToken, idAuxiliarActual, materiaToken);
     }
   }
 
   // Modo offline sin internet
-  return resolverOffline(idExamen, codigoSis, idExamenToken, expiraAt, idEstudianteToken, idAuxiliarActual);
+  return resolverOffline(idExamen, codigoSis, idExamenToken, idEstudianteToken, idAuxiliarActual, materiaToken);
 }
 
 async function resolverOffline(
   idExamen: string,
   codigoSis: string,
   idExamenToken?: string,
-  expiraAt?: number,
   idEstudianteToken?: string,
-  idAuxiliarActual?: string
+  idAuxiliarActual?: string,
+  materiaToken?: string
 ): Promise<ResultadoEscaneo> {
+  if (idExamenToken && idExamenToken !== idExamen) {
+    return {
+      success: false,
+      acceso: false,
+      metodo: 'OFFLINE',
+      mensaje: 'El código QR presentado corresponde a otra evaluación o materia.',
+      codigo: 'RECHAZADO_EXAMEN_DISTINTO',
+      detalles: {
+        codigo: 'RECHAZADO_EXAMEN_DISTINTO',
+      },
+    };
+  }
+
   const resOffline = await validarQrOffline(
     idExamen,
     codigoSis,
     idExamenToken,
-    expiraAt,
+    undefined,
     idEstudianteToken,
-    idAuxiliarActual
+    idAuxiliarActual,
+    materiaToken
   );
 
   return {

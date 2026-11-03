@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { db, type AsistenciaOffline } from '../db/offlineStorage';
+import { db } from '../db/offlineStorage';
 import { 
   sincronizarDescargaExamen, 
   sincronizarSubidaAsistencias, 
@@ -16,23 +16,26 @@ export const ControlesOffline: React.FC<Props> = ({ idExamen, token }) => {
   const [cargando, setCargando] = useState<boolean>(false);
   const [mensaje, setMensaje] = useState<string>('');
   const [estaOnline, setEstaOnline] = useState<boolean>(navigator.onLine);
-  const [registrosLocales, setRegistrosLocales] = useState<AsistenciaOffline[]>([]);
-  const [mostrarTarjetas, setMostrarTarjetas] = useState<boolean>(false);
 
   const actualizarDatos = useCallback(async () => {
     try {
-      const lista = await db.asistencias_pendientes
+      const asistenciasPendientes = await db.asistencias_pendientes
         .where('id_examen')
         .equals(idExamen)
-        .reverse()
-        .toArray();
+        .filter((item) => !item.sincronizado)
+        .count()
 
-      setRegistrosLocales(lista);
-      setPendientes(lista.filter((item) => !item.sincronizado).length);
+      const examenModificado = await db.examenes_modificados
+        .where('id_examen')
+        .equals(idExamen)
+        .filter((item) => !item.sincronizado)
+        .count()
+
+      setPendientes(asistenciasPendientes + examenModificado)
     } catch (e) {
-      console.warn('Error al leer asistencias locales en Dexie:', e);
+      console.warn('Error al leer datos locales en Dexie:', e)
     }
-  }, [idExamen]);
+  }, [idExamen])
 
   const handleSincronizar = useCallback(async () => {
     if (!navigator.onLine) {
@@ -81,12 +84,14 @@ export const ControlesOffline: React.FC<Props> = ({ idExamen, token }) => {
     window.addEventListener('offline', handleOfflineStatus);
     window.addEventListener('asistencia-offline-guardada', actualizarDatos);
     window.addEventListener('offline-scan-registered', actualizarDatos);
+    window.addEventListener('examen-offline-actualizado', actualizarDatos);
 
     return () => {
       window.removeEventListener('online', handleOnlineStatus);
       window.removeEventListener('offline', handleOfflineStatus);
       window.removeEventListener('asistencia-offline-guardada', actualizarDatos);
       window.removeEventListener('offline-scan-registered', actualizarDatos);
+      window.removeEventListener('examen-offline-actualizado', actualizarDatos);
     };
   }, [actualizarDatos, handleSincronizar]);
 
@@ -133,7 +138,7 @@ export const ControlesOffline: React.FC<Props> = ({ idExamen, token }) => {
           disabled={cargando || !estaOnline}
           className="px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
         >
-          {cargando ? 'Descargando...' : 'Descargar Padrón'}
+          {cargando ? 'Descargando...' : 'Descargar datos'}
         </button>
 
         <button
@@ -148,61 +153,12 @@ export const ControlesOffline: React.FC<Props> = ({ idExamen, token }) => {
         >
           Sincronizar ({pendientes} pendientes)
         </button>
-
-        <button
-          type="button"
-          onClick={() => setMostrarTarjetas((prev) => !prev)}
-          className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 cursor-pointer"
-        >
-          {mostrarTarjetas ? 'Ocultar registros' : `Ver registros (${registrosLocales.length})`}
-        </button>
       </div>
 
       {mensaje && (
         <p className={`mt-2 font-medium ${mensaje.includes('Error') ? 'text-red-600' : 'text-gray-600'}`}>
           {mensaje}
         </p>
-      )}
-
-      {mostrarTarjetas && (
-        <div className="mt-3 space-y-2 max-h-56 overflow-y-auto">
-          {registrosLocales.length === 0 ? (
-            <p className="text-gray-400 italic">No hay registros locales en este dispositivo.</p>
-          ) : (
-            registrosLocales.map((reg) => (
-              <div
-                key={reg.id}
-                className="p-2.5 bg-white border border-gray-200 rounded-lg flex items-center justify-between"
-              >
-                <div>
-                  <p className="font-bold text-gray-800">
-                    SIS: {reg.codigo_sis}{' '}
-                    <span
-                      className={`text-[10px] ml-1 px-1.5 py-0.5 rounded ${
-                        reg.resultado === 'PERMITIDO'
-                          ? 'bg-emerald-50 text-emerald-700 font-semibold'
-                          : 'bg-rose-50 text-rose-700 font-semibold'
-                      }`}
-                    >
-                      {reg.resultado}
-                    </span>
-                  </p>
-                  <p className="text-[11px] text-gray-500">
-                    Hora local: {new Date(reg.fecha_ingreso).toLocaleTimeString()} · Motivo: {reg.motivo || 'N/A'}
-                  </p>
-                </div>
-
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                    reg.sincronizado ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'
-                  }`}
-                >
-                  {reg.sincronizado ? 'Sincronizado' : 'Pendiente'}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
       )}
     </div>
   );

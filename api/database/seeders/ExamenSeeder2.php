@@ -108,35 +108,35 @@ class ExamenSeeder2 extends Seeder
 
         $ahora = Carbon::now('America/La_Paz');
 
-        // Examen Activo
+        // Examen Activo -> Aula 691B
         $examenActivo = Examen::firstOrNew(['nombre' => 'Segundo Parcial - Activo']);
         if (!$examenActivo->exists) {
             $examenActivo->id = (string) Str::uuid();
         }
         $examenActivo->fill([
             'id_materia' => $materia->id,
-            'id_aula'    => $aula->id,
+            'id_aula'    => $aula691->id,
             'id_docente' => $docente->id,
             'estado'     => 'Programado',
             'fecha'      => $ahora->format('Y-m-d'),
             'hora_ini'   => $ahora->copy()->subMinutes(15)->format('H:i:s'),
-            'hora_fin'   => $ahora->copy()->addMinutes(12)->format('H:i:s'),
+            'hora_fin'   => $ahora->copy()->addMinutes(120)->format('H:i:s'),
         ]);
         $examenActivo->save();
 
-        // Examen por concluir
+        // Examen por concluir -> Aula 692B (evita colisión de aula)
         $examenExpirado = Examen::firstOrNew(['nombre' => 'Primer Parcial - por concluir']);
         if (!$examenExpirado->exists) {
             $examenExpirado->id = (string) Str::uuid();
         }
         $examenExpirado->fill([
             'id_materia' => $materia->id,
-            'id_aula'    => $aula->id,
+            'id_aula'    => $aula692->id,
             'id_docente' => $docente->id,
             'estado'     => 'Programado',
             'fecha'      => $ahora->format('Y-m-d'),
             'hora_ini'   => $ahora->copy()->subMinutes(90)->format('H:i:s'),
-            'hora_fin'   => $ahora->copy()->addMinutes(12)->format('H:i:s'),
+            'hora_fin'   => $ahora->copy()->addMinutes(120)->format('H:i:s'),
         ]);
         $examenExpirado->save();
 
