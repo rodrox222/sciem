@@ -45,7 +45,10 @@ class HabilitacionExamenController extends Controller
                 'apellido_materno', 
                 'email_institucional'
             )
-            ->withPivot('estado', 'motivo_estado', 'ajuste_manual', 'fecha_ajuste_manual', 'id_auxiliar');
+            ->withPivot('estado', 'motivo_estado', 'ajuste_manual', 'fecha_ajuste_manual', 'id_auxiliar')
+            ->orderBy('estudiantes.apellido_paterno', 'asc')
+            ->orderBy('estudiantes.apellido_materno', 'asc')
+            ->orderBy('estudiantes.nombre', 'asc');
 
             if (!$esDocenteOAdmin && $esAuxiliar) {
                 $query->wherePivot('id_auxiliar', $user->id);
@@ -53,12 +56,16 @@ class HabilitacionExamenController extends Controller
         }]);
 
         $estudiantes = $examen->estudiantes->map(function ($estudiante) {
+            // Formato ordenado: Apellido Paterno [Apellido Materno] Nombre
+            $apellidos = trim("{$estudiante->apellido_paterno} {$estudiante->apellido_materno}");
+            $nombreCompleto = trim("{$apellidos} {$estudiante->nombre}");
+
             return [
                 'id'                  => $estudiante->id,
                 'codigo_sis'          => $estudiante->codigo_sis,
                 'ci'                  => $estudiante->ci,
                 'ci_extension'        => $estudiante->ci_extension,
-                'nombre_completo'     => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
+                'nombre_completo'     => $nombreCompleto,
                 'email_institucional' => $estudiante->email_institucional,
                 'estado'              => $estudiante->pivot->estado,
                 'motivo_estado'       => $estudiante->pivot->motivo_estado,
