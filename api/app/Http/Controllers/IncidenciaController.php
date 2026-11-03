@@ -4,81 +4,119 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreIncidenciaRequest;
 use App\Http\Requests\StoreNoticiaRequest;
-use App\Models\Incidencia;
-use App\Models\Noticia;
 use App\Models\Admin;
-use App\Models\Docente;
 use App\Models\Auxiliar;
+use App\Models\Docente;
+use App\Models\Incidencia;
+use App\Models\LogAuditoria;
+use App\Models\Noticia;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class IncidenciaController extends Controller
 {
-    /**
-     * [HU14/T2] Registrar situación excepcional (incidencia)
-     */
     public function storeIncidencia(StoreIncidenciaRequest $request): JsonResponse
     {
         $user = $request->user();
-        
+
         $incidencia = Incidencia::create(array_merge(
             $request->validated(),
             [
-                'autor_id' => $user->id,
+                'autor_id'   => $user->id,
                 'autor_tipo' => get_class($user),
             ]
         ));
 
+        $this->registrarAuditoria($request, 'INCIDENCIA_REGISTRADA', [
+            'target_type' => 'incidencias',
+            'target_id'   => $incidencia->id,
+            'titulo'      => $incidencia->titulo,
+        ]);
+
         return response()->json([
-            'message' => 'Incidencia registrada exitosamente.',
-            'incidencia' => $incidencia
+            'message'    => 'Incidencia registrada exitosamente.',
+            'incidencia' => $incidencia,
         ], 201);
     }
 
-    /**
-     * [HU14/T3] Publicar aviso operativo (noticia)
-     */
     public function storeNoticia(StoreNoticiaRequest $request): JsonResponse
     {
         $user = $request->user();
 
-        // Regla de Negocio: Solo Admin o Docente pueden publicar noticias.
         if (!($user instanceof Admin) && !($user instanceof Docente)) {
-             return response()->json([
-                 'message' => 'No tienes permisos para publicar noticias.'
-             ], 403);
+            return response()->json([
+                'message' => 'No tienes permisos para publicar noticias.'
+            ], 403);
+        }
+
+        $data = $request->validated();
+
+        if (isset($data['es_publica'])) {
+            $esPublicaBool = filter_var($data['es_publica'], FILTER_VALIDATE_BOOLEAN);
+            $data['es_publica'] = $esPublicaBool ? DB::raw('true') : DB::raw('false');
         }
 
         $noticia = Noticia::create(array_merge(
-            $request->validated(),
+            $data,
             [
-                'autor_id' => $user->id,
+                'autor_id'   => $user->id,
                 'autor_tipo' => get_class($user),
             ]
         ));
 
+        $this->registrarAuditoria($request, 'NOTICIA_PUBLICADA', [
+            'target_type' => 'noticias',
+            'target_id'   => $noticia->id,
+            'titulo'      => $noticia->titulo,
+        ]);
+
         return response()->json([
             'message' => 'Noticia publicada exitosamente.',
-            'noticia' => $noticia
+            'noticia' => $noticia,
         ], 201);
     }
 
-    /**
-     * [HU14/T4] Obtener feed de noticias (público o interno)
-     */
     public function getNoticias(Request $request): JsonResponse
     {
-        // Si la petición viene sin token (es pública), solo devolvemos las públicas.
         $esAutenticado = auth('sanctum')->check();
 
         $noticias = Noticia::query()
             ->when(!$esAutenticado, function ($query) {
-                $query->where('es_publica', true);
+                $query->whereRaw('es_publica is true');
             })
-            ->with(['examen', 'autor']) 
+            ->with(['examen', 'autor'])
             ->orderBy('created_at', 'desc')
-            ->paginate(10); // Paginación estándar
+            ->paginate(10);
 
         return response()->json($noticias);
+    }
+
+    private function registrarAuditoria(Request $request, string $accion, array $detalles = []): void
+    {
+        $user = $request->user();
+        if (!$user) return;
+
+        $rol = match (get_class($user)) {
+            Admin::class    => 'admin',
+            Docente::class  => 'docente',
+            Auxiliar::class => 'auxiliar',
+            default         => 'desconocido',
+        };
+
+        $nombreCompleto = trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}");
+
+        LogAuditoria::create([
+            'user_type'         => get_class($user),
+            'user_id'           => $user->id,
+            'rol_en_el_momento' => $rol,
+            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : $user->nombre,
+            'usuario_email'     => $user->email ?? null,
+            'modulo'            => 'INCIDENCIAS_NOTICIAS',
+            'accion'            => $accion,
+            'ip_origen'         => $request->ip() ?? '127.0.0.1',
+            'user_agent'        => $request->userAgent(),
+            'detalles'          => $detalles,
+        ]);
     }
 }

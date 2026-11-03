@@ -16,9 +16,6 @@ use Illuminate\Support\Facades\DB;
 
 class ExamenController extends Controller
 {
-    /**
-     * Agenda Académica / Home: Público. Trae todos los exámenes programados.
-     */
     public function index(Request $request): JsonResponse
     {
         $query = Examen::with([
@@ -53,9 +50,6 @@ class ExamenController extends Controller
         return response()->json($examenes);
     }
 
-    /**
-     * Dashboard "Mis exámenes": Exclusivo del docente titular o auxiliar asignado.
-     */
     public function misExamenes(Request $request): JsonResponse
     {
         /** @var \App\Models\Docente|\App\Models\Auxiliar|\App\Models\Admin|\App\Models\Estudiante $user */
@@ -70,7 +64,6 @@ class ExamenController extends Controller
 
         $rol = \App\Services\RolOperativo::actual($request);
 
-        // Si es estudiante con permiso de auxiliar, habilitar la vista de auxiliar
         $esAuxiliar = ($rol === 'auxiliar') || ($user && !empty($user->es_auxiliar));
 
         if ($rol === 'docente') {
@@ -120,7 +113,6 @@ class ExamenController extends Controller
         $data = $request->validated();
         $user = $request->user();
 
-        // Si quien crea es docente, forzar id_docente a su propio ID
         if ($user instanceof Docente || ($user->rol ?? '') === 'docente') {
             $data['id_docente'] = $user->id;
         }
@@ -150,10 +142,12 @@ class ExamenController extends Controller
         });
 
         $this->registrarAuditoria($request, 'EXAMEN_CREADO', [
-            'examen_id'  => $examen->id,
-            'nombre'     => $examen->nombre,
-            'id_materia' => $examen->id_materia,
-            'fecha'      => $examen->fecha,
+            'target_type' => 'examen',
+            'target_id'   => $examen->id,
+            'examen_id'   => $examen->id,
+            'nombre'      => $examen->nombre,
+            'id_materia'  => $examen->id_materia,
+            'fecha'       => $examen->fecha,
         ]);
 
         return response()->json([
@@ -162,9 +156,6 @@ class ExamenController extends Controller
         ], 201);
     }
 
-    /**
-     * Consulta individual del examen (Blindado contra accesos no autorizados)
-     */
     public function show(Request $request, string $id): JsonResponse
     {
         \App\Services\AccesoExamen::buscar($id);
@@ -175,7 +166,6 @@ class ExamenController extends Controller
         }
 
         $user = $request->user();
-
         $tieneAcceso = \App\Services\AccesoExamen::permite($request, $examen);
 
         if (!$tieneAcceso && $user && !empty($user->es_auxiliar)) {
@@ -200,9 +190,6 @@ class ExamenController extends Controller
         return response()->json($examen);
     }
 
-    /**
-     * Actualización del examen (Solo docente titular o admin)
-     */
     public function update(UpdateExamenRequest $request, string $id): JsonResponse
     {
         $examen = Examen::find($id);
@@ -219,6 +206,8 @@ class ExamenController extends Controller
         }
 
         $data = $request->validated();
+        $camposAfectados = array_keys($data);
+        $valoresAnteriores = $examen->only($camposAfectados);
 
         DB::transaction(function () use ($examen, $data, $request) {
             $examen->update($data);
@@ -243,8 +232,11 @@ class ExamenController extends Controller
         });
 
         $this->registrarAuditoria($request, 'EXAMEN_ACTUALIZADO', [
-            'examen_id'           => $examen->id,
-            'campos_actualizados' => array_keys($data),
+            'target_type'         => 'examen',
+            'target_id'           => $examen->id,
+            'campos_actualizados' => $camposAfectados,
+            'valores_anteriores'  => $valoresAnteriores,
+            'valores_nuevos'      => $data,
         ]);
 
         return response()->json([
@@ -253,9 +245,6 @@ class ExamenController extends Controller
         ]);
     }
 
-    /**
-     * Eliminación del examen (Solo docente titular o admin)
-     */
     public function destroy(Request $request, string $id): JsonResponse
     {
         $examen = Examen::find($id);
@@ -272,8 +261,10 @@ class ExamenController extends Controller
         }
 
         $detalles = [
-            'examen_id' => $examen->id,
-            'nombre'    => $examen->nombre,
+            'target_type' => 'examen',
+            'target_id'   => $examen->id,
+            'examen_id'   => $examen->id,
+            'nombre'      => $examen->nombre,
         ];
 
         $examen->delete();
@@ -283,11 +274,6 @@ class ExamenController extends Controller
         return response()->json(['message' => 'Examen eliminado exitosamente.']);
     }
 
-    /**
-     * Helper de autorización:
-     * - $soloEscritura = false: permite lectura a admin, docente titular y auxiliar aceptado.
-     * - $soloEscritura = true: permite edición/borrado solo a admin y docente titular.
-     */
     private function validarAccesoExamen($user, Examen $examen, bool $soloEscritura = false): bool
     {
         if (!$user) {

@@ -15,14 +15,10 @@ use Illuminate\Support\Facades\Cache;
 
 class MateriaController extends Controller
 {
-    /**
-     * Listar materias con búsqueda y paginación opcional
-     */
     public function index(Request $request): JsonResponse
     {
         $search = $request->query('search');
 
-        // Cachear cuando piden el catálogo completo (?all=1 o ?all=true) sin búsqueda
         if ($request->boolean('all') && empty($search)) {
             $materias = Cache::remember('catalogo_materias_all', 600, function () {
                 return Materia::orderBy('nombre', 'asc')->get();
@@ -45,9 +41,6 @@ class MateriaController extends Controller
         return response()->json($query->orderBy('nombre', 'asc')->paginate($perPage));
     }
 
-    /**
-     * Crear una materia (Admin y Docente)
-     */
     public function store(StoreMateriaRequest $request): JsonResponse
     {
         $data = $request->validated();
@@ -56,8 +49,9 @@ class MateriaController extends Controller
         Cache::forget('catalogo_materias_all');
 
         $this->registrarAuditoria($request, 'MATERIA_CREADA', [
-            'materia_id' => $materia->id,
-            'nombre'     => $materia->nombre,
+            'target_type' => 'materia',
+            'target_id'   => $materia->id,
+            'nombre'      => $materia->nombre,
         ]);
 
         return response()->json([
@@ -66,9 +60,6 @@ class MateriaController extends Controller
         ], 201);
     }
 
-    /**
-     * Ver detalle de una materia con la cantidad de exámenes relacionados
-     */
     public function show(string $id): JsonResponse
     {
         $materia = Materia::withCount('examenes')->find($id);
@@ -80,9 +71,6 @@ class MateriaController extends Controller
         return response()->json($materia);
     }
 
-    /**
-     * Actualizar una materia
-     */
     public function update(UpdateMateriaRequest $request, string $id): JsonResponse
     {
         $materia = Materia::find($id);
@@ -92,13 +80,19 @@ class MateriaController extends Controller
         }
 
         $data = $request->validated();
+        $camposAfectados = array_keys($data);
+        $valoresAnteriores = $materia->only($camposAfectados);
+
         $materia->update($data);
 
         Cache::forget('catalogo_materias_all');
 
         $this->registrarAuditoria($request, 'MATERIA_ACTUALIZADA', [
-            'materia_id'          => $materia->id,
-            'campos_actualizados' => array_keys($data),
+            'target_type'         => 'materia',
+            'target_id'           => $materia->id,
+            'campos_actualizados' => $camposAfectados,
+            'valores_anteriores'  => $valoresAnteriores,
+            'valores_nuevos'      => $data,
         ]);
 
         return response()->json([
@@ -107,9 +101,6 @@ class MateriaController extends Controller
         ]);
     }
 
-    /**
-     * Eliminar materia evitando romper integridad referencial
-     */
     public function destroy(Request $request, string $id): JsonResponse
     {
         $materia = Materia::withCount('examenes')->find($id);
@@ -125,8 +116,9 @@ class MateriaController extends Controller
         }
 
         $detalles = [
-            'materia_id' => $materia->id,
-            'nombre'     => $materia->nombre,
+            'target_type' => 'materia',
+            'target_id'   => $materia->id,
+            'nombre'      => $materia->nombre,
         ];
 
         $materia->delete();
@@ -138,28 +130,25 @@ class MateriaController extends Controller
         return response()->json(['message' => 'Materia eliminada exitosamente.']);
     }
 
-    /**
-     * Registra el evento en logs_auditoria con el esquema centralizado.
-     */
     private function registrarAuditoria(Request $request, string $accion, array $detalles = []): void
     {
         $user = $request->user();
 
-        $rol = match (get_class($user)) {
+        $rol = match ($user ? get_class($user) : null) {
             Admin::class    => 'admin',
             Docente::class  => 'docente',
             Auxiliar::class => 'auxiliar',
             default         => 'desconocido',
         };
 
-        $nombreCompleto = trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}");
+        $nombreCompleto = $user ? trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}") : 'Sistema';
 
         LogAuditoria::create([
-            'user_type'         => get_class($user),
-            'user_id'           => $user->id,
+            'user_type'         => $user ? get_class($user) : null,
+            'user_id'           => $user?->id,
             'rol_en_el_momento' => $rol,
-            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : $user->nombre,
-            'usuario_email'     => $user->email ?? null,
+            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : ($user?->nombre ?? 'Sistema'),
+            'usuario_email'     => $user?->email ?? null,
             'modulo'            => 'MATERIAS',
             'accion'            => $accion,
             'ip_origen'         => $request->ip() ?? '127.0.0.1',

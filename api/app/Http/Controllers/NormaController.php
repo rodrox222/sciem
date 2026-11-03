@@ -19,15 +19,11 @@ use Illuminate\Support\Facades\Cache;
 
 class NormaController extends Controller
 {
-    /**
-     * Listar normas con filtros.
-     */
     public function index(Request $request): JsonResponse
     {
         $tipo = $request->query('tipo');
         $search = $request->query('search');
 
-        // Cachear catálogo de normas generales
         if ($request->boolean('all') && $tipo === 'General' && !$search) {
             $normas = Cache::remember('catalogo_normas_generales', 600, function () {
                 return Norma::where('tipo', 'General')->orderBy('titulo', 'asc')->get();
@@ -55,18 +51,16 @@ class NormaController extends Controller
         return response()->json($query->orderBy('created_at', 'desc')->paginate(10));
     }
 
-    /**
-     * Crear una nueva norma.
-     */
     public function store(StoreNormaRequest $request): JsonResponse
     {
         $data = $request->validated();
         $norma = Norma::create($data);
 
         $this->registrarAuditoria($request, 'NORMA_CREADA', [
-            'norma_id' => $norma->id,
-            'titulo'   => $norma->titulo,
-            'tipo'     => $norma->tipo,
+            'target_type' => 'normas',
+            'target_id'   => $norma->id,
+            'titulo'      => $norma->titulo,
+            'tipo'        => $norma->tipo,
         ]);
 
         return response()->json([
@@ -75,9 +69,6 @@ class NormaController extends Controller
         ], 201);
     }
 
-    /**
-     * Detalle de una norma.
-     */
     public function show(string $id): JsonResponse
     {
         $norma = Norma::find($id);
@@ -89,10 +80,6 @@ class NormaController extends Controller
         return response()->json($norma);
     }
 
-    /**
-     * Actualizar una norma.
-     * Restricción: Los docentes NO pueden modificar normas Generales.
-     */
     public function update(UpdateNormaRequest $request, string $id): JsonResponse
     {
         $norma = Norma::find($id);
@@ -112,11 +99,18 @@ class NormaController extends Controller
         if (isset($data['tipo']) && $data['tipo'] !== $norma->tipo) {
             throw ValidationException::withMessages(['tipo' => 'El tipo de una norma existente no puede cambiarse.']);
         }
+
+        $camposAfectados = array_keys($data);
+        $valoresAnteriores = $norma->only($camposAfectados);
+
         $norma->update($data);
 
         $this->registrarAuditoria($request, 'NORMA_ACTUALIZADA', [
-            'norma_id'            => $norma->id,
-            'campos_actualizados' => array_keys($data),
+            'target_type'         => 'normas',
+            'target_id'           => $norma->id,
+            'campos_actualizados' => $camposAfectados,
+            'valores_anteriores'  => $valoresAnteriores,
+            'valores_nuevos'      => $data,
         ]);
 
         return response()->json([
@@ -125,9 +119,6 @@ class NormaController extends Controller
         ]);
     }
 
-    /**
-     * Eliminar una norma.
-     */
     public function destroy(Request $request, string $id): JsonResponse
     {
         $norma = Norma::find($id);
@@ -144,9 +135,10 @@ class NormaController extends Controller
         }
 
         $detalles = [
-            'norma_id' => $norma->id,
-            'titulo'   => $norma->titulo,
-            'tipo'     => $norma->tipo,
+            'target_type' => 'normas',
+            'target_id'   => $norma->id,
+            'titulo'      => $norma->titulo,
+            'tipo'        => $norma->tipo,
         ];
 
         $norma->delete();
@@ -156,7 +148,6 @@ class NormaController extends Controller
         return response()->json(['message' => 'Norma eliminada exitosamente.']);
     }
 
-    /** Crea normas particulares dentro de un examen, sin dejar normas sueltas. */
     public function crearParticularesParaExamen(Request $request, string $id): JsonResponse
     {
         $examen = Examen::find($id);
@@ -169,8 +160,8 @@ class NormaController extends Controller
         }
 
         $data = $request->validate([
-            'particulares' => ['required', 'array', 'min:1', 'max:20'],
-            'particulares.*.titulo' => ['required', 'string', 'max:150'],
+            'particulares'               => ['required', 'array', 'min:1', 'max:20'],
+            'particulares.*.titulo'      => ['required', 'string', 'max:150'],
             'particulares.*.descripcion' => ['required', 'string'],
         ]);
 
@@ -187,9 +178,9 @@ class NormaController extends Controller
                     continue;
                 }
                 $norma = Norma::create([
-                    'titulo' => trim($particular['titulo']),
+                    'titulo'      => trim($particular['titulo']),
                     'descripcion' => trim($particular['descripcion']),
-                    'tipo' => 'Particular',
+                    'tipo'        => 'Particular',
                 ]);
                 $examen->normas()->attach($norma->id);
                 $creadas->push($norma);
@@ -198,19 +189,18 @@ class NormaController extends Controller
         });
 
         $this->registrarAuditoria($request, 'NORMAS_PARTICULARES_CREADAS_EXAMEN', [
-            'examen_id' => $examen->id,
-            'normas_ids' => $normas->pluck('id')->all(),
+            'target_type' => 'examen_norma',
+            'target_id'   => $examen->id,
+            'examen_id'   => $examen->id,
+            'normas_ids'  => $normas->pluck('id')->all(),
         ]);
 
         return response()->json([
             'message' => 'Normas particulares vinculadas al examen.',
-            'normas' => $normas,
+            'normas'  => $normas,
         ], 201);
     }
 
-    /**
-     * Asignar o sincronizar un conjunto de normas a un examen específico (tabla pivote).
-     */
     public function syncExamenNormas(SyncNormasExamenRequest $request, string $idExamen): JsonResponse
     {
         $examen = Examen::find($idExamen);
@@ -235,11 +225,16 @@ class NormaController extends Controller
             ]);
         }
 
+        $normasPrevias = $examen->normas()->pluck('normas.id')->toArray();
+
         $examen->normas()->sync($ids);
 
         $this->registrarAuditoria($request, 'NORMAS_ASIGNADAS_EXAMEN', [
-            'examen_id'  => $examen->id,
-            'normas_ids' => $request->validated('normas'),
+            'target_type'        => 'examen_norma',
+            'target_id'          => $examen->id,
+            'examen_id'          => $examen->id,
+            'valores_anteriores' => ['normas' => $normasPrevias],
+            'valores_nuevos'     => ['normas' => $ids],
         ]);
 
         return response()->json([
@@ -248,28 +243,25 @@ class NormaController extends Controller
         ]);
     }
 
-    /**
-     * Registra el evento en logs_auditoria con el nuevo esquema centralizado.
-     */
     private function registrarAuditoria(Request $request, string $accion, array $detalles = []): void
     {
         $user = $request->user();
 
-        $rol = match (get_class($user)) {
+        $rol = match ($user ? get_class($user) : null) {
             Admin::class    => 'admin',
             Docente::class  => 'docente',
             Auxiliar::class => 'auxiliar',
             default         => 'desconocido',
         };
 
-        $nombreCompleto = trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}");
+        $nombreCompleto = $user ? trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}") : 'Sistema';
 
         LogAuditoria::create([
-            'user_type'         => get_class($user),
-            'user_id'           => $user->id,
+            'user_type'         => $user ? get_class($user) : null,
+            'user_id'           => $user?->id,
             'rol_en_el_momento' => $rol,
-            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : $user->nombre,
-            'usuario_email'     => $user->email ?? null,
+            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : ($user?->nombre ?? 'Sistema'),
+            'usuario_email'     => $user?->email ?? null,
             'modulo'            => 'NORMAS',
             'accion'            => $accion,
             'ip_origen'         => $request->ip() ?? '127.0.0.1',

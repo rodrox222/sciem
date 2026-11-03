@@ -4,11 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Concerns\HasUuids; 
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 
 class Noticia extends Model
 {
-    use HasFactory, HasUuids; 
+    use HasFactory, HasUuids;
+
+    protected $table = 'noticias';
 
     protected $fillable = [
         'titulo',
@@ -17,8 +19,17 @@ class Noticia extends Model
         'es_publica',
         'autor_id',
         'autor_tipo',
-        'id_examen' 
+        'id_examen',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'es_publica' => 'boolean',
+            'created_at' => 'datetime',
+            'updated_at' => 'datetime',
+        ];
+    }
 
     public function autor()
     {

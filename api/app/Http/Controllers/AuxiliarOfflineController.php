@@ -56,35 +56,29 @@ class AuxiliarOfflineController extends Controller
             ->orderBy('e.nombre', 'asc')
             ->get();
 
-        // 1. Docente descarga TODO el padrón completo
         if ($esDocente) {
             $estudiantesParaEscanear = $todosEstudiantes;
             $otrosModulosSis = [];
         } else {
-            // 2. Auxiliar descarga solo SUS estudiantes asignados
             $estudiantesParaEscanear = $todosEstudiantes->filter(function ($item) use ($user) {
                 return $item->id_auxiliar === $user->id;
             })->values();
 
-            // Lista ligera de códigos SIS del resto del examen para detectar "NO_ASIGNADO" offline
             $otrosModulosSis = $todosEstudiantes->filter(function ($item) use ($user) {
                 return $item->id_auxiliar !== $user->id;
             })->pluck('codigo_sis')->toArray();
         }
 
-        // Expulsiones vigentes para validar offline igual que en el online
         $expulsiones = DB::table('expulsiones')
             ->where('id_examen', $idExamen)
             ->pluck('id_estudiante')
             ->toArray();
 
-        // Prerrequisitos
         $prerrequisitos = DB::table('prerrequisitos_examen')
             ->where('id_examen', $idExamen)
             ->select(['id', 'id_examen', 'titulo as nombre', 'descripcion'])
             ->get();
 
-        // Normas activas
         $normas = DB::table('examen_norma as en')
             ->join('normas as n', 'en.id_norma', '=', 'n.id')
             ->where('en.id_examen', $idExamen)
@@ -177,7 +171,6 @@ class AuxiliarOfflineController extends Controller
                         ->where('id_estudiante', $estudiante->id)
                         ->first();
 
-                    // Control de Asignación Estricta
                     if (!$esDocente && isset($inscripcion->id_auxiliar) && $inscripcion->id_auxiliar !== $user->id) {
                         $errores[] = [
                             'codigo_sis' => $codigoSis,
@@ -215,15 +208,12 @@ class AuxiliarOfflineController extends Controller
                     if ($ingresoPrevio) {
                         $fechaPrevio = Carbon::parse($ingresoPrevio->fecha_escaneo);
 
-                        // Si el registro actual ocurrió ANTES que el existente en servidor
                         if ($fechaIngreso->lt($fechaPrevio)) {
-                            // Degradar el previo a CONFLICTO
                             $ingresoPrevio->update([
                                 'resultado' => 'RECHAZADO_YA_INGRESO',
                                 'mensaje'   => 'Sustituido por ingreso offline cronológicamente anterior (R3).',
                             ]);
 
-                            // Grabar el nuevo como el PERMITIDO válido
                             LogAsistencia::create([
                                 'id_examen'            => $idExamen,
                                 'id_estudiante'        => $estudiante->id,
@@ -242,7 +232,6 @@ class AuxiliarOfflineController extends Controller
                                     'updated_at'    => now('America/La_Paz'),
                                 ]);
                         } else {
-                            // El actual ocurrió DESPUÉS: se marca como CONFLICTO (R3)
                             $this->registrarIntentoDirecto(
                                 $idExamen,
                                 $estudiante->id,
@@ -259,7 +248,6 @@ class AuxiliarOfflineController extends Controller
                             ];
                         }
                     } else {
-                        // Ingreso normal único
                         LogAsistencia::create([
                             'id_examen'            => $idExamen,
                             'id_estudiante'        => $estudiante->id,

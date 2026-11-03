@@ -4,9 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StorePrerrequisitoRequest;
 use App\Http\Requests\ToggleCumplimientoRequest;
+use App\Models\Admin;
+use App\Models\Auxiliar;
 use App\Models\Docente;
 use App\Models\Estudiante;
 use App\Models\Examen;
+use App\Models\LogAuditoria;
 use App\Models\PrerrequisitoExamen;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -39,6 +42,13 @@ class PrerrequisitoController extends Controller
             return $nuevo;
         });
 
+        $this->registrarAuditoria($request, 'PRERREQUISITO_CREADO', [
+            'target_type' => 'prerrequisitos_examen',
+            'target_id'   => $prerrequisito->id,
+            'id_examen'   => $examen->id,
+            'titulo'      => $prerrequisito->titulo,
+        ]);
+
         return response()->json([
             'message'       => 'Prerrequisito creado. Se ha actualizado el estado de los alumnos.',
             'prerrequisito' => $prerrequisito,
@@ -61,7 +71,17 @@ class PrerrequisitoController extends Controller
 
         $cumplido = (bool) $request->input('cumplido');
 
-        DB::transaction(function () use ($prerrequisito, $estudianteId, $cumplido, $docenteId) {
+        // Snapshot del estado previo del prerrequisito para la auditoría de reversión
+        $registroPrevio = DB::table('estudiante_prerrequisito')
+            ->where('id_prerrequisito', $prerrequisitoId)
+            ->where('id_estudiante', $estudianteId)
+            ->first();
+
+        $cumplidoAnterior = $registroPrevio 
+            ? filter_var($registroPrevio->cumplido, FILTER_VALIDATE_BOOLEAN)
+            : false;
+
+        DB::transaction(function () use ($prerrequisito, $estudianteId, $cumplido, $docenteId, $cumplidoAnterior, $request) {
             $prerrequisito->estudiantes()->syncWithoutDetaching([
                 $estudianteId => [
                     'cumplido'                => $cumplido ? DB::raw('true') : DB::raw('false'),
@@ -97,6 +117,23 @@ class PrerrequisitoController extends Controller
                         'updated_at' => now(),
                     ]);
             }
+
+            // Registro en logs_auditoria listo para reversión compensatoria
+            $this->registrarAuditoria($request, 'PRERREQUISITO_CUMPLIMIENTO_ACTUALIZADO', [
+                'target_type'        => 'estudiante_prerrequisito',
+                'target_id'          => $estudianteId,
+                'id_prerrequisito'   => $prerrequisito->id,
+                'id_estudiante'      => $estudianteId,
+                'id_examen'          => $prerrequisito->id_examen,
+                'valores_anteriores' => [
+                    'cumplido'           => $cumplidoAnterior,
+                    'fecha_cumplimiento' => $registroPrevio?->fecha_cumplimiento,
+                ],
+                'valores_nuevos'     => [
+                    'cumplido'           => $cumplido,
+                    'fecha_cumplimiento' => $cumplido ? now()->toDateTimeString() : null,
+                ],
+            ]);
         });
 
         return response()->json(['message' => 'Cumplimiento actualizado exitosamente.']);
@@ -151,5 +188,33 @@ class PrerrequisitoController extends Controller
             });
 
         return response()->json($prerrequisitos, 200);
+    }
+
+    private function registrarAuditoria(Request $request, string $accion, array $detalles = []): void
+    {
+        $user = $request->user();
+        if (!$user) return;
+
+        $rol = match (get_class($user)) {
+            Admin::class    => 'admin',
+            Docente::class  => 'docente',
+            Auxiliar::class => 'auxiliar',
+            default         => 'desconocido',
+        };
+
+        $nombreCompleto = trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}");
+
+        LogAuditoria::create([
+            'user_type'         => get_class($user),
+            'user_id'           => $user->id,
+            'rol_en_el_momento' => $rol,
+            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : $user->nombre,
+            'usuario_email'     => $user->email ?? null,
+            'modulo'            => 'PRERREQUISITOS',
+            'accion'            => $accion,
+            'ip_origen'         => $request->ip() ?? '127.0.0.1',
+            'user_agent'        => $request->userAgent(),
+            'detalles'          => $detalles,
+        ]);
     }
 }
