@@ -6,7 +6,7 @@ export type EstadoInscripcion = 'Habilitado' | 'Inhabilitado'
 export interface Estudiante {
   id: string
   codigo_sis: string
-  ci: string
+  ci: string | null
   ci_extension?: string | null
   nombre: string
   apellido_paterno: string
@@ -28,7 +28,7 @@ export interface Estudiante {
 export interface EstudianteInscritoExamen {
   id: string
   codigo_sis: string
-  ci: string
+  ci: string | null
   ci_extension?: string | null
   nombre_completo: string
   email_institucional: string
@@ -48,6 +48,7 @@ export interface CompletarDatosEstudiantePayload {
   ci: string
   ci_extension?: string | null
 }
+
 export interface PerfilEstudianteResponse {
   success: boolean
   message: string
@@ -60,6 +61,7 @@ export interface PerfilEstudianteResponse {
     primer_acceso_completado: boolean
   }
 }
+
 export interface SubirFotoEstudianteResponse {
   success: boolean
   message: string
@@ -91,6 +93,7 @@ export interface MisExamenesResponse {
   total_examenes: number
   examenes: ExamenEstudiante[]
 }
+
 export interface TokenQrResponse {
   success: boolean
   message: string
@@ -103,9 +106,10 @@ export interface TokenQrResponse {
     }
   }
 }
+
 export interface EstudiantePayload {
   codigo_sis: string
-  ci: string
+  ci?: string | null
   ci_extension?: string | null
   nombre: string
   apellido_paterno: string
@@ -135,6 +139,10 @@ export const estudiantesService = {
     )
   },
 
+  update(id: string, payload: Partial<EstudiantePayload>) {
+    return api.put<MutationResponse>(`/estudiantes/${id}`, payload)
+  },
+
   listByExam(examId: string) {
     return api.get<EstudiantesExamenResponse>(`/examenes/${examId}/estudiantes`)
   },
@@ -142,34 +150,36 @@ export const estudiantesService = {
   enroll(examId: string, payload: InscripcionPayload) {
     return api.post<MutationResponse>(`/examenes/${examId}/estudiantes`, payload)
   },
-cargaMasiva(examId: string, archivo: File) {
-  const formData = new FormData()
-  formData.append('archivo', archivo)
 
-  return api.post<{
-    message: string
-    examen_id: string
-    total_insertados: number
-  }>(
-    `/examenes/${examId}/estudiantes/carga-masiva`,
-    formData,
-  )
-},
+  cargaMasiva(examId: string, archivo: File) {
+    const formData = new FormData()
+    formData.append('archivo', archivo)
+
+    return api.post<{
+      message: string
+      examen_id: string
+      total_insertados: number
+    }>(
+      `/examenes/${examId}/estudiantes/carga-masiva`,
+      formData,
+    )
+  },
+
   cambiarHabilitacion(
     examId: string,
     estudianteId: string,
-   payload: {
-  estado: EstadoInscripcion
-  motivo_estado?: string | null
-},
+    payload: {
+      estado: EstadoInscripcion
+      motivo_estado?: string | null
+    },
   ) {
     return api.patch<{
       message: string
       data: {
         examen_id: string
-        estudiante_id: string
+        estudianteId: string
         estado: EstadoInscripcion
-motivo_estado: string | null
+        motivo_estado: string | null
       }
     }>(
       `/examenes/${examId}/estudiantes/${estudianteId}/habilitacion`,
@@ -180,45 +190,49 @@ motivo_estado: string | null
   unenroll(examId: string, estudianteId: string) {
     return api.delete<{ message: string }>(`/examenes/${examId}/estudiantes/${estudianteId}`)
   },
-    completarDatos(payload: CompletarDatosEstudiantePayload) {
-  return api.patch<PerfilEstudianteResponse>(
-    '/estudiante/completar-datos',
-    payload,
-  )
-},
+
+  completarDatos(payload: CompletarDatosEstudiantePayload) {
+    return api.patch<PerfilEstudianteResponse>(
+      '/estudiante/completar-datos',
+      payload,
+    )
+  },
+
   subirFoto(foto: File) {
-  const formData = new FormData()
-  formData.append('foto', foto)
+    const formData = new FormData()
+    formData.append('foto', foto)
 
-  return api.post<SubirFotoEstudianteResponse>(
-    '/estudiante/foto',
-    formData,
-  )
-},
- misExamenes() {
-  return api.get<MisExamenesResponse>(
-    '/estudiante/mis-examenes',
-  )
-},
- generarTokenQr(examenId: string, fotoVerificacion: File) {
-  const formData = new FormData()
-  formData.append('foto_verificacion', fotoVerificacion)
+    return api.post<SubirFotoEstudianteResponse>(
+      '/estudiante/foto',
+      formData,
+    )
+  },
 
-  return api.post<TokenQrResponse>(
-    `/estudiante/examenes/${examenId}/qr-token`,
-    formData,
-  )
-},
+  misExamenes() {
+    return api.get<MisExamenesResponse>(
+      '/estudiante/mis-examenes',
+    )
+  },
 
- cambiarPassword(payload: {
-  current_password: string
-  new_password: string
-  new_password_confirmation: string
-}) {
-  return api.put<{
-    success: boolean
-    message: string
-    error_type?: string
-  }>('/estudiante/cambiar-password', payload)
-},
+  generarTokenQr(examenId: string, fotoVerificacion: File) {
+    const formData = new FormData()
+    formData.append('foto_verificacion', fotoVerificacion)
+
+    return api.post<TokenQrResponse>(
+      `/estudiante/examenes/${examenId}/qr-token`,
+      formData,
+    )
+  },
+
+  cambiarPassword(payload: {
+    current_password: string
+    new_password: string
+    new_password_confirmation: string
+  }) {
+    return api.put<{
+      success: boolean
+      message: string
+      error_type?: string
+    }>('/estudiante/cambiar-password', payload)
+  },
 }
