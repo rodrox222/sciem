@@ -25,12 +25,15 @@ class ExamenSeeder2 extends Seeder
             ->orWhere('nombre', 'ilike', 'Introduccion a la programacion')
             ->firstOrFail();
 
-        // Obtener el aula creada por AulaSeeder
-        $aula = Aula::where('nombre', 'Aula 691B')
+        // Obtener las aulas creadas por AulaSeeder
+        $aula691 = Aula::where('nombre', 'Aula 691B')
             ->orWhere('nombre', 'Aula 691-B')
             ->firstOrFail();
 
-        // Obtener o crear docente de prueba
+        $aula692 = Aula::where('nombre', 'Aula 692B')
+            ->orWhere('nombre', 'Aula 692-B')
+            ->firstOrFail();
+
         $docente = Docente::firstOrCreate(
             ['email' => 'docente@fcyt.umss.edu.bo'],
             [
