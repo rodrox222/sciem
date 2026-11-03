@@ -17,6 +17,7 @@ import {
   type RolDashboard,
 } from '@/services/dashboard.service'
 import { examenesService } from '@/services/examenes.service'
+import { estudiantesService } from '@/services/estudiantes.service'
 
 const TITULOS: Record<RolDashboard, string> = {
   admin: 'Administración',
@@ -202,10 +203,26 @@ export function DashboardUnificado() {
         // traemos los exámenes reales desde examenesService.list() que es el que funciona al 100%
         if (rolActivo === 'auxiliar') {
           try {
+            // 1. Obtener los IDs de las evaluaciones donde rinde como estudiante
+            let idsComoEstudiante: string[] = []
+            try {
+              const resMisEx = await estudiantesService.misExamenes()
+              const examenesEstudiante = Array.isArray(resMisEx.examenes) ? resMisEx.examenes : []
+              idsComoEstudiante = examenesEstudiante.map((e) => String(e.id_examen))
+            } catch (errMisEx) {
+              console.warn('No se pudieron obtener exámenes de estudiante para exclusión:', errMisEx)
+            }
+
+            // 2. Obtener la lista general de exámenes
             const res = await examenesService.list({ perPage: 50 })
             const lista = Array.isArray(res.data) ? res.data : []
 
-            const examenesMapeados: ExamenDashboard[] = lista.map((ex: any) => ({
+            // 3. Filtrar: descartar cualquier examen donde esté inscrito como alumno examinando
+            const examenesParaGestionar = lista.filter(
+              (ex: any) => !idsComoEstudiante.includes(String(ex.id))
+            )
+
+            const examenesMapeados: ExamenDashboard[] = examenesParaGestionar.map((ex: any) => ({
               id: ex.id,
               nombre: ex.nombre,
               materia: ex.materia?.nombre || ex.materia || 'Sin asignatura',
@@ -230,7 +247,7 @@ export function DashboardUnificado() {
               },
             }
           } catch (errEx) {
-            console.error('Error al forzar lista de exámenes para auxiliar:', errEx)
+            console.error('Error al cargar exámenes para auxiliar:', errEx)
           }
         }
 
