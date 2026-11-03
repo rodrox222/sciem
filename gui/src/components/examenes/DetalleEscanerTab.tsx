@@ -27,7 +27,6 @@ import {
 } from '@/services/estudiantes.service'
 import type { Examen } from '@/services/examenes.service'
 
-import { ControlesOffline } from '@/components/ControlesOffline'
 import { procesarIngresoEscaneado } from '@/services/verificacionScannerService'
 
 const READER_ID = 'qr-camera-stream-unique'
@@ -292,80 +291,85 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
 
   // Proceso de escaneo con soporte híbrido Online/Offline
   const handleScan = useCallback(
-  async (decodedText: string) => {
-    if (isPausedRef.current) return
+    async (decodedText: string) => {
+      if (isPausedRef.current) return
 
-    isPausedRef.current = true
-    setValidationResult(null)
-    setIsValidating(true)
+      isPausedRef.current = true
+      setValidationResult(null)
+      setIsValidating(true)
 
-    try {
-      // Intentar validar directamente contra la API de Laravel
-      const res = await api.post<VerificationResponse>(
-        `/examenes/${exam.id}/verificar-ingreso`,
-        { qr_data: decodedText }
-      )
+      // Función auxiliar para resolver con el motor offline de Dexie
+      const ejecutarOffline = async () => {
+        try {
+          const resOffline = await procesarIngresoEscaneado(decodedText, exam.id, token)
 
-      // Si fue exitoso (200 OK)
-      setValidationResult({
-        estado: 'autorizado',
-        estudiante: {
-          nombreCompleto: res.estudiante?.nombre_completo || res.estudiante?.nombre,
-          codigoSis: res.estudiante?.codigo_sis || res.estudiante?.sis,
-        },
-        horaIngreso: res.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
-      })
-      void loadAsistencias()
-      setShowModal(true)
-    } catch (error: any) {
-      // Solo cortamos si el servidor SÍ respondió con un código HTTP real (400, 403, 409)
-      const tieneRespuestaDelServidor = Boolean(error?.status && error.status >= 400)
+          if (resOffline.success) {
+            setValidationResult({
+              estado: 'autorizado',
+              estudiante: {
+                nombreCompleto: resOffline.estudiante?.nombre_completo,
+                codigoSis: resOffline.estudiante?.codigo_sis,
+              },
+              horaIngreso: resOffline.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
+            })
+            void loadAsistencias()
+          } else {
+            const codigoError = resOffline.codigo || resOffline.detalles?.codigo
 
-      if (tieneRespuestaDelServidor && error instanceof ApiError) {
-        setValidationResult(mapVerificationError(error))
+            setValidationResult(
+              mapOfflineResultToDialog({
+                codigo: codigoError,
+                mensaje: resOffline.mensaje,
+                estudiante: resOffline.estudiante,
+                detalles: resOffline.detalles,
+              })
+            )
+          }
+        } catch (offlineErr) {
+          setValidationResult(mapVerificationError(offlineErr))
+        }
         setShowModal(true)
+      }
+
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        await ejecutarOffline()
+        setIsValidating(false)
         return
       }
 
-      // Si no hubo respuesta del servidor (sin Wi-Fi / red caída)
-      console.warn('Sin conexión al servidor. Procesando escaneo en modo offline...')
-
       try {
-        const resOffline = await procesarIngresoEscaneado(decodedText, exam.id, token)
+        const res = await api.post<VerificationResponse>(
+          `/examenes/${exam.id}/verificar-ingreso`,
+          { qr_data: decodedText }
+        )
 
-        if (resOffline.success) {
-          setValidationResult({
-            estado: 'autorizado',
-            estudiante: {
-              nombreCompleto: resOffline.estudiante?.nombre_completo,
-              codigoSis: resOffline.estudiante?.codigo_sis,
-            },
-            horaIngreso: resOffline.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
-          })
-          void loadAsistencias()
-        } else {
-          // Extrae el código ya sea de primer nivel o de detalles
-          const codigoError = resOffline.codigo || resOffline.detalles?.codigo
+        setValidationResult({
+          estado: 'autorizado',
+          estudiante: {
+            nombreCompleto: res.estudiante?.nombre_completo || res.estudiante?.nombre,
+            codigoSis: res.estudiante?.codigo_sis || res.estudiante?.sis,
+          },
+          horaIngreso: res.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
+        })
+        void loadAsistencias()
+        setShowModal(true)
+      } catch (error: any) {
+        const tieneRespuestaDelServidor = Boolean(error?.status && error.status >= 400)
 
-          setValidationResult(
-            mapOfflineResultToDialog({
-              codigo: codigoError,
-              mensaje: resOffline.mensaje,
-              estudiante: resOffline.estudiante,
-              detalles: resOffline.detalles,
-            })
-          )
+        if (tieneRespuestaDelServidor && error instanceof ApiError) {
+          setValidationResult(mapVerificationError(error))
+          setShowModal(true)
+          return
         }
-      } catch (offlineErr) {
-        setValidationResult(mapVerificationError(offlineErr))
+
+        console.warn('Fallo de red en la API. Recurriendo a validación offline...')
+        await ejecutarOffline()
+      } finally {
+        setIsValidating(false)
       }
-      setShowModal(true)
-    } finally {
-      setIsValidating(false)
-    }
-  },
-  [exam.id, token, loadAsistencias]
-)
+    },
+    [exam.id, token, loadAsistencias]
+  )
 
   // Ingreso Manual Asistido sin QR
   const handleIngresoManual = async (student: EstudianteInscritoExamen) => {
@@ -633,9 +637,6 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
 
         {/* Columna Derecha: Controles Offline, Control de Sesión y Estudiantes en Sala (5 cols) */}
         <div className="space-y-4 lg:col-span-5">
-          {/* Bloque de Gestión Offline (HU-21) */}
-          <ControlesOffline idExamen={exam.id} token={token} />
-
           {/* Tarjeta de Control de Sesión */}
           <Card className="rounded-2xl border-border bg-card shadow-xs">
             <CardContent className="space-y-3 p-5 text-xs">

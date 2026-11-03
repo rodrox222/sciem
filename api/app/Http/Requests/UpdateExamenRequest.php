@@ -35,10 +35,17 @@ class UpdateExamenRequest extends FormRequest
                 return;
             }
 
-            // Obtener el ID del examen en la ruta (soporta 'id' o 'examene')
-            $examenId = $this->route('id') ?? $this->route('examen');
-            if ($examenId instanceof Examen) {
-                $examenId = $examenId->id;
+            $param = $this->route('examene') 
+                ?? $this->route('examen') 
+                ?? $this->route('id') 
+                ?? request()->route('examene')
+                ?? request()->route('examen')
+                ?? request()->route('id');
+
+            $examenId = $param instanceof Examen ? $param->id : $param;
+
+            if (!$examenId) {
+                $examenId = $this->segment(count($this->segments()));
             }
 
             $examenActual = Examen::find($examenId);
@@ -48,12 +55,12 @@ class UpdateExamenRequest extends FormRequest
 
             $idAula   = $this->input('id_aula', $examenActual->id_aula);
             $fecha    = $this->input('fecha', $examenActual->fecha?->format('Y-m-d') ?? $examenActual->fecha);
-            $horaIni  = $this->input('hora_ini', substr($examenActual->hora_ini, 0, 5));
-            $horaFin  = $this->input('hora_fin', substr($examenActual->hora_fin, 0, 5));
+            $horaIni  = $this->input('hora_ini', substr((string) $examenActual->hora_ini, 0, 5));
+            $horaFin  = $this->input('hora_fin', substr((string) $examenActual->hora_fin, 0, 5));
 
             $traslape = Examen::where('id_aula', $idAula)
                 ->where('fecha', $fecha)
-                ->where('id', '!=', $examenId)
+                ->where('id', '!=', $examenActual->id) 
                 ->whereIn('estado', ['Programado', 'En proceso'])
                 ->where(function ($query) use ($horaIni, $horaFin) {
                     $query->where('hora_ini', '<', $horaFin)
@@ -68,5 +75,29 @@ class UpdateExamenRequest extends FormRequest
                 );
             }
         });
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $param = $this->route('examene') 
+            ?? $this->route('examen') 
+            ?? $this->route('id') 
+            ?? $this->segment(count($this->segments()));
+
+        $examenId = $param instanceof \App\Models\Examen ? $param->id : $param;
+        $examenActual = \App\Models\Examen::find($examenId);
+
+        if ($examenActual) {
+            $merge = [];
+            if (empty($this->id_aula)) {
+                $merge['id_aula'] = $examenActual->id_aula;
+            }
+            if (empty($this->id_docente)) {
+                $merge['id_docente'] = $examenActual->id_docente;
+            }
+            if (!empty($merge)) {
+                $this->merge($merge);
+            }
+        }
     }
 }

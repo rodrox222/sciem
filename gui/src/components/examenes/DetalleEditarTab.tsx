@@ -39,53 +39,63 @@ interface FormState {
   id_docente: string
 }
 
-const normalizeDate = (date: string) => (date ? date.slice(0, 10) : '')
-const normalizeTime = (time: string) => (time ? time.slice(0, 5) : '')
+const normalizeDate = (date: string) => (date ? String(date).slice(0, 10) : '')
+const normalizeTime = (time: string) => {
+  if (!time) return '08:00'
+  const limpio = String(time).trim()
+  return limpio.length >= 5 ? limpio.slice(0, 5) : '08:00'
+}
 
+// Soporta duraciones largas sin retornar vacío
 const addMinutes = (time: string, duration: number) => {
-  if (!/^\d{2}:\d{2}$/.test(time) || duration <= 0) return ''
-  const [hours, minutes] = time.split(':').map(Number)
-  const total = hours * 60 + minutes + duration
-  if (total >= 24 * 60) return ''
-  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+  const normTime = normalizeTime(time)
+  if (!/^\d{2}:\d{2}$/.test(normTime)) return '23:59'
+  const [hours, minutes] = normTime.split(':').map(Number)
+  const validDuration = Number.isNaN(duration) || duration <= 0 ? 90 : duration
+  
+  let total = hours * 60 + minutes + validDuration
+  // Si sobrepasa la medianoche, ajustar a 23:59 para no violar la jornada del día
+  if (total >= 24 * 60) {
+    return '23:59'
+  }
+  
+  const endHours = Math.floor(total / 60)
+  const endMins = total % 60
+  return `${String(endHours).padStart(2, '0')}:${String(endMins).padStart(2, '0')}`
 }
 
 const minutesBetween = (start: string, end: string) => {
-  const [startHour, startMinute] = normalizeTime(start).split(':').map(Number)
-  const [endHour, endMinute] = normalizeTime(end).split(':').map(Number)
-  const diff = endHour * 60 + endMinute - (startHour * 60 + startMinute)
-  return diff > 0 ? diff : 60
+  try {
+    const [startHour, startMinute] = normalizeTime(start).split(':').map(Number)
+    const [endHour, endMinute] = normalizeTime(end).split(':').map(Number)
+    const diff = endHour * 60 + endMinute - (startHour * 60 + startMinute)
+    return diff > 0 ? diff : 90
+  } catch {
+    return 90
+  }
 }
 
 export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
   const role = (localStorage.getItem('user_role') ?? '').toLowerCase()
   const isAdmin = role === 'admin' || role === 'administrador'
 
+  // Rescate seguro de IDs de relaciones
+  const idMateriaSeguro = exam.id_materia || (exam.materia as any)?.id || ''
+  const idAulaSeguro = exam.id_aula || (exam.aula as any)?.id || ''
+  const idDocenteSeguro = exam.id_docente || (exam.docente as any)?.id || ''
+
   const [form, setForm] = useState<FormState>({
-    nombre: exam.nombre,
-    id_materia: exam.id_materia,
+    nombre: exam.nombre || '',
+    id_materia: idMateriaSeguro,
     fecha: normalizeDate(exam.fecha),
     hora_ini: normalizeTime(exam.hora_ini),
     duracion: String(minutesBetween(exam.hora_ini, exam.hora_fin)),
-    id_aula: exam.id_aula,
-    id_docente: exam.id_docente,
+    id_aula: idAulaSeguro,
+    id_docente: idDocenteSeguro,
   })
 
-  // Inicializar materias y aulas con los datos existentes del examen para que nunca queden vacíos en offline
-  const [materias, setMaterias] = useState<Materia[]>(
-    exam.materia
-      ? [{ id: exam.id_materia, nombre: exam.materia.nombre, codigo: '', semestre: '' } as unknown as Materia]
-      : []
-  )
-  const [aulas, setAulas] = useState<Aula[]>([
-    {
-      id: exam.id_aula,
-      nombre: exam.aula?.nombre ?? 'Aula actual',
-      ubicacion: 'Ubicación registrada',
-      capacidad: 0,
-      estado: 'Disponible',
-    },
-  ])
+  const [materias, setMaterias] = useState<Materia[]>([])
+  const [aulas, setAulas] = useState<Aula[]>([])
   const [docentes, setDocentes] = useState<DocenteItem[]>([])
   const [normas, setNormas] = useState<Norma[]>(exam.normas ?? [])
   const [selectedNorms, setSelectedNorms] = useState<string[]>(
@@ -102,8 +112,22 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
   )
 
   const loadDependencies = useCallback(async () => {
-    // Si estamos sin conexión, omitimos las peticiones a la API para evitar el error de red
+    // Si estamos en modo desconectado, poblamos con los datos del examen para no dejar selects vacíos
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      if (exam.materia) {
+        setMaterias([{ id: idMateriaSeguro, nombre: exam.materia.nombre } as any])
+      }
+      if (exam.aula || idAulaSeguro) {
+        setAulas([
+          {
+            id: idAulaSeguro,
+            nombre: exam.aula?.nombre ?? 'Aula actual asignada',
+            ubicacion: 'Ubicación registrada',
+            capacidad: 0,
+            estado: 'Disponible',
+          },
+        ])
+      }
       setLoading(false)
       return
     }
@@ -118,24 +142,42 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
         isAdmin ? examenesService.listDocentes().catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
       ])
 
-      if (subjects.length > 0) setMaterias(subjects)
+      if (subjects.length > 0) {
+        setMaterias(subjects)
+        if (!form.id_materia && subjects[0]?.id) {
+          setForm((c) => ({ ...c, id_materia: subjects[0].id }))
+        }
+      } else if (exam.materia) {
+        setMaterias([{ id: idMateriaSeguro, nombre: exam.materia.nombre } as any])
+      }
 
       const roomsList = rooms.data || []
       if (roomsList.length > 0) {
+        const existeAula = roomsList.some((r: Aula) => r.id === idAulaSeguro)
         setAulas(
-          roomsList.some((r: Aula) => r.id === exam.id_aula)
+          existeAula
             ? roomsList
             : [
                 ...roomsList,
                 {
-                  id: exam.id_aula,
-                  nombre: exam.aula?.nombre ?? 'Aula actual',
+                  id: idAulaSeguro,
+                  nombre: exam.aula?.nombre ?? 'Aula actual asignada',
                   ubicacion: 'Ubicación registrada',
                   capacidad: 0,
                   estado: 'Disponible',
                 },
               ]
         )
+      } else if (idAulaSeguro) {
+        setAulas([
+          {
+            id: idAulaSeguro,
+            nombre: exam.aula?.nombre ?? 'Aula actual asignada',
+            ubicacion: 'Ubicación registrada',
+            capacidad: 0,
+            estado: 'Disponible',
+          },
+        ])
       }
 
       if (rules.length > 0) setNormas(rules)
@@ -145,7 +187,7 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
     } finally {
       setLoading(false)
     }
-  }, [isAdmin, exam.id_aula, exam.aula?.nombre])
+  }, [isAdmin, idMateriaSeguro, idAulaSeguro, exam.materia, exam.aula?.nombre, form.id_materia])
 
   useEffect(() => {
     void loadDependencies()
@@ -164,21 +206,26 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
     setSuccess('')
 
     try {
+      const horaFinValida = endTime || '23:59'
+
       const payload: ExamenPayload = {
         nombre: form.nombre.trim(),
-        id_materia: form.id_materia,
+        id_materia: form.id_materia || idMateriaSeguro,
         estado: exam.estado,
         fecha: form.fecha,
         hora_ini: form.hora_ini,
-        hora_fin: endTime,
-        id_aula: form.id_aula,
-        id_docente: form.id_docente,
+        hora_fin: horaFinValida,
+        id_aula: form.id_aula || idAulaSeguro,
+        id_docente: form.id_docente || idDocenteSeguro,
         normas_ids: selectedNorms,
       }
 
-      // El método update ya delega a Dexie cuando !navigator.onLine
       const response = await examenesService.update(exam.id, payload)
-      setSuccess(response.message || 'Evaluación actualizada correctamente.')
+      const mensajeExito = !navigator.onLine
+        ? 'Modificación guardada localmente en este dispositivo. Se sincronizará automáticamente al detectar conexión.'
+        : (response.message || 'Evaluación actualizada correctamente.')
+
+      setSuccess(mensajeExito)
       onUpdated()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al guardar cambios del examen.')
@@ -231,6 +278,7 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
                 value={form.id_materia}
                 onChange={(e) => setForm((c) => ({ ...c, id_materia: e.target.value }))}
                 className="h-10 w-full rounded-xl border border-border bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
+                required
               >
                 {materias.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -248,6 +296,7 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
                 value={form.id_aula}
                 onChange={(e) => setForm((c) => ({ ...c, id_aula: e.target.value }))}
                 className="h-10 w-full rounded-xl border border-border bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
+                required
               >
                 {aulas.map((a) => (
                   <option key={a.id} value={a.id}>
@@ -266,6 +315,7 @@ export function DetalleEditarTab({ exam, onUpdated }: DetalleEditarTabProps) {
                   value={form.id_docente}
                   onChange={(e) => setForm((c) => ({ ...c, id_docente: e.target.value }))}
                   className="h-10 w-full rounded-xl border border-border bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
+                  required
                 >
                   {docentes.map((d) => (
                     <option key={d.id} value={d.id}>
