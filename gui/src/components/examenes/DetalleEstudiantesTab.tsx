@@ -2,32 +2,36 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import {
   AlertCircle,
   CheckCircle2,
-  Edit3,
   LoaderCircle,
-  Plus,
-  QrCode,
   RefreshCw,
   Search,
+  Upload,
   UserPlus,
-  UserX,
   Users,
   WifiOff,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+
+import { InscribirEstudianteModal } from '@/components/estudiantes/InscribirEstudianteModal'
 import { EstudianteFormModal } from '@/components/estudiantes/EstudianteFormModal'
-import { AsociarEstudiantesModal } from '@/components/estudiantes/AsociarEstudiantesModal'
+import { CargaMasivaModal } from '@/components/estudiantes/CargaMasivaModal'
 import { InhabilitarEstudianteModal } from '@/components/estudiantes/InhabilitarEstudianteModal'
 import { EstudianteQrModal } from '@/components/estudiantes/EstudianteQrModal'
 import { PrerrequisitosEstudianteModal } from '@/components/estudiantes/PrerrequisitosEstudianteModal'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { PrerrequisitosPanel } from '@/components/estudiantes/PrerrequisitosPanel'
+import { EstudiantesTable } from '@/components/estudiantes/EstudiantesTable'
+import { EstudiantesMobileCards } from '@/components/estudiantes/EstudiantesMobileCards'
+
 import {
   prerrequisitosService,
   type Prerrequisito,
@@ -52,27 +56,20 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
   const [students, setStudents] = useState<EstudianteInscritoExamen[]>([])
   const [searchInput, setSearchInput] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
-  const [estadoFiltro, setEstadoFiltro] = useState<
-    'Todos' | 'Habilitado' | 'Inhabilitado'
-  >('Todos')
+  const [estadoFiltro, setEstadoFiltro] = useState<'Todos' | 'Habilitado' | 'Inhabilitado'>('Todos')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [isOffline, setIsOffline] = useState(false)
   const [prerrequisitos, setPrerrequisitos] = useState<Prerrequisito[]>([])
-  const [prerrequisitoFormOpen, setPrerrequisitoFormOpen] = useState(false)
-  const [prerrequisitoTitulo, setPrerrequisitoTitulo] = useState('')
-  const [prerrequisitoDescripcion, setPrerrequisitoDescripcion] = useState('')
-  const [savingPrerrequisito, setSavingPrerrequisito] = useState(false)
 
-  // Modales
-  const [modalOpen, setModalOpen] = useState(false)
-  const [associateModalOpen, setAssociateModalOpen] = useState(false)
+  // Estados de Modales
+  const [inscribirModalOpen, setInscribirModalOpen] = useState(false)
+  const [bulkModalOpen, setBulkModalOpen] = useState(false)
   const [editingStudent, setEditingStudent] = useState<any | null>(null)
   const [inhabilitarStudent, setInhabilitarStudent] = useState<EstudianteInscritoExamen | null>(null)
   const [qrStudent, setQrStudent] = useState<EstudianteInscritoExamen | null>(null)
-  const [prerrequisitosStudent, setPrerrequisitosStudent] =
-    useState<EstudianteInscritoExamen | null>(null)
+  const [prerrequisitosStudent, setPrerrequisitosStudent] = useState<EstudianteInscritoExamen | null>(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -80,7 +77,6 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
 
     let loadedOnline = false
 
-    // 1. Intento Online
     try {
       const [estudiantesRes, prereqsRes] = await Promise.all([
         estudiantesService.listByExam(exam.id),
@@ -92,11 +88,9 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
       setIsOffline(false)
       loadedOnline = true
     } catch {
-      // Falla la conexión a la red
       loadedOnline = false
     }
 
-    // 2. Fallback Offline a Dexie si falló la red
     if (!loadedOnline) {
       try {
         const [estudiantesLocales, prereqsLocales] = await Promise.all([
@@ -105,13 +99,12 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
         ])
 
         if (estudiantesLocales.length > 0) {
-          // Adaptar el modelo EstudianteOffline al tipo EstudianteInscritoExamen
           const adaptedStudents: EstudianteInscritoExamen[] = estudiantesLocales.map((st) => ({
             id: st.id_estudiante,
             codigo_sis: st.codigo_sis,
             ci: st.ci,
             ci_extension: st.ci_extension,
-            nombre_completo: `${st.nombre} ${st.apellido_paterno} ${st.apellido_materno || ''}`.trim(),
+            nombre_completo: `${st.apellido_paterno} ${st.apellido_materno || ''} ${st.nombre}`.trim(),
             email_institucional: `${st.codigo_sis}@est.umss.edu`,
             foto_perfil_url: st.foto_perfil_url,
             estado: (st.estado_habilitacion === 'HABILITADO' ? 'Habilitado' : 'Inhabilitado') as 'Habilitado' | 'Inhabilitado',
@@ -152,91 +145,28 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
     return students.filter((student) => {
       const matchesSearch =
         !searchTerm ||
-        [
-          student.nombre_completo,
-          student.codigo_sis,
-          student.ci,
-        ]
+        [student.nombre_completo, student.codigo_sis, student.ci]
           .join(' ')
           .toLowerCase()
           .includes(search)
 
       const matchesEstado =
-        estadoFiltro === 'Todos' ||
-        student.estado === estadoFiltro
+        estadoFiltro === 'Todos' || student.estado === estadoFiltro
 
       return matchesSearch && matchesEstado
     })
   }, [searchTerm, students, estadoFiltro])
 
-  const enabledCount = visibleStudents.filter(
-    (student) => student.estado === 'Habilitado'
-  ).length
+  const enabledCount = visibleStudents.filter((s) => s.estado === 'Habilitado').length
 
   const handleSearch = (e: FormEvent) => {
     e.preventDefault()
     setSearchTerm(searchInput.trim())
   }
 
-  const handleSavePrerrequisito = async (e: FormEvent) => {
-    e.preventDefault()
-
-    if (isOffline) {
-      setError('No se pueden crear prerrequisitos en modo offline.')
-      return
-    }
-
-    if (!prerrequisitoTitulo.trim()) {
-      setError('El título del prerrequisito es obligatorio.')
-      return
-    }
-
-    if (prerrequisitoTitulo.trim().length > 150) {
-      setError('El título no puede superar los 150 caracteres.')
-      return
-    }
-
-    if (prerrequisitoDescripcion.trim().length > 500) {
-      setError('La descripción no puede superar los 500 caracteres.')
-      return
-    }
-
-    try {
-      setSavingPrerrequisito(true)
-      setError('')
-      setSuccess('')
-
-      const response = await prerrequisitosService.create(exam.id, {
-        titulo: prerrequisitoTitulo.trim(),
-        descripcion: prerrequisitoDescripcion.trim() || null,
-      })
-
-      setSuccess(response.message || 'Prerrequisito creado correctamente.')
-      setPrerrequisitoFormOpen(false)
-      setPrerrequisitoTitulo('')
-      setPrerrequisitoDescripcion('')
-
-      await loadData()
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'No se pudo crear el prerrequisito.',
-      )
-    } finally {
-      setSavingPrerrequisito(false)
-    }
-  }
-
-  const openInhabilitar = (student: EstudianteInscritoExamen) => {
-    if (isOffline) return
-    setSuccess('')
-    setInhabilitarStudent(student)
-  }
-
   const saveStudent = async (payload: InscripcionPayload) => {
     const response = await estudiantesService.enroll(exam.id, payload)
-    setSuccess(response.message || 'Estudiante asignado correctamente.')
+    setSuccess(response.message || 'Estudiante actualizado correctamente.')
     await loadData()
   }
 
@@ -251,9 +181,7 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
         perPage: 100,
       })
 
-      const fullStudent = response.data.find(
-        (item) => item.id === student.id,
-      )
+      const fullStudent = response.data.find((item) => item.id === student.id)
 
       if (!fullStudent) {
         setError('No se pudo encontrar la información completa del estudiante.')
@@ -269,14 +197,8 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
           fecha_ajuste_manual: student.fecha_ajuste_manual,
         },
       })
-
-      setModalOpen(true)
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'No se pudo cargar la información del estudiante.',
-      )
+      setError(err instanceof Error ? err.message : 'No se pudo cargar la información del estudiante.')
     }
   }
 
@@ -284,12 +206,12 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
     <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-clip">
       {/* Banner de Modo Offline */}
       {isOffline && (
-        <div className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800">
-          <WifiOff className="h-4 w-4 shrink-0 text-amber-600" />
-          <span>
+        <Alert className="border-amber-300 bg-amber-50 text-amber-800">
+          <WifiOff className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-xs font-semibold ml-2">
             Modo sin conexión: mostrando padrón y prerrequisitos locales
-          </span>
-        </div>
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* Barra de control y conteo */}
@@ -304,18 +226,17 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
         </div>
 
         {canManage && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               disabled={isOffline}
               onClick={() => {
                 setSuccess('')
-                setEditingStudent(null)
-                setModalOpen(true)
+                setInscribirModalOpen(true)
               }}
               className="cursor-pointer gap-2 bg-sci-blue text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
             >
-              <UserPlus className="h-4 w-4" /> Crear estudiante
+              <UserPlus className="h-4 w-4" /> Inscribir Estudiante
             </Button>
 
             <Button
@@ -323,248 +244,96 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
               disabled={isOffline}
               onClick={() => {
                 setSuccess('')
-                setAssociateModalOpen(true)
+                setBulkModalOpen(true)
               }}
               variant="outline"
               className="cursor-pointer gap-2 text-xs font-semibold disabled:opacity-50"
             >
-              <Users className="h-4 w-4" /> Agregar estudiante
+              <Upload className="h-4 w-4" /> Carga masiva
             </Button>
           </div>
         )}
       </div>
 
-      {associateModalOpen && (
-        <AsociarEstudiantesModal
-          examId={exam.id}
-          examName={exam.nombre}
-          onClose={() => setAssociateModalOpen(false)}
-          onSuccess={() => {
-            setAssociateModalOpen(false)
-            void loadData()
-          }}
-        />
-      )}
-
       {success && (
-        <div className="rounded-xl border border-sci-cyan/30 bg-sci-cyan/10 px-4 py-3 text-xs font-semibold text-sci-navy">
-          {success}
-        </div>
+        <Alert className="border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy">
+          <CheckCircle2 className="h-4 w-4 text-sci-cyan" />
+          <AlertDescription className="text-xs font-semibold ml-2">
+            {success}
+          </AlertDescription>
+        </Alert>
       )}
 
       {error && (
-        <div className="flex items-center justify-between rounded-xl border border-sci-red/20 bg-sci-red/10 p-4 text-xs text-sci-red">
-          <span className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" /> {error}
-          </span>
-          <Button type="button" variant="outline" size="sm" onClick={() => void loadData()} className="gap-1 text-xs">
+        <Alert className="border-sci-red/20 bg-sci-red/10 text-sci-red flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 text-sci-red" />
+            <AlertDescription className="text-xs font-semibold">{error}</AlertDescription>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void loadData()}
+            className="gap-1 text-xs"
+          >
             <RefreshCw className="h-3 w-3" /> Reintentar
           </Button>
-        </div>
+        </Alert>
       )}
 
-      {(prerrequisitos.length > 0 || canManage) && (
-        <Card className="mb-4 border-sci-cyan/20 bg-white shadow-sm">
-          <CardContent className="p-5">
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-sci-navy">
-                  Prerrequisitos del examen
-                </h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Condiciones que deben cumplirse para que un estudiante esté habilitado.
-                </p>
-              </div>
+      {/* Sub-panel de Prerrequisitos */}
+      <PrerrequisitosPanel
+        examId={exam.id}
+        canManage={canManage}
+        isOffline={isOffline}
+        prerrequisitos={prerrequisitos}
+        onPrerrequisitoCreated={loadData}
+        onError={setError}
+        onSuccess={setSuccess}
+      />
 
-              {canManage && (
-                <Button
-                  type="button"
-                  disabled={isOffline}
-                  className="gap-2 bg-sci-blue text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
-                  onClick={() => {
-                    setError('')
-                    setSuccess('')
-                    setPrerrequisitoTitulo('')
-                    setPrerrequisitoDescripcion('')
-                    setPrerrequisitoFormOpen(true)
-                  }}
-                >
-                  <Plus className="h-4 w-4" />
-                  Agregar prerrequisito
-                </Button>
-              )}
-            </div>
+      {/* Buscador y Filtros */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <form onSubmit={handleSearch} className="flex flex-1 gap-2">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Filtrar inscritos por nombre, CI o Código SIS..."
+              className="h-10 bg-background pl-9 text-xs"
+            />
+          </div>
+          <Button type="submit" variant="outline" className="h-10 text-xs">
+            Buscar
+          </Button>
+        </form>
 
-            <div className="space-y-3">
-              {prerrequisitos.map((prerrequisito) => (
-                <div
-                  key={prerrequisito.id}
-                  className="rounded-lg border border-border bg-muted/20 p-3"
-                >
-                  <p className="text-sm font-semibold text-sci-navy">
-                    {prerrequisito.titulo}
-                  </p>
-                  {prerrequisito.descripcion && (
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                      {prerrequisito.descripcion}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {prerrequisitoFormOpen && canManage && (
-        <Dialog
-          open={prerrequisitoFormOpen}
-          onOpenChange={(open) => {
-            if (!savingPrerrequisito) {
-              setPrerrequisitoFormOpen(open)
-              if (!open) {
-                setPrerrequisitoTitulo('')
-                setPrerrequisitoDescripcion('')
-                setError('')
-              }
-            }
-          }}
-        >
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Nuevo prerrequisito</DialogTitle>
-              <DialogDescription>
-                Define una condición que deben cumplir los estudiantes.
-              </DialogDescription>
-            </DialogHeader>
-
-            <form onSubmit={handleSavePrerrequisito} className="space-y-4">
-              <div className="space-y-2">
-                <label htmlFor="prerrequisito-titulo" className="text-sm font-medium">
-                  Título *
-                </label>
-                <Input
-                  id="prerrequisito-titulo"
-                  value={prerrequisitoTitulo}
-                  onChange={(e) => setPrerrequisitoTitulo(e.target.value)}
-                  placeholder="Ej. Aprobar la materia anterior"
-                  maxLength={150}
-                  required
-                  disabled={savingPrerrequisito}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {prerrequisitoTitulo.length}/150 caracteres
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <label htmlFor="prerrequisito-descripcion" className="text-sm font-medium">
-                  Descripción
-                </label>
-                <textarea
-                  id="prerrequisito-descripcion"
-                  value={prerrequisitoDescripcion}
-                  onChange={(e) => setPrerrequisitoDescripcion(e.target.value)}
-                  placeholder="Describe qué debe cumplir el estudiante."
-                  maxLength={500}
-                  rows={4}
-                  disabled={savingPrerrequisito}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                />
-                <p className="text-xs text-muted-foreground">
-                  {prerrequisitoDescripcion.length}/500 caracteres
-                </p>
-              </div>
-
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={savingPrerrequisito}
-                  onClick={() => {
-                    setPrerrequisitoFormOpen(false)
-                    setPrerrequisitoTitulo('')
-                    setPrerrequisitoDescripcion('')
-                    setError('')
-                  }}
-                >
-                  Cancelar
-                </Button>
-
-                <Button
-                  type="submit"
-                  disabled={savingPrerrequisito}
-                  className="gap-2 bg-sci-blue text-white hover:opacity-90"
-                >
-                  {savingPrerrequisito && (
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                  )}
-                  {savingPrerrequisito ? 'Guardando...' : 'Guardar prerrequisito'}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {/* Buscador */}
-      <form onSubmit={handleSearch} className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Filtrar por nombre, CI o Código SIS..."
-            className="h-10 bg-background pl-9 text-xs"
-          />
-        </div>
-        <Button type="submit" variant="outline" className="h-10 text-xs">Buscar</Button>
-      </form>
-
-      {/* Filtro por estado: móvil */}
-      <details className="rounded-xl border border-border bg-white md:hidden">
-        <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-sci-navy">
-          Filtrar por estado
-          <span className="ml-2 text-xs font-normal text-muted-foreground">
-            {estadoFiltro}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            Estado:
           </span>
-        </summary>
-        <div className="border-t border-border p-3">
-          <label htmlFor="estado-filtro-movil" className="mb-2 block text-xs font-medium text-sci-dark">
-            Estado de habilitación
-          </label>
-          <select
-            id="estado-filtro-movil"
+          <Select
             value={estadoFiltro}
-            onChange={(e) => setEstadoFiltro(e.target.value as 'Todos' | 'Habilitado' | 'Inhabilitado')}
-            className="h-11 w-full rounded-md border border-border bg-white px-3 text-sm"
+            onValueChange={(val) =>
+              setEstadoFiltro(val as 'Todos' | 'Habilitado' | 'Inhabilitado')
+            }
           >
-            <option value="Todos">Todos los estados</option>
-            <option value="Habilitado">Habilitados</option>
-            <option value="Inhabilitado">Inhabilitados</option>
-          </select>
+            <SelectTrigger className="h-10 w-36 text-xs">
+              <SelectValue placeholder="Estado" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Todos">Todos</SelectItem>
+              <SelectItem value="Habilitado">Habilitados</SelectItem>
+              <SelectItem value="Inhabilitado">Inhabilitados</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-      </details>
-
-      {/* Filtro visible en escritorio */}
-      <div className="hidden md:flex md:items-center md:gap-2">
-        <label htmlFor="estado-filtro-escritorio" className="text-sm text-muted-foreground">
-          Estado:
-        </label>
-        <select
-          id="estado-filtro-escritorio"
-          value={estadoFiltro}
-          onChange={(e) => setEstadoFiltro(e.target.value as 'Todos' | 'Habilitado' | 'Inhabilitado')}
-          className="h-10 rounded-md border border-border bg-white px-3 text-sm"
-        >
-          <option value="Todos">Todos</option>
-          <option value="Habilitado">Habilitados</option>
-          <option value="Inhabilitado">Inhabilitados</option>
-        </select>
       </div>
 
-      {/* Tabla de Estudiantes */}
+      {/* Tabla y tarjetas de Estudiantes */}
       <Card className="rounded-2xl border-border bg-card shadow-xs">
         <CardContent className="p-0">
           {loading ? (
@@ -573,273 +342,90 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
             </div>
           ) : (
             <>
-              <div className="hidden overflow-x-auto md:block">
-                <table className="w-full text-left text-xs">
-                  <thead className="border-b border-border bg-muted/40 font-semibold text-muted-foreground">
-                    <tr>
-                      <th className="px-5 py-3.5">Estudiante</th>
-                      <th className="px-5 py-3.5">Código SIS</th>
-                      <th className="px-5 py-3.5">C.I.</th>
-                      <th className="px-5 py-3.5">Correo</th>
-                      <th className="px-5 py-3.5">Estado</th>
-                      <th className="px-5 py-3.5 text-right">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {visibleStudents.map((st) => (
-                      <tr key={st.id} className="hover:bg-muted/20">
-                        <td className="px-5 py-3.5 font-bold text-sci-navy">{st.nombre_completo}</td>
-                        <td className="px-5 py-3.5 text-muted-foreground">{st.codigo_sis}</td>
-                        <td className="px-5 py-3.5 text-muted-foreground">{st.ci} {st.ci_extension ?? ''}</td>
-                        <td className="px-5 py-3.5 text-muted-foreground">{st.email_institucional}</td>
-                        <td className="px-5 py-3.5">
-                          <div className="flex flex-col gap-0.5">
-                            <span
-                              className={`inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                                st.estado === 'Habilitado'
-                                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700'
-                                  : 'border-red-500/30 bg-red-500/10 text-red-600'
-                              }`}
-                            >
-                              {st.estado}
-                            </span>
-                            {st.estado === 'Inhabilitado' && st.motivo_estado && (
-                              <span
-                                title={st.motivo_estado}
-                                className="max-w-44 truncate text-[10px] text-muted-foreground"
-                              >
-                                {st.motivo_estado}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-5 py-3.5 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              title="Ver Credencial QR"
-                              onClick={() => setQrStudent(st)}
-                              className="cursor-pointer h-8 w-8 p-0"
-                            >
-                              <QrCode className="h-3.5 w-3.5 text-sci-cyan" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={isOffline}
-                              title={isOffline ? 'No disponible offline' : 'Gestionar prerrequisitos'}
-                              onClick={() => setPrerrequisitosStudent(st)}
-                              className="cursor-pointer gap-1 text-xs h-8 disabled:opacity-50"
-                            >
-                              Prerrequisitos
-                            </Button>
-                            {canManage && (
-                              <>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={isOffline}
-                                  title={isOffline ? 'No disponible offline' : 'Editar'}
-                                  onClick={() => void openEditStudent(st)}
-                                  className="cursor-pointer gap-1 text-xs h-8 disabled:opacity-50"
-                                >
-                                  <Edit3 className="h-3 w-3" /> Editar
-                                </Button>
+              <EstudiantesTable
+                students={visibleStudents}
+                canManage={canManage}
+                isOffline={isOffline}
+                onVerQr={(st) => setQrStudent(st)}
+                onPrerrequisitos={(st) => setPrerrequisitosStudent(st)}
+                onEditar={(st) => void openEditStudent(st)}
+                onInhabilitar={(st) => {
+                  if (!isOffline) {
+                    setSuccess('')
+                    setInhabilitarStudent(st)
+                  }
+                }}
+              />
 
-                                {st.estado !== 'Inhabilitado' && (
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={isOffline}
-                                    title={isOffline ? 'No disponible offline' : 'Inhabilitar'}
-                                    onClick={() => openInhabilitar(st)}
-                                    className="cursor-pointer gap-1 text-xs text-sci-red hover:text-sci-red h-8 disabled:opacity-50"
-                                  >
-                                    <UserX className="h-3 w-3" /> Inhabilitar
-                                  </Button>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {visibleStudents.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="py-10 text-center text-muted-foreground">
-                          No hay estudiantes registrados para este examen.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Tarjetas de estudiantes para móviles */}
-              <div className="space-y-3 p-3 md:hidden">
-                {visibleStudents.map((st) => (
-                  <div
-                    key={st.id}
-                    className="space-y-3 rounded-xl border border-border bg-white p-4 shadow-sm"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="break-words text-sm font-bold text-sci-navy">
-                          {st.nombre_completo}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Código SIS: {st.codigo_sis}
-                        </p>
-                      </div>
-
-                      <span
-                        className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold ${
-                          st.estado === 'Habilitado'
-                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700'
-                            : 'border-red-500/30 bg-red-500/10 text-red-600'
-                        }`}
-                      >
-                        {st.estado}
-                      </span>
-                    </div>
-
-                    <div className="space-y-2 border-t border-border pt-3 text-xs">
-                      <div>
-                        <p className="font-semibold text-sci-dark">C.I.</p>
-                        <p className="mt-0.5 text-muted-foreground">
-                          {st.ci} {st.ci_extension ?? ''}
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="font-semibold text-sci-dark">Correo institucional</p>
-                        <p className="mt-0.5 break-all text-muted-foreground">
-                          {st.email_institucional}
-                        </p>
-                      </div>
-
-                      {st.estado === 'Inhabilitado' && st.motivo_estado && (
-                        <div className="rounded-lg bg-red-50 p-3">
-                          <p className="font-semibold text-red-700">
-                            Motivo de inhabilitación
-                          </p>
-                          <p className="mt-1 break-words text-red-600">
-                            {st.motivo_estado}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 border-t border-border pt-3">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setQrStudent(st)}
-                        className="h-10 gap-2 text-xs"
-                      >
-                        <QrCode className="h-4 w-4 text-sci-cyan" />
-                        Ver QR
-                      </Button>
-
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={isOffline}
-                        onClick={() => setPrerrequisitosStudent(st)}
-                        className="h-10 gap-2 text-xs disabled:opacity-50"
-                      >
-                        Prerrequisitos
-                      </Button>
-
-                      {canManage && (
-                        <>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={isOffline}
-                            onClick={() => void openEditStudent(st)}
-                            className="h-10 gap-2 text-xs disabled:opacity-50"
-                          >
-                            <Edit3 className="h-4 w-4" />
-                            Editar
-                          </Button>
-
-                          {st.estado !== 'Inhabilitado' && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={isOffline}
-                              onClick={() => openInhabilitar(st)}
-                              className="h-10 gap-2 text-xs text-sci-red hover:text-sci-red disabled:opacity-50"
-                            >
-                              <UserX className="h-4 w-4" />
-                              Inhabilitar
-                            </Button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-
-                {visibleStudents.length === 0 && (
-                  <p className="py-8 text-center text-sm text-muted-foreground">
-                    No hay estudiantes que coincidan con los filtros.
-                  </p>
-                )}
-              </div>
+              <EstudiantesMobileCards
+                students={visibleStudents}
+                canManage={canManage}
+                isOffline={isOffline}
+                onVerQr={(st) => setQrStudent(st)}
+                onPrerrequisitos={(st) => setPrerrequisitosStudent(st)}
+                onEditar={(st) => void openEditStudent(st)}
+                onInhabilitar={(st) => {
+                  if (!isOffline) {
+                    setSuccess('')
+                    setInhabilitarStudent(st)
+                  }
+                }}
+              />
             </>
           )}
         </CardContent>
       </Card>
 
-      {/* Modal para crear/editar estudiante */}
-      {modalOpen && (
+      {/* Modal UNIFICADO de Búsqueda + Alta In Situ */}
+      <InscribirEstudianteModal
+        examId={exam.id}
+        examName={exam.nombre}
+        isOpen={inscribirModalOpen}
+        onClose={() => setInscribirModalOpen(false)}
+        onSuccess={() => {
+          setSuccess('Inscripción realizada con éxito.')
+          void loadData()
+        }}
+      />
+
+      {/* Modal solo para EDITAR estudiante existente */}
+      {editingStudent && (
         <EstudianteFormModal
-          key={editingStudent?.id ?? 'new'}
+          key={editingStudent.id}
           estudiante={editingStudent}
           examMode={true}
-          onClose={() => setModalOpen(false)}
+          onClose={() => setEditingStudent(null)}
           onSubmit={saveStudent}
+        />
+      )}
+
+      {/* Modal de Carga Masiva */}
+      {bulkModalOpen && (
+        <CargaMasivaModal
+          isOpen={bulkModalOpen}
+          onClose={() => setBulkModalOpen(false)}
           onBulkUpload={async (archivo) => {
             const response = await estudiantesService.cargaMasiva(exam.id, archivo)
-
             setSuccess(
               response.message ||
-                `Carga masiva completada. Se registraron ${response.total_insertados} estudiantes.`,
+                `Carga masiva completada. Se registraron ${response.total_insertados} estudiantes.`
             )
-
-            setModalOpen(false)
+            setBulkModalOpen(false)
             await loadData()
           }}
         />
       )}
 
-      {/* Modal para inhabilitar estudiante */}
       {inhabilitarStudent && (
         <InhabilitarEstudianteModal
           estudiante={inhabilitarStudent as any}
           examName={exam.nombre}
           onClose={() => setInhabilitarStudent(null)}
           onSubmit={async (motivo) => {
-            await estudiantesService.cambiarHabilitacion(
-              exam.id,
-              inhabilitarStudent.id,
-              {
-                estado: 'Inhabilitado',
-                motivo_estado: motivo,
-              }
-            )
-
+            await estudiantesService.cambiarHabilitacion(exam.id, inhabilitarStudent.id, {
+              estado: 'Inhabilitado',
+              motivo_estado: motivo,
+            })
             setInhabilitarStudent(null)
             setSuccess('Estudiante inhabilitado correctamente.')
             await loadData()
@@ -847,7 +433,6 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
         />
       )}
 
-      {/* Modal para visualizar el código QR del estudiante */}
       {qrStudent && (
         <EstudianteQrModal
           estudiante={qrStudent}
@@ -862,9 +447,7 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
           estudiante={prerrequisitosStudent}
           prerrequisitos={prerrequisitos}
           onClose={() => setPrerrequisitosStudent(null)}
-          onSuccess={() => {
-            void loadData()
-          }}
+          onSuccess={() => void loadData()}
         />
       )}
     </div>
