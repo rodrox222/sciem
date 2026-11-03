@@ -16,6 +16,7 @@ import {
   type ResumenAdmin, type ResumenConExamenes, type ResumenDocente,
   type RolDashboard,
 } from '@/services/dashboard.service'
+import { examenesService } from '@/services/examenes.service'
 
 const TITULOS: Record<RolDashboard, string> = {
   admin: 'Administración',
@@ -91,11 +92,13 @@ function ListaExamenes({ examenes, rol }: { examenes: ExamenDashboard[]; rol: Ro
               {rol === 'auxiliar' && examen.docente && <p className="break-words">Docente: {examen.docente}</p>}
               {rol === 'estudiante' && examen.estado_habilitacion === 'Inhabilitado' && examen.motivo_estado &&
                 <p className="break-words text-destructive">Motivo: {examen.motivo_estado}</p>}
+              
+              {/* Enlace directo a la gestión o vista del examen */}
               <Link
-                to={rol === 'estudiante' ? '/estudiante' : `/examenes/${encodeURIComponent(String(examen.id))}`}
-                className="inline-flex items-center gap-1 font-semibold text-sci-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                to={rol === 'estudiante' ? `/estudiante/examenes/${encodeURIComponent(String(examen.id))}` : `/examenes/${encodeURIComponent(String(examen.id))}`}
+                className="inline-flex items-center gap-1 font-semibold text-sci-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary cursor-pointer pt-2"
               >
-                {rol === 'estudiante' ? 'Abrir mi módulo' : 'Ver examen'}
+                {rol === 'estudiante' ? 'Ver evaluación' : 'Gestionar evaluación'}
                 <ChevronRight className="h-4 w-4" aria-hidden="true" />
               </Link>
             </CardContent>
@@ -184,41 +187,81 @@ export function DashboardUnificado() {
     setLoading(true)
     setError('')
 
-    dashboardService.obtener()
-      .then((data) => {
+    const cargarDatos = async () => {
+      try {
+        // 1. Obtener respuesta base del dashboard
+        const data = await dashboardService.obtener()
         if (!activo) return
-        if (!data.success || !data.secciones?.resumen) {
-          setError('El servidor no devolvió información válida para el dashboard.')
-          setRespuesta(null)
-          return
-        }
 
-        // Si es usuario dual, adaptamos la visualización al rol seleccionado
-        const dataAdaptada: DashboardResponse = {
+        let dataAdaptada: DashboardResponse = {
           ...data,
           rol: esUsuarioDual ? rolActivo : data.rol,
         }
 
+        // 2. Si es AUXILIAR (o si el dashboard devolvió 0 exámenes para auxiliar),
+        // traemos los exámenes reales desde examenesService.list() que es el que funciona al 100%
+        if (rolActivo === 'auxiliar') {
+          try {
+            const res = await examenesService.list({ perPage: 50 })
+            const lista = Array.isArray(res.data) ? res.data : []
+
+            const examenesMapeados: ExamenDashboard[] = lista.map((ex: any) => ({
+              id: ex.id,
+              nombre: ex.nombre,
+              materia: ex.materia?.nombre || ex.materia || 'Sin asignatura',
+              fecha: ex.fecha,
+              hora_ini: ex.hora_ini,
+              hora_fin: ex.hora_fin,
+              aula: ex.aula?.nombre || ex.aula || 'Aula asignada',
+              docente: ex.docente?.nombre 
+                ? `${ex.docente.nombre} ${ex.docente.apellido_paterno || ''}`.trim()
+                : (typeof ex.docente === 'string' ? ex.docente : 'Docente titular'),
+              estado: ex.estado || 'Programado',
+            }))
+
+            dataAdaptada = {
+              ...dataAdaptada,
+              secciones: {
+                ...dataAdaptada.secciones,
+                resumen: {
+                  total_examenes: examenesMapeados.length,
+                  examenes: examenesMapeados,
+                } as any,
+              },
+            }
+          } catch (errEx) {
+            console.error('Error al forzar lista de exámenes para auxiliar:', errEx)
+          }
+        }
+
         setRespuesta(dataAdaptada)
         setError('')
-      })
-      .catch((e: unknown) => {
+      } catch (e: unknown) {
         if (!activo) return
         setRespuesta(null)
-        setError(e instanceof ApiError && e.status === 403
-          ? 'No tienes autorización para consultar este dashboard.'
-          : e instanceof ApiError && e.status === 401
+        setError(
+          e instanceof ApiError && e.status === 403
+            ? 'No tienes autorización para consultar este dashboard.'
+            : e instanceof ApiError && e.status === 401
             ? 'La sesión ha expirado. Inicia sesión nuevamente.'
-            : 'No se pudo obtener el dashboard. Revisa la conexión e inténtalo de nuevo.')
-      })
-      .finally(() => { if (activo) setLoading(false) })
-    return () => { activo = false }
+            : 'No se pudo obtener el dashboard. Revisa la conexión e inténtalo de nuevo.'
+        )
+      } finally {
+        if (activo) setLoading(false)
+      }
+    }
+
+    void cargarDatos()
+
+    return () => {
+      activo = false
+    }
   }, [revision, rolActivo, esUsuarioDual])
 
   const alternarModo = (nuevoRol: RolDashboard) => {
     if (nuevoRol === rolActivo) return
     setRolActivo(nuevoRol)
-    
+
     localStorage.setItem('user_role', nuevoRol)
 
     try {
@@ -228,8 +271,7 @@ export function DashboardUnificado() {
         parsed.rol = nuevoRol
         localStorage.setItem('user_data', JSON.stringify(parsed))
       }
-    } catch {
-    }
+    } catch {}
 
     window.dispatchEvent(new CustomEvent('rolCambiado', { detail: nuevoRol }))
   }
@@ -253,34 +295,41 @@ export function DashboardUnificado() {
             Resumen del usuario autenticado, según los datos autorizados por el servidor.
           </p>
 
-          {/* Switch de modo para estudiantes que son auxiliares */}
+          {/* Switch de modo de acceso dual */}
           {esUsuarioDual && (
-            <div className="mt-3 inline-flex items-center gap-1 rounded-xl border border-border bg-muted/50 p-1 shadow-2xs">
-              <span className="px-2.5 text-xs font-semibold text-muted-foreground">
-                Vista actual:
-              </span>
-              <button
-                type="button"
-                onClick={() => alternarModo('estudiante')}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-                  rolActivo === 'estudiante'
-                    ? 'bg-card text-sci-navy shadow-xs border border-border'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Estudiante
-              </button>
-              <button
-                type="button"
-                onClick={() => alternarModo('auxiliar')}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-                  rolActivo === 'auxiliar'
-                    ? 'bg-card text-sci-navy shadow-xs border border-border'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Auxiliar
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-5 shadow-xs">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-sci-cyan">
+                  Modo de acceso
+                </p>
+                <p className="mt-0.5 text-sm font-bold text-sci-navy">
+                  Selecciona el rol con el que deseas operar:
+                </p>
+              </div>
+              <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-muted/40 p-1">
+                <button
+                  type="button"
+                  onClick={() => alternarModo('estudiante')}
+                  className={`inline-flex items-center justify-center rounded-lg px-4 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                    rolActivo === 'estudiante'
+                      ? 'bg-card text-sci-navy shadow-xs border border-border'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Estudiante
+                </button>
+                <button
+                  type="button"
+                  onClick={() => alternarModo('auxiliar')}
+                  className={`inline-flex items-center justify-center rounded-lg px-4 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                    rolActivo === 'auxiliar'
+                      ? 'bg-card text-sci-navy shadow-xs border border-border'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Auxiliar
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -309,13 +358,6 @@ export function DashboardUnificado() {
       )}
 
       {!loading && respuesta && <ResumenPorRol data={respuesta} />}
-
-      {!loading && rolActivo === 'estudiante' && (
-        <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
-          Para generar tu QR, verificar habilitación o actualizar tu fotografía, visita{' '}
-          <Link to="/estudiante" className="font-semibold text-sci-blue underline underline-offset-2">Mi módulo de estudiante</Link>.
-        </div>
-      )}
     </div>
   )
 }
