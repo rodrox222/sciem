@@ -74,7 +74,7 @@ class AuxiliarModuloController extends Controller
         }
 
         if (!$estudianteAuxiliar->es_auxiliar) {
-            $estudianteAuxiliar->es_auxiliar = true;
+            $estudianteAuxiliar->es_auxiliar = DB::raw('true');
             $estudianteAuxiliar->save();
         }
 
@@ -85,6 +85,8 @@ class AuxiliarModuloController extends Controller
             ->where('id_examen', $examen->id)
             ->where('id_auxiliar', $estudianteAuxiliar->id)
             ->first();
+
+        $estadoAnterior = $asignacionExistente ? $asignacionExistente->estado : null;
 
         if ($asignacionExistente) {
             if ($asignacionExistente->estado === 'Activo') {
@@ -121,9 +123,13 @@ class AuxiliarModuloController extends Controller
         $this->redistribuirEstudiantesExamen($examen->id);
 
         $this->registrarAuditoria($request, 'AUXILIAR_ASIGNADO_DIRECTO', [
-            'examen_id'   => $examen->id,
-            'auxiliar_id' => $estudianteAuxiliar->id,
-            'email'       => $email,
+            'target_type'        => 'examen_auxiliar',
+            'target_id'          => $idAsignacion,
+            'id_examen'          => $examen->id,
+            'id_auxiliar'        => $estudianteAuxiliar->id,
+            'valores_anteriores' => $estadoAnterior ? ['estado' => $estadoAnterior] : null,
+            'valores_nuevos'     => ['estado' => 'Activo'],
+            'email'              => $email,
         ]);
 
         return response()->json([
@@ -163,25 +169,32 @@ class AuxiliarModuloController extends Controller
             return response()->json(['message' => 'No autorizado.'], 403);
         }
 
-        // Cambiamos el estado a Inactivo en lugar de borrar la fila
-        $actualizado = DB::table('examen_auxiliar')
+        $registroPrevio = DB::table('examen_auxiliar')
             ->where('id_examen', $idExamen)
             ->where('id_auxiliar', $idAuxiliar)
+            ->first();
+
+        if (!$registroPrevio) {
+            return response()->json(['message' => 'El auxiliar no estaba asignado a este examen.'], 404);
+        }
+
+        DB::table('examen_auxiliar')
+            ->where('id', $registroPrevio->id)
             ->update([
                 'estado'     => 'Inactivo',
                 'updated_at' => Carbon::now('America/La_Paz'),
             ]);
 
-        if (!$actualizado) {
-            return response()->json(['message' => 'El auxiliar no estaba asignado a este examen.'], 404);
-        }
-
         // Rebalancear estudiantes entre los que sigan 'Activo'
         $this->redistribuirEstudiantesExamen($idExamen);
 
         $this->registrarAuditoria($request, 'AUXILIAR_DESACTIVADO', [
-            'examen_id'   => $idExamen,
-            'auxiliar_id' => $idAuxiliar,
+            'target_type'        => 'examen_auxiliar',
+            'target_id'          => $registroPrevio->id,
+            'id_examen'          => $idExamen,
+            'id_auxiliar'        => $idAuxiliar,
+            'valores_anteriores' => ['estado' => $registroPrevio->estado],
+            'valores_nuevos'     => ['estado' => 'Inactivo'],
         ]);
 
         return response()->json([
@@ -190,10 +203,6 @@ class AuxiliarModuloController extends Controller
         ], 200);
     }
 
-    /**
-     * Listar auxiliares asignados a un examen (Vista docente).
-     * GET /api/examenes/{id_examen}/auxiliares
-     */
     public function listarAuxiliaresExamen(Request $request, string $idExamen): JsonResponse
     {
         $docente = $request->user();
@@ -229,10 +238,6 @@ class AuxiliarModuloController extends Controller
         ], 200);
     }
 
-    /**
-     * Auxiliar consulta sus exámenes asignados.
-     * GET /api/auxiliar/mis-examenes
-     */
     public function misExamenesAsignados(Request $request): JsonResponse
     {
         $auxiliar = $request->user();

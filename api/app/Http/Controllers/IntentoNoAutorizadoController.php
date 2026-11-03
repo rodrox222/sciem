@@ -12,10 +12,6 @@ use Illuminate\Support\Str;
 
 class IntentoNoAutorizadoController extends Controller
 {
-    /**
-     * HU13: Listar los intentos indebidos registrados automáticamente por el escáner
-     * GET /api/examenes/{id_examen}/intentos-no-autorizados
-     */
     public function index(Request $request, string $idExamen): JsonResponse
     {
         if (!Str::isUuid($idExamen)) {
@@ -46,7 +42,6 @@ class IntentoNoAutorizadoController extends Controller
             ->through(function ($intento) {
                 $estudiante = $intento->estudiante;
 
-                // Si el estudiante no existe en BD, rescatar el identificador guardado en auditoría
                 $identificador = $estudiante?->codigo_sis;
                 if (!$identificador) {
                     $auditoria = LogAuditoria::where('modulo', 'INTENTOS_NO_AUTORIZADOS')

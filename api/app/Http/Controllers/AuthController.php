@@ -56,7 +56,7 @@ class AuthController extends Controller
         // LÓGICA DE MULTI-ROL (ESTUDIANTE / AUXILIAR)
         $rolesDisponibles = [$rolDetectado]; 
 
-        // Si la bandera es_auxiliar está en true, le habilitamos el segundo rol
+        // Si la bandera es_auxiliar está en true, habilitamos el segundo rol
         if ($user instanceof Estudiante && $user->es_auxiliar) {
             $rolesDisponibles = ['estudiante', 'auxiliar'];
         }
@@ -125,28 +125,18 @@ class AuthController extends Controller
 
     // --- MÉTODOS AUXILIARES ---
 
-    /**
-     * Discrimina de forma unívoca la entidad a consultar:
-     * - Si manda explicitamente role="estudiante", busca en Estudiante.
-     * - Solo números -> Puede ser Admin (por CI) o Estudiante (por Código SIS).
-     * - Terminado en @fcyt.umss.edu.bo -> Docente.
-     * - Terminado en @est.umss.edu -> Busca en Estudiante (por email_institucional) o en Auxiliar (por email).
-     */
     private function identificarYBuscarUsuario(string $identificador, ?string $rolSugerido = null): array
     {
-        // Si el cliente especificó explícitamente el rol "estudiante" o "auxiliar"
         if (in_array($rolSugerido, ['estudiante', 'auxiliar'])) {
             $estudiante = Estudiante::where('email_institucional', $identificador)
                 ->orWhere('codigo_sis', $identificador)
                 ->first();
             if ($estudiante) {
-                // Si sugirió auxiliar, validamos si realmente tiene la bandera activa
                 $rolDetectado = ($rolSugerido === 'auxiliar' && $estudiante->es_auxiliar) ? 'auxiliar' : 'estudiante';
                 return [$estudiante, $rolDetectado];
             }
         }
 
-        // Solo números: Evaluar si es Estudiante (Código SIS) o Admin (CI)
         if (ctype_digit($identificador)) {
             $estudiante = Estudiante::where('codigo_sis', $identificador)->first();
             if ($estudiante) {
@@ -161,7 +151,6 @@ class AuthController extends Controller
 
         $emailLower = strtolower($identificador);
 
-        // Docente
         if (str_ends_with($emailLower, '@fcyt.umss.edu.bo')) {
             $docente = Docente::where('email', $emailLower)->first();
             if ($docente) {
@@ -169,7 +158,6 @@ class AuthController extends Controller
             }
         }
 
-        // Terminado en @est.umss.edu (para los estudiantes pe)
         if (str_ends_with($emailLower, '@est.umss.edu')) {
             $estudiante = Estudiante::where('email_institucional', $emailLower)->first();
             if ($estudiante) {
@@ -177,7 +165,6 @@ class AuthController extends Controller
             }
         }
 
-        // Otros dominios (por ejemplo @gmail.com)
         $docente = Docente::where('email', $emailLower)->first();
         if ($docente) {
             return [$docente, 'docente'];
@@ -196,9 +183,6 @@ class AuthController extends Controller
         return [null, null];
     }
 
-    /**
-     * Centraliza la persistencia de auditoría para eventos de autenticación
-     */
     private function registrarLogAuth(
         Request $request,
         string $accion,
