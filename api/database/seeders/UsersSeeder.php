@@ -131,6 +131,23 @@ class UsersSeeder extends Seeder
         );
 
         DB::table('docente')->updateOrInsert(
+            ['email' => 'rodrigoalmarazflores222@gmail.com'],
+            [
+                'id'                => (string) Str::uuid(),
+                'ci'                => '45895632',
+                'ci_extension'      => null,
+                'nombre'            => 'Rodrigo',
+                'apellido_paterno'  => 'Almaraz',
+                'apellido_materno'  => 'Flores',
+                'email_verified_at' => now(),
+                'password'          => Hash::make('qwerasdf'),
+                'activo'            => DB::raw('true'),
+                'created_at'        => now(),
+                'updated_at'        => now(),
+            ]
+        );
+
+        DB::table('docente')->updateOrInsert(
             ['email' => 'revollofernando001@gmail.com'],
             [
                 'id'                => (string) Str::uuid(),
