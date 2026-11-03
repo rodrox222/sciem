@@ -393,7 +393,7 @@ class EstudianteController extends Controller
             'codigo_sis'         => $estudiante->codigo_sis,
         ]);
 
-        return response response()->json([
+        return response()->json([
             'success' => true,
             'message' => 'Fotografía facial validada y guardada correctamente.',
             'data'    => [

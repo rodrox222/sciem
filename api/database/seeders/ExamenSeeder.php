@@ -15,24 +15,18 @@ class ExamenSeeder extends Seeder
 {
     public function run(): void
     {
-        // Asegurar o crear una Materia de prueba
-        $materia = Materia::firstOrCreate(
-            ['nombre' => 'Introduccion a la programacion'],
-            ['id' => (string) Str::uuid()]
-        );
+        // Obtener la materia creada por MateriaSeeder
+        $materia = Materia::where('nombre', 'Introducción a la Programación')
+            ->orWhere('nombre', 'ilike', 'Introduccion a la programacion')
+            ->firstOrFail();
 
-        // Asegurar o crear un Aula de prueba
-        $aula = Aula::firstOrCreate(
-            ['nombre' => 'Aula 691B'],
-            [
-                'id'        => (string) Str::uuid(),
-                'ubicacion' => 'Edificio Nuevo FCyT - Planta Baja',
-                'estado'    => 'Disponible',
-                'capacidad' => 50,
-            ]
-        );
+        // Obtener el aula creada por AulaSeeder
+        $aula = Aula::where('nombre', 'Aula 691B')
+            ->orWhere('nombre', 'Aula 691-B')
+            ->firstOrFail();
 
-       $docente = Docente::where('email', 'docente@fcyt.umss.edu.bo')->first();
+        // Obtener o crear docente de prueba
+        $docente = Docente::where('email', 'docente@fcyt.umss.edu.bo')->first();
 
         if (!$docente) {
             $docente = Docente::create([
@@ -49,7 +43,7 @@ class ExamenSeeder extends Seeder
             ]);
         }
 
-        // Crear el Examen
+        // Crear o actualizar el Examen
         $examen = Examen::updateOrCreate(
             ['nombre' => 'segundo parcial'],
             [
@@ -64,7 +58,8 @@ class ExamenSeeder extends Seeder
             ]
         );
 
-       $estudiantes = Estudiante::take(2)->get();
+        // Asignar estudiantes
+        $estudiantes = Estudiante::take(2)->get();
 
         $syncData = [];
         foreach ($estudiantes as $estudiante) {
