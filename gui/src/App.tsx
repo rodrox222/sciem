@@ -5,7 +5,6 @@ import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute'
 import PublicLayout from './layouts/PublicLayout'
 import MainLayout from './layouts/MainLayout'
 import AuthLayout from './layouts/AuthLayout'
-import EstudianteDashboardPage from './pages/EstudianteDashboardPage'
 
 // Páginas públicas
 import { HomePage } from './pages/HomePage'
