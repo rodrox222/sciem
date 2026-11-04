@@ -2,8 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
   BookOpenCheck, CalendarDays, ChevronRight, CircleAlert,
-  ClipboardList, DoorOpen, GraduationCap, RefreshCw,
-  ShieldCheck, UsersRound,
+  ClipboardList, DoorOpen, Download, GraduationCap, RefreshCw,
+  ShieldCheck, Smartphone, UsersRound,
 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -308,10 +308,33 @@ export function DashboardUnificado() {
           </p>
         </div>
 
-        <Button type="button" variant="outline" onClick={reintentar} disabled={loading}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
-          Actualizar
-        </Button>
+        {/* Acciones superiores: Solo Auxiliar puede ver la descarga del APK institucional */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {rolActivo === 'auxiliar' && (
+            <Button
+              asChild
+              variant="outline"
+              className="cursor-pointer gap-2 border-sci-cyan/40 bg-sci-cyan/5 font-semibold text-sci-navy shadow-xs hover:bg-sci-cyan/15 hover:text-sci-blue"
+            >
+              <a
+                href="/apk/sci-control-ingreso.apk"
+                download="SCI_Control_Ingreso.apk"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Descargar instalador APK para control de ingreso"
+              >
+                <Smartphone className="h-4 w-4 text-sci-cyan" aria-hidden="true" />
+                <span>Descargar APK</span>
+                <Download className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+              </a>
+            </Button>
+          )}
+
+          <Button type="button" variant="outline" onClick={reintentar} disabled={loading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+            Actualizar
+          </Button>
+        </div>
       </div>
 
       {loading && (
