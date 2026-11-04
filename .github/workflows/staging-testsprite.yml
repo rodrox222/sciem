@@ -1,0 +1,54 @@
+name: Staging - calentar backend y ejecutar TestSprite
+
+# Mientras se valida la integración solo corre manualmente (cada run consume créditos).
+# Cuando la línea base sea estable, se puede volver a activar el disparador por push.
+on:
+  workflow_dispatch:
+
+jobs:
+  testsprite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+      TESTSPRITE_API_KEY: ${{ secrets.TESTSPRITE_API_KEY }}
+    steps:
+      - name: Calentar el backend en Render
+        run: |
+          # Verificado: /api/health responde 204. Se aceptan todos los 2xx.
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 "$BASE_URL/api/health" || true)
+            echo "Intento $i: HTTP ${code:-000}"
+            if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then
+              echo "Backend listo"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "El backend no respondió a tiempo"
+          exit 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Instalar TestSprite CLI
+        run: npm i -g @testsprite/testsprite-cli@latest
+
+      - name: Ejecutar suite de TestSprite contra staging
+        # Proyecto "SCI - Staging" (workspace BalerickDR's workspace). Entorno: default.
+        run: >-
+          testsprite ci run
+          --project "02800191-1658-4e08-9246-22969b5563a8"
+          --env "default"
+          --target-url "$BASE_URL"
+          --fail-on-skipped
+          --summary-file testsprite-summary.json
+
+      - name: Subir reporte de TestSprite
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testsprite-results
+          path: testsprite-summary.json
+          if-no-files-found: ignore
