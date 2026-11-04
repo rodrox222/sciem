@@ -93,7 +93,6 @@ export const Header: React.FC = () => {
   // Si el usuario es dual (estudiante/auxiliar), agregamos el tab de conmutación al lado de Noticias
   const navItems: NavItem[] = [...baseNavItems];
   if (esUsuarioDual && (normalizedRole === 'estudiante' || normalizedRole === 'auxiliar')) {
-    const rolDestino = normalizedRole === 'estudiante' ? 'auxiliar' : 'estudiante';
     const etiquetaTab = normalizedRole === 'estudiante' ? 'Auxiliar' : 'Estudiante';
     navItems.push({
       name: etiquetaTab,
