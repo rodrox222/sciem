@@ -2,8 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
   BookOpenCheck, CalendarDays, ChevronRight, CircleAlert,
-  ClipboardList, DoorOpen, GraduationCap, RefreshCw,
-  ShieldCheck, UsersRound,
+  ClipboardList, DoorOpen, Download, GraduationCap, RefreshCw,
+  ShieldCheck, Smartphone, UsersRound,
 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -94,7 +94,6 @@ function ListaExamenes({ examenes, rol }: { examenes: ExamenDashboard[]; rol: Ro
               {rol === 'estudiante' && examen.estado_habilitacion === 'Inhabilitado' && examen.motivo_estado &&
                 <p className="break-words text-destructive">Motivo: {examen.motivo_estado}</p>}
               
-              {/* Enlace directo a la gestión o vista del examen */}
               <Link
                 to={rol === 'estudiante' ? `/estudiante/examenes/${encodeURIComponent(String(examen.id))}` : `/examenes/${encodeURIComponent(String(examen.id))}`}
                 className="inline-flex items-center gap-1 font-semibold text-sci-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary cursor-pointer pt-2"
@@ -178,6 +177,25 @@ export function DashboardUnificado() {
     }
   })
 
+  // Escuchar el cambio de rol originado desde el tab del Header
+  useEffect(() => {
+    const handleRolCambiado = (e: Event) => {
+      const customEvent = e as CustomEvent<string>
+      const nuevo = normalizarRolDashboard(customEvent.detail || localStorage.getItem('user_role'))
+      if (nuevo) {
+        setRolActivo(nuevo)
+      }
+    }
+
+    window.addEventListener('rolCambiado', handleRolCambiado)
+    window.addEventListener('storage', handleRolCambiado)
+
+    return () => {
+      window.removeEventListener('rolCambiado', handleRolCambiado)
+      window.removeEventListener('storage', handleRolCambiado)
+    }
+  }, [])
+
   const [revision, setRevision] = useState(0)
   const [respuesta, setRespuesta] = useState<DashboardResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -190,7 +208,6 @@ export function DashboardUnificado() {
 
     const cargarDatos = async () => {
       try {
-        // 1. Obtener respuesta base del dashboard
         const data = await dashboardService.obtener()
         if (!activo) return
 
@@ -199,11 +216,9 @@ export function DashboardUnificado() {
           rol: esUsuarioDual ? rolActivo : data.rol,
         }
 
-        // 2. Si es AUXILIAR (o si el dashboard devolvió 0 exámenes para auxiliar),
-        // traemos los exámenes reales desde examenesService.list() que es el que funciona al 100%
+        // Si es AUXILIAR, traemos los exámenes y excluimos los que cursa como estudiante
         if (rolActivo === 'auxiliar') {
           try {
-            // 1. Obtener los IDs de las evaluaciones donde rinde como estudiante
             let idsComoEstudiante: string[] = []
             try {
               const resMisEx = await estudiantesService.misExamenes()
@@ -213,11 +228,9 @@ export function DashboardUnificado() {
               console.warn('No se pudieron obtener exámenes de estudiante para exclusión:', errMisEx)
             }
 
-            // 2. Obtener la lista general de exámenes
             const res = await examenesService.list({ perPage: 50 })
             const lista = Array.isArray(res.data) ? res.data : []
 
-            // 3. Filtrar: descartar cualquier examen donde esté inscrito como alumno examinando
             const examenesParaGestionar = lista.filter(
               (ex: any) => !idsComoEstudiante.includes(String(ex.id))
             )
@@ -275,24 +288,6 @@ export function DashboardUnificado() {
     }
   }, [revision, rolActivo, esUsuarioDual])
 
-  const alternarModo = (nuevoRol: RolDashboard) => {
-    if (nuevoRol === rolActivo) return
-    setRolActivo(nuevoRol)
-
-    localStorage.setItem('user_role', nuevoRol)
-
-    try {
-      const rawUser = localStorage.getItem('user_data')
-      if (rawUser) {
-        const parsed = JSON.parse(rawUser)
-        parsed.rol = nuevoRol
-        localStorage.setItem('user_data', JSON.stringify(parsed))
-      }
-    } catch {}
-
-    window.dispatchEvent(new CustomEvent('rolCambiado', { detail: nuevoRol }))
-  }
-
   const reintentar = () => {
     setLoading(true)
     setRespuesta(null)
@@ -311,50 +306,35 @@ export function DashboardUnificado() {
           <p className="mt-1 text-sm text-muted-foreground">
             Resumen del usuario autenticado, según los datos autorizados por el servidor.
           </p>
-
-          {/* Switch de modo de acceso dual */}
-          {esUsuarioDual && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-5 shadow-xs">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-sci-cyan">
-                  Modo de acceso
-                </p>
-                <p className="mt-0.5 text-sm font-bold text-sci-navy">
-                  Selecciona el rol con el que deseas operar:
-                </p>
-              </div>
-              <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-muted/40 p-1">
-                <button
-                  type="button"
-                  onClick={() => alternarModo('estudiante')}
-                  className={`inline-flex items-center justify-center rounded-lg px-4 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                    rolActivo === 'estudiante'
-                      ? 'bg-card text-sci-navy shadow-xs border border-border'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Estudiante
-                </button>
-                <button
-                  type="button"
-                  onClick={() => alternarModo('auxiliar')}
-                  className={`inline-flex items-center justify-center rounded-lg px-4 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                    rolActivo === 'auxiliar'
-                      ? 'bg-card text-sci-navy shadow-xs border border-border'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Auxiliar
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
-        <Button type="button" variant="outline" onClick={reintentar} disabled={loading}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
-          Actualizar
-        </Button>
+        {/* Acciones superiores: Solo Auxiliar puede ver la descarga del APK institucional */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {rolActivo === 'auxiliar' && (
+            <Button
+              asChild
+              variant="outline"
+              className="cursor-pointer gap-2 border-sci-cyan/40 bg-sci-cyan/5 font-semibold text-sci-navy shadow-xs hover:bg-sci-cyan/15 hover:text-sci-blue"
+            >
+              <a
+                href="/apk/sci-control-ingreso.apk"
+                download="SCI_Control_Ingreso.apk"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Descargar instalador APK para control de ingreso"
+              >
+                <Smartphone className="h-4 w-4 text-sci-cyan" aria-hidden="true" />
+                <span>Descargar APK</span>
+                <Download className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+              </a>
+            </Button>
+          )}
+
+          <Button type="button" variant="outline" onClick={reintentar} disabled={loading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+            Actualizar
+          </Button>
+        </div>
       </div>
 
       {loading && (

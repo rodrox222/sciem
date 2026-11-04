@@ -155,41 +155,6 @@ export default function EstudianteDashboardPage() {
     setCamaraAbierta(false)
   }
 
-  
-
-
-  const [esUsuarioDual] = useState<boolean>(() => {
-    try {
-      const u = JSON.parse(localStorage.getItem('user_data') || '{}')
-      return Boolean(u.es_auxiliar || u.roles_disponibles?.includes('auxiliar'))
-    } catch {
-      return false
-    }
-  })
-
-  const [rolActivo, setRolActivo] = useState(() => {
-    return (localStorage.getItem('user_role') || 'estudiante').toLowerCase()
-  })
-
-  const alternarModo = (nuevoRol: string) => {
-    if (nuevoRol === rolActivo) return
-    setRolActivo(nuevoRol)
-    localStorage.setItem('user_role', nuevoRol)
-
-    try {
-      const rawUser = localStorage.getItem('user_data')
-      if (rawUser) {
-        const parsed = JSON.parse(rawUser)
-        parsed.rol = nuevoRol
-        localStorage.setItem('user_data', JSON.stringify(parsed))
-      }
-    } catch {}
-
-    window.dispatchEvent(new CustomEvent('rolCambiado', { detail: nuevoRol }))
-  }
-
-
-
   useEffect(() => {
     if (!camaraAbierta) return
 
@@ -341,44 +306,7 @@ export default function EstudianteDashboardPage() {
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      {/* Switch de modo para usuarios duales (Estudiante / Auxiliar) */}
-      {esUsuarioDual && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-5 shadow-xs">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-sci-cyan">
-              Modo de acceso
-            </p>
-            <p className="mt-0.5 text-sm font-bold text-sci-navy">
-              Selecciona el rol con el que deseas operar:
-            </p>
-          </div>
-          <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-muted/40 p-1">
-            <button
-              type="button"
-              onClick={() => alternarModo('estudiante')}
-              className={`inline-flex items-center justify-center rounded-lg px-4 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                rolActivo === 'estudiante'
-                  ? 'bg-card text-sci-navy shadow-xs border border-border'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Estudiante
-            </button>
-            <button
-              type="button"
-              onClick={() => alternarModo('auxiliar')}
-              className={`inline-flex items-center justify-center rounded-lg px-4 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                rolActivo === 'auxiliar'
-                  ? 'bg-card text-sci-navy shadow-xs border border-border'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Auxiliar
-            </button>
-          </div>
-        </div>
-      )}
+    <div className="space-y-6 p-4 md:p-6">      
       {/* 
         PRIMER ACCESO OBLIGATORIO:
         Solo se muestra si el perfil NO está completado.
