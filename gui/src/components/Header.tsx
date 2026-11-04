@@ -10,6 +10,7 @@ import logoUmss from '@/assets/logo_umss_SVG.svg';
 interface NavItem {
   name: string;
   href: string;
+  isRoleToggle?: boolean;
 }
 
 const NAV_ITEMS_BY_ROLE: Record<string, NavItem[]> = {
@@ -54,16 +55,27 @@ export const Header: React.FC = () => {
     (localStorage.getItem('user_role') || initialRole).toLowerCase()
   );
 
-  // Escuchar el cambio inmediato de rol desde el switch del Dashboard
+  // Detectar si el usuario autenticado tiene rol dual (estudiante y auxiliar)
+  const [esUsuarioDual, setEsUsuarioDual] = useState<boolean>(() => {
+    try {
+      const u = JSON.parse(localStorage.getItem('user_data') || '{}');
+      return Boolean(u.es_auxiliar || u.roles_disponibles?.includes('auxiliar'));
+    } catch {
+      return false;
+    }
+  });
+
+  // Escuchar el cambio inmediato de rol entre componentes
   useEffect(() => {
     const handleRolCambiado = (e: Event) => {
       const customEvent = e as CustomEvent<string>;
-      if (customEvent.detail) {
-        setActiveRole(customEvent.detail.toLowerCase());
-      } else {
-        const nuevo = localStorage.getItem('user_role');
-        if (nuevo) setActiveRole(nuevo.toLowerCase());
-      }
+      const nuevo = (customEvent.detail || localStorage.getItem('user_role') || '').toLowerCase();
+      if (nuevo) setActiveRole(nuevo);
+
+      try {
+        const u = JSON.parse(localStorage.getItem('user_data') || '{}');
+        setEsUsuarioDual(Boolean(u.es_auxiliar || u.roles_disponibles?.includes('auxiliar')));
+      } catch {}
     };
 
     window.addEventListener('rolCambiado', handleRolCambiado);
@@ -76,11 +88,46 @@ export const Header: React.FC = () => {
   }, []);
 
   const normalizedRole = activeRole === 'administrador' ? 'admin' : activeRole;
-  const navItems = NAV_ITEMS_BY_ROLE[normalizedRole] || NAV_ITEMS_BY_ROLE.docente;
+  const baseNavItems = NAV_ITEMS_BY_ROLE[normalizedRole] || NAV_ITEMS_BY_ROLE.docente;
 
-  const goTo = (href: string) => {
-    if (href === '#') return;
-    navigate(href);
+  // Si el usuario es dual (estudiante/auxiliar), agregamos el tab de conmutación al lado de Noticias
+  const navItems: NavItem[] = [...baseNavItems];
+  if (esUsuarioDual && (normalizedRole === 'estudiante' || normalizedRole === 'auxiliar')) {
+    const rolDestino = normalizedRole === 'estudiante' ? 'auxiliar' : 'estudiante';
+    const etiquetaTab = normalizedRole === 'estudiante' ? 'Auxiliar' : 'Estudiante';
+    navItems.push({
+      name: etiquetaTab,
+      href: '/dashboard',
+      isRoleToggle: true,
+    });
+  }
+
+  const alternarRol = (rolDestino: string) => {
+    localStorage.setItem('user_role', rolDestino);
+
+    try {
+      const rawUser = localStorage.getItem('user_data');
+      if (rawUser) {
+        const parsed = JSON.parse(rawUser);
+        parsed.rol = rolDestino;
+        localStorage.setItem('user_data', JSON.stringify(parsed));
+      }
+    } catch {}
+
+    setActiveRole(rolDestino);
+    window.dispatchEvent(new CustomEvent('rolCambiado', { detail: rolDestino }));
+    navigate('/dashboard');
+    setMobileOpen(false);
+  };
+
+  const goTo = (item: NavItem) => {
+    if (item.isRoleToggle) {
+      const rolDestino = normalizedRole === 'estudiante' ? 'auxiliar' : 'estudiante';
+      alternarRol(rolDestino);
+      return;
+    }
+    if (item.href === '#') return;
+    navigate(item.href);
     setMobileOpen(false);
   };
 
@@ -103,7 +150,7 @@ export const Header: React.FC = () => {
           {/* Logo SCI */}
           <div
             className="flex cursor-pointer select-none items-center gap-2 sm:gap-3"
-            onClick={() => goTo(isAuthenticated ? '/dashboard' : '/')}
+            onClick={() => navigate(isAuthenticated ? '/dashboard' : '/')}
           >
             <img src={logoSci} alt="Logo SCI" className="h-10 sm:h-12 w-auto object-contain" />
             <div className="leading-tight">
@@ -165,13 +212,13 @@ export const Header: React.FC = () => {
                 <span className="hidden md:inline-flex items-center rounded-full border border-border bg-muted/40 px-3.5 py-1 text-xs font-medium text-muted-foreground">
                   Información académica oficial
                 </span>
-                <Button onClick={() => goTo('/login')} size="sm" className="font-semibold shadow-xs cursor-pointer">
+                <Button onClick={() => navigate('/login')} size="sm" className="font-semibold shadow-xs cursor-pointer">
                   Ingresar
                 </Button>
               </>
             )}
 
-            {/* Hamburguesa visible SIEMPRE en móviles (autenticado o público) */}
+            {/* Hamburguesa visible en móviles */}
             <Button
               variant="ghost"
               size="icon"
@@ -188,14 +235,18 @@ export const Header: React.FC = () => {
         <nav className="hidden xl:flex justify-center border-t border-border pt-1 text-xs sm:text-sm font-medium">
           {isAuthenticated ? (
             navItems.map((item) => {
-              const active = location.pathname.startsWith(item.href);
+              // El tab toggle nunca está "activo" como ruta fija, funciona como disparador de cambio
+              const active = !item.isRoleToggle && location.pathname.startsWith(item.href);
+
               return (
                 <button
                   key={item.name}
                   type="button"
-                  onClick={() => goTo(item.href)}
+                  onClick={() => goTo(item)}
                   className={`min-h-11 border-b-2 px-4 py-2 transition-colors cursor-pointer ${
-                    active
+                    item.isRoleToggle
+                      ? 'border-transparent text-sci-cyan font-bold hover:text-sci-blue hover:border-sci-cyan'
+                      : active
                       ? 'border-primary font-bold text-primary'
                       : 'border-transparent text-muted-foreground hover:text-foreground'
                   }`}
@@ -208,7 +259,7 @@ export const Header: React.FC = () => {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => goTo('/')}
+                onClick={() => navigate('/')}
                 className={`border-b-2 px-5 py-2.5 font-bold transition-colors cursor-pointer ${
                   location.pathname === '/'
                     ? 'border-primary text-primary'
@@ -219,7 +270,7 @@ export const Header: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => goTo('/cronograma')}
+                onClick={() => navigate('/cronograma')}
                 className={`border-b-2 px-5 py-2.5 transition-colors cursor-pointer ${
                   location.pathname === '/cronograma'
                     ? 'border-primary font-bold text-primary'
@@ -230,7 +281,7 @@ export const Header: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => goTo('/noticias')}
+                onClick={() => navigate('/noticias')}
                 className={`border-b-2 px-5 py-2.5 transition-colors cursor-pointer ${
                   location.pathname === '/noticias'
                     ? 'border-primary font-bold text-primary'
@@ -252,8 +303,12 @@ export const Header: React.FC = () => {
                   <button
                     key={item.name}
                     type="button"
-                    onClick={() => goTo(item.href)}
-                    className="block w-full rounded-lg px-4 py-2.5 text-left text-sm font-medium text-foreground hover:bg-muted cursor-pointer"
+                    onClick={() => goTo(item)}
+                    className={`block w-full rounded-lg px-4 py-2.5 text-left text-sm font-medium cursor-pointer ${
+                      item.isRoleToggle
+                        ? 'font-bold text-sci-cyan hover:bg-muted'
+                        : 'text-foreground hover:bg-muted'
+                    }`}
                   >
                     {item.name}
                   </button>
@@ -271,21 +326,21 @@ export const Header: React.FC = () => {
               <>
                 <button
                   type="button"
-                  onClick={() => goTo('/')}
+                  onClick={() => navigate('/')}
                   className="block w-full rounded-lg px-4 py-2.5 text-left text-sm font-medium hover:bg-muted cursor-pointer"
                 >
                   Inicio
                 </button>
                 <button
                   type="button"
-                  onClick={() => goTo('/cronograma')}
+                  onClick={() => navigate('/cronograma')}
                   className="block w-full rounded-lg px-4 py-2.5 text-left text-sm font-medium hover:bg-muted cursor-pointer"
                 >
                   Cronograma de exámenes
                 </button>
                 <button
                   type="button"
-                  onClick={() => goTo('/noticias')}
+                  onClick={() => navigate('/noticias')}
                   className="block w-full rounded-lg px-4 py-2.5 text-left text-sm font-medium hover:bg-muted cursor-pointer"
                 >
                   Noticias
