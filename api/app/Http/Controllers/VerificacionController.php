@@ -58,9 +58,42 @@ class VerificacionController extends Controller
         abort_unless($tieneAcceso, 403, 'Acceso denegado: no estás autorizado para escanear en esta evaluación.');
 
         if (str_contains($trimmedQr, '.') && !str_starts_with($trimmedQr, '{')) {
-            \App\Services\IdentificadorQr::leer($trimmedQr, $idExamen);
-        }
+            try {
+                \App\Services\IdentificadorQr::leer($trimmedQr, $idExamen);
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                $identificadorSeguro = substr(preg_replace('/[^a-zA-Z0-9_-]/', '', $trimmedQr), 0, 20);
+                if (empty($identificadorSeguro)) {
+                    $identificadorSeguro = 'QR_INVALIDO';
+                }
 
+                $this->registrarIntentoYAuditoria(
+                    $request,
+                    $examen->id,
+                    null,
+                    'QR_INVALIDO',
+                    $rol,
+                    $userId,
+                    $identificadorSeguro
+                );
+
+                $this->registrarLog(
+                    $examen->id,
+                    null,
+                    $identificadorSeguro,
+                    'ERROR_DATOS_INVALIDOS',
+                    'El código QR no pertenece al sistema universitario (token inválido o manipulado).',
+                    ['raw_preview' => substr($rawQr, 0, 100)]
+                );
+
+                return response()->json([
+                    'success'    => false,
+                    'resultado'  => 'ERROR_DATOS_INVALIDOS',
+                    'message'    => 'Código QR inválido, expirado o ajeno a esta evaluación.',
+                    'error_type' => 'QR_INVALIDO',
+                ], 400);
+            }
+        }
+        
         $idExamenToken = null;
         $idEstudianteToken = null;
         $codigoSis = null;

@@ -34,11 +34,13 @@ export type CodigoRechazoValidacion =
   | 'ERROR_VALIDACION'
 
 export interface EstudianteValidado {
+  id?: string
   nombreCompleto?: string
   codigoSis?: string
   ci?: string
   ciExtension?: string
   fotoPerfilUrl?: string | null
+  foto_url?: string | null // Compatible con la respuesta directa del backend
 }
 
 export type ResultadoValidacionAcceso =
@@ -86,6 +88,23 @@ const formatDate = (date: string) => {
     year: 'numeric',
     timeZone: 'UTC',
   }).format(new Date(`${normalized}T00:00:00Z`))
+}
+
+// Función universal para construir la URL absoluta de la fotografía
+function formatearUrlFoto(foto?: string | null): string | null {
+  if (!foto) return null
+
+  // Si ya es una URL completa (http/https), se devuelve tal cual
+  if (foto.startsWith('http://') || foto.startsWith('https://')) {
+    return foto
+  }
+
+  // Si es relativa (/storage/...), le anteponemos el origen del backend
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+  const backendOrigin = apiUrl.replace(/\/api\/?$/, '')
+  const rutaLimpia = foto.startsWith('/') ? foto : `/${foto}`
+
+  return `${backendOrigin}${rutaLimpia}`
 }
 
 const getRejectionCopy = (
@@ -196,6 +215,10 @@ export function ResultadoValidacionDialog({
   const student = resultado.estado === 'pendiente' ? undefined : resultado.estudiante
   const visibleNorms = examen.normas?.slice(0, 3) ?? []
   const hiddenNormCount = Math.max((examen.normas?.length ?? 0) - visibleNorms.length, 0)
+
+  // Obtener la URL compatible de fotoPerfilUrl o foto_url
+  const rawFoto = student?.fotoPerfilUrl || (student as any)?.foto_url
+  const urlFotoEstudiante = formatearUrlFoto(rawFoto)
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
@@ -315,9 +338,9 @@ export function ResultadoValidacionDialog({
                 isDuplicate ? 'p-3' : 'p-4'
               }`}
             >
-              {student.fotoPerfilUrl && !imgError ? (
+              {urlFotoEstudiante && !imgError ? (
                 <img
-                  src={student.fotoPerfilUrl}
+                  src={urlFotoEstudiante}
                   alt={student.nombreCompleto || 'Fotografía del estudiante'}
                   onError={() => setImgError(true)}
                   className="h-16 w-16 shrink-0 rounded-2xl border-2 border-border object-cover shadow-xs"
@@ -446,7 +469,7 @@ export function ResultadoValidacionDialog({
         >
           <Button
             type="button"
-            className="w-full bg-sci-blue font-bold text-white hover:opacity-90"
+            className="w-full bg-sci-blue font-bold text-white hover:opacity-90 cursor-pointer"
             onClick={onClose}
           >
             Continuar escaneando
