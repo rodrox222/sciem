@@ -57,9 +57,12 @@ class AulaController extends Controller
         Cache::forget('catalogo_aulas_disponibles');
 
         $this->registrarAuditoria($request, 'AULA_CREADA', [
-            'aula_id'   => $aula->id,
-            'nombre'    => $aula->nombre,
-            'capacidad' => $aula->capacidad,
+            'target_type' => 'aula',
+            'target_id'   => $aula->id,
+            'nombre'      => $aula->nombre,
+            'capacidad'   => $aula->capacidad,
+            'ubicacion'   => $aula->ubicacion,
+            'estado'      => $aula->estado,
         ]);
 
         return response()->json([
@@ -83,7 +86,7 @@ class AulaController extends Controller
     }
 
     /**
-     * Actualizar los datos de un aula.
+     * Actualizar los datos de un aula con snapshot para soporte de reversión.
      */
     public function update(UpdateAulaRequest $request, string $id): JsonResponse
     {
@@ -94,13 +97,21 @@ class AulaController extends Controller
         }
 
         $data = $request->validated();
+
+        // Extraer únicamente los campos modificados para el snapshot anterior
+        $camposAfectados = array_keys($data);
+        $valoresAnteriores = $aula->only($camposAfectados);
+
         $aula->update($data);
 
         Cache::forget('catalogo_aulas_disponibles');
 
         $this->registrarAuditoria($request, 'AULA_ACTUALIZADA', [
-            'aula_id'             => $aula->id,
-            'campos_actualizados' => array_keys($data),
+            'target_type'         => 'aula',
+            'target_id'           => $aula->id,
+            'campos_actualizados' => $camposAfectados,
+            'valores_anteriores'  => $valoresAnteriores,
+            'valores_nuevos'      => $data,
         ]);
 
         return response()->json([
@@ -121,8 +132,12 @@ class AulaController extends Controller
         }
 
         $detalles = [
-            'aula_id' => $aula->id,
-            'nombre'  => $aula->nombre,
+            'target_type' => 'aula',
+            'target_id'   => $aula->id,
+            'nombre'      => $aula->nombre,
+            'ubicacion'   => $aula->ubicacion,
+            'capacidad'   => $aula->capacidad,
+            'estado'      => $aula->estado,
         ];
 
         $aula->delete();
@@ -141,21 +156,21 @@ class AulaController extends Controller
     {
         $user = $request->user();
 
-        $rol = match (get_class($user)) {
+        $rol = match ($user ? get_class($user) : null) {
             Admin::class    => 'admin',
             Docente::class  => 'docente',
             Auxiliar::class => 'auxiliar',
             default         => 'desconocido',
         };
 
-        $nombreCompleto = trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}");
+        $nombreCompleto = $user ? trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}") : 'Sistema';
 
         LogAuditoria::create([
-            'user_type'         => get_class($user),
-            'user_id'           => $user->id,
+            'user_type'         => $user ? get_class($user) : null,
+            'user_id'           => $user?->id,
             'rol_en_el_momento' => $rol,
-            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : $user->nombre,
-            'usuario_email'     => $user->email ?? null,
+            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : ($user?->nombre ?? 'Sistema'),
+            'usuario_email'     => $user?->email ?? null,
             'modulo'            => 'AULAS',
             'accion'            => $accion,
             'ip_origen'         => $request->ip() ?? '127.0.0.1',

@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import {
   AlertCircle,
-  ArrowLeft,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -10,37 +8,42 @@ import {
   LoaderCircle,
   RefreshCw,
   Search,
-  UserPlus,
   Users,
 } from 'lucide-react'
 
-import { EstudianteFormModal } from '../components/estudiantes/EstudianteFormModal'
-import { AsociarEstudiantesModal } from '../components/estudiantes/AsociarEstudiantesModal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+
+import { EstudianteFormModal } from '@/components/estudiantes/EstudianteFormModal'
 import {
   estudiantesService,
   type Estudiante,
   type InscripcionPayload,
-} from '../services/estudiantes.service'
-import { examenesService, type Examen } from '../services/examenes.service'
+} from '@/services/estudiantes.service'
 
 const PER_PAGE = 10
 
-const fullName = (student: Estudiante) =>
-  [student.nombre, student.apellido_paterno, student.apellido_materno]
+const formatNombreCompleto = (st: Estudiante) =>
+  [st.apellido_paterno, st.apellido_materno, st.nombre]
     .filter(Boolean)
     .join(' ')
 
 export default function EstudiantesPage() {
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const examId = searchParams.get('examen')
   const role = (localStorage.getItem('user_role') ?? '').toLowerCase()
   const canManage = ['admin', 'administrador', 'docente'].includes(role)
 
   const [students, setStudents] = useState<Estudiante[]>([])
-  const [exam, setExam] = useState<Examen | null>(null)
   const [searchInput, setSearchInput] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [page, setPage] = useState(1)
@@ -49,84 +52,37 @@ export default function EstudiantesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [modalOpen, setModalOpen] = useState(false)
-  const [associateModalOpen, setAssociateModalOpen] = useState(false)
- const [editingStudent, setEditingStudent] = useState<Estudiante | null>(null)
+  const [editingStudent, setEditingStudent] = useState<Estudiante | null>(null)
+
   const loadStudents = useCallback(async () => {
     setLoading(true)
     setError('')
 
     try {
-      if (examId) {
-        const [studentResponse, examResponse] = await Promise.all([
-          estudiantesService.listByExam(examId),
-          examenesService.get(examId),
-        ])
+      const response = await estudiantesService.list({
+        search: searchTerm,
+        page,
+        perPage: PER_PAGE,
+      })
 
-        // Normalizamos los estudiantes del examen a la interfaz Estudiante
-        const mappedStudents: Estudiante[] = (studentResponse.estudiantes || []).map((st) => ({
-          id: st.id,
-          codigo_sis: st.codigo_sis,
-          ci: st.ci,
-          ci_extension: st.ci_extension,
-          nombre: st.nombre_completo,
-          apellido_paterno: '',
-          apellido_materno: null,
-          email_institucional: st.email_institucional,
-          activo: true,
-          pivot: {
-            estado: st.estado,
-            motivo_estado: st.motivo_estado,
-            ajuste_manual: st.ajuste_manual,
-            fecha_ajuste_manual: st.fecha_ajuste_manual,
-          },
-        }))
-
-        setStudents(mappedStudents)
-        setTotal(mappedStudents.length)
-        setLastPage(1)
-        setExam(examResponse)
-      } else {
-        const response = await estudiantesService.list({
-          search: searchTerm,
-          page,
-          perPage: PER_PAGE,
-        })
-        setStudents(response.data)
-        setTotal(response.total)
-        setLastPage(Math.max(response.last_page, 1))
-        setExam(null)
-      }
+      setStudents(response.data)
+      setTotal(response.total)
+      setLastPage(Math.max(response.last_page, 1))
     } catch (loadError) {
       setError(
         loadError instanceof Error
           ? loadError.message
-          : 'No se pudo consultar el listado de estudiantes.',
+          : 'No se pudo consultar el listado de estudiantes.'
       )
     } finally {
       setLoading(false)
     }
-  }, [examId, page, searchTerm])
+  }, [page, searchTerm])
 
   useEffect(() => {
     const requestId = window.setTimeout(() => void loadStudents(), 0)
     return () => window.clearTimeout(requestId)
   }, [loadStudents])
-
-  const visibleStudents = useMemo(() => {
-    if (!examId || !searchTerm) return students
-    const search = searchTerm.toLocaleLowerCase()
-    return students.filter((student) =>
-      [fullName(student), student.codigo_sis, student.ci]
-        .join(' ')
-        .toLocaleLowerCase()
-        .includes(search),
-    )
-  }, [examId, searchTerm, students])
-
-  const enabledCount = visibleStudents.filter(
-    (student) => student.pivot?.estado !== 'Inhabilitado' && student.activo,
-  ).length
 
   const applySearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -137,119 +93,81 @@ export default function EstudiantesPage() {
   const openEdit = (student: Estudiante) => {
     setEditingStudent(student)
     setSuccess('')
-    setModalOpen(true)
+    setError('')
   }
 
-  const ensureNoRealDuplicate = async (payload: InscripcionPayload) => {
-    const sisResponse = await estudiantesService.list({
-      search: payload.codigo_sis,
-      perPage: 100,
-    })
-    const duplicateSis = sisResponse.data.find(
-      (student) =>
-        student.codigo_sis.toLocaleLowerCase() === payload.codigo_sis.toLocaleLowerCase() &&
-        student.id !== editingStudent?.id &&
-        (student.ci.toLocaleUpperCase() !== payload.ci.toLocaleUpperCase() ||
-          (student.ci_extension ?? '').toLocaleUpperCase() !==
-            (payload.ci_extension ?? '').toLocaleUpperCase() ||
-          student.email_institucional.toLocaleLowerCase() !==
-            payload.email_institucional.toLocaleLowerCase()),
-    )
-    if (duplicateSis) {
-      throw new Error('El código SIS ya está registrado con otros datos de identidad.')
-    }
+  const handleUpdateStudent = async (payload: InscripcionPayload) => {
+    if (!editingStudent) return
 
-    const ciResponse = await estudiantesService.list({ search: payload.ci, perPage: 100 })
-    const duplicateCi = ciResponse.data.find(
-      (student) =>
-        student.ci.toLocaleUpperCase() === payload.ci.toLocaleUpperCase() &&
-        (student.ci_extension ?? '').toLocaleUpperCase() ===
-          (payload.ci_extension ?? '').toLocaleUpperCase() &&
-        student.id !== editingStudent?.id &&
-        student.codigo_sis.toLocaleLowerCase() !== payload.codigo_sis.toLocaleLowerCase(),
-    )
-    if (duplicateCi) {
-      throw new Error('El documento de identidad ya se encuentra registrado con otro código SIS.')
+    try {
+      // Si tu backend tiene endpoint de actualización directa:
+      await estudiantesService.update(editingStudent.id, {
+        nombre: payload.nombre,
+        apellido_paterno: payload.apellido_paterno,
+        apellido_materno: payload.apellido_materno,
+        codigo_sis: payload.codigo_sis,
+        email_institucional: payload.email_institucional,
+        activo: payload.activo,
+      })
+
+      setSuccess('Estudiante actualizado en el padrón correctamente.')
+      setEditingStudent(null)
+      await loadStudents()
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'No se pudo actualizar los datos del estudiante.'
+      )
     }
   }
 
-  const saveStudent = async (payload: InscripcionPayload) => {
-    await ensureNoRealDuplicate(payload)
-
-    if (!examId || !exam) {
-      throw new Error('Selecciona un examen antes de inscribir estudiantes.')
-    }
-    const response = await estudiantesService.enroll(examId, payload)
-    setSuccess(response.message || 'Estudiante vinculado al examen correctamente.')
-    await loadStudents()
-  }
+  const activeCount = students.filter((s) => s.activo).length
 
   return (
     <div className="space-y-6">
       {/* Encabezado */}
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          {examId && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate('/examenes')}
-              className="mb-2 p-0 h-auto font-semibold text-sci-blue hover:text-sci-navy cursor-pointer gap-1"
-            >
-              <ArrowLeft className="h-4 w-4" /> Volver a exámenes
-            </Button>
-          )}
-          <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-sci-cyan">
-            Padrón Académico
-          </span>
-          <h1 className="mt-1 text-2xl sm:text-3xl font-extrabold text-sci-navy tracking-tight">
-            {examId ? 'Estudiantes del examen' : 'Padrón de estudiantes'}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {exam
-              ? `${exam.nombre} · ${exam.materia?.nombre ?? 'Asignatura'} · ${exam.aula?.nombre ?? 'Aula asignada'}`
-              : 'Consulta el padrón estudiantil oficial de la facultad.'}
-          </p>
-        </div>
-
-        {canManage && examId && exam && (
-          <Button
-            type="button"
-            onClick={() => setAssociateModalOpen(true)}
-            className="bg-sci-blue hover:opacity-90 text-white font-semibold cursor-pointer shadow-xs gap-2"
-          >
-            <UserPlus className="h-4 w-4" />
-            Agregar Estudiantes
-          </Button>
-        )}
+      <header className="flex flex-col gap-1">
+        <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-sci-cyan">
+          Padrón Académico
+        </span>
+        <h1 className="text-2xl font-extrabold tracking-tight text-sci-navy sm:text-3xl">
+          Padrón general de estudiantes
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Consulta y gestión de los registros oficiales de estudiantes en la facultad.
+        </p>
       </header>
 
-      {/* Resumen numérico */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <article className="rounded-2xl border border-border bg-card p-5 shadow-xs">
-          <div className="flex items-center gap-3">
+      {/* Tarjetas de Resumen */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card className="rounded-2xl border-border bg-card shadow-xs">
+          <CardContent className="flex items-center gap-3 p-5">
             <span className="grid h-11 w-11 place-items-center rounded-xl bg-sci-navy/10 text-sci-navy">
               <Users className="h-5 w-5" />
             </span>
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Total registrados</p>
+              <p className="text-xs font-medium text-muted-foreground">
+                Total en padrón
+              </p>
               <p className="text-2xl font-extrabold text-sci-navy">{total}</p>
             </div>
-          </div>
-        </article>
+          </CardContent>
+        </Card>
 
-        <article className="rounded-2xl border border-border bg-card p-5 shadow-xs sm:col-span-2">
-          <div className="flex items-center gap-3">
+        <Card className="rounded-2xl border-border bg-card shadow-xs">
+          <CardContent className="flex items-center gap-3 p-5">
             <span className="grid h-11 w-11 place-items-center rounded-xl bg-sci-cyan/15 text-sci-cyan">
               <CheckCircle2 className="h-5 w-5" />
             </span>
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Habilitados en esta vista</p>
-              <p className="text-2xl font-extrabold text-sci-navy">{enabledCount}</p>
+              <p className="text-xs font-medium text-muted-foreground">
+                Activos en página actual
+              </p>
+              <p className="text-2xl font-extrabold text-sci-navy">{activeCount}</p>
             </div>
-          </div>
-        </article>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Buscador */}
@@ -262,41 +180,45 @@ export default function EstudiantesPage() {
           <Input
             type="search"
             value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
-            placeholder="Buscar por nombre, apellido, CI o código SIS..."
-            className="h-10 pl-9 bg-background"
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Buscar por apellido, nombre, CI o código SIS..."
+            className="h-10 bg-background pl-9 text-xs"
           />
         </div>
-        <Button type="submit" variant="outline" className="h-10 cursor-pointer gap-2">
+        <Button type="submit" variant="outline" className="h-10 cursor-pointer gap-2 text-xs">
           <Search className="h-4 w-4" /> Buscar
         </Button>
       </form>
 
+      {/* Alertas */}
       {success && (
-        <div className="rounded-xl border border-sci-cyan/30 bg-sci-cyan/10 px-4 py-3 text-xs text-sci-navy font-semibold" role="status">
-          {success}
-        </div>
+        <Alert className="border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy">
+          <CheckCircle2 className="h-4 w-4 text-sci-cyan" />
+          <AlertDescription className="ml-2 text-xs font-semibold">
+            {success}
+          </AlertDescription>
+        </Alert>
       )}
 
       {error && (
-        <div className="flex flex-col gap-3 rounded-2xl border border-sci-red/20 bg-sci-red/10 p-4 text-xs text-sci-red sm:flex-row sm:items-center sm:justify-between" role="alert">
-          <span className="flex items-center gap-2 font-medium">
+        <Alert className="flex items-center justify-between border-sci-red/20 bg-sci-red/10 text-sci-red">
+          <div className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4 shrink-0" />
-            {error}
-          </span>
+            <AlertDescription className="text-xs font-semibold">{error}</AlertDescription>
+          </div>
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={() => void loadStudents()}
-            className="cursor-pointer gap-1 text-xs"
+            className="gap-1 text-xs"
           >
             <RefreshCw className="h-3.5 w-3.5" /> Reintentar
           </Button>
-        </div>
+        </Alert>
       )}
 
-      {/* Tabla y Tarjetas de Estudiantes */}
+      {/* Listado con Shadcn UI */}
       {loading ? (
         <div className="grid min-h-72 place-items-center rounded-2xl border border-border bg-card text-muted-foreground">
           <div className="text-center">
@@ -306,139 +228,147 @@ export default function EstudiantesPage() {
         </div>
       ) : (
         <>
-          {/* Vista Tabla Desktop */}
-          <section className="hidden overflow-hidden rounded-2xl border border-border bg-card shadow-xs md:block">
-            <table className="w-full table-fixed text-left text-xs">
-              <thead className="border-b border-border bg-muted/50 text-muted-foreground font-semibold">
-                <tr>
-                  <th className="w-[30%] px-5 py-4">Estudiante</th>
-                  <th className="w-[16%] px-5 py-4">Código SIS</th>
-                  <th className="w-[16%] px-5 py-4">CI</th>
-                  <th className="w-[24%] px-5 py-4">Correo institucional</th>
-                  <th className="px-5 py-4 text-right">Estado / Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {visibleStudents.map((student) => (
-                  <tr key={student.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-5 py-4 font-bold text-sci-navy truncate">
-                      {fullName(student)}
-                    </td>
-                    <td className="px-5 py-4 text-muted-foreground">{student.codigo_sis}</td>
-                    <td className="px-5 py-4 text-muted-foreground">
-                      {student.ci}
-                      {student.ci_extension ? ` ${student.ci_extension}` : ''}
-                    </td>
-                    <td className="break-all px-5 py-4 text-muted-foreground">
+          {/* Tabla de Escritorio */}
+          <div className="hidden overflow-hidden rounded-2xl border border-border bg-card shadow-xs md:block">
+            <Table className="text-xs">
+              <TableHeader className="bg-muted/50 font-semibold text-muted-foreground">
+                <TableRow className="border-b border-border hover:bg-transparent">
+                  <TableHead className="w-[30%] px-5 py-4">Estudiante</TableHead>
+                  <TableHead className="w-[16%] px-5 py-4">Código SIS</TableHead>
+                  <TableHead className="w-[16%] px-5 py-4">C.I.</TableHead>
+                  <TableHead className="w-[24%] px-5 py-4">Correo institucional</TableHead>
+                  <TableHead className="px-5 py-4 text-right">Estado / Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+
+              <TableBody className="divide-y divide-border">
+                {students.map((student) => (
+                  <TableRow key={student.id} className="hover:bg-muted/30">
+                    <TableCell className="px-5 py-4 font-bold text-sci-navy">
+                      {formatNombreCompleto(student)}
+                    </TableCell>
+
+                    <TableCell className="px-5 py-4 text-muted-foreground">
+                      {student.codigo_sis}
+                    </TableCell>
+
+                    <TableCell className="px-5 py-4 text-muted-foreground">
+                      {student.ci ? `${student.ci} ${student.ci_extension ?? ''}` : '—'}
+                    </TableCell>
+
+                    <TableCell className="break-all px-5 py-4 text-muted-foreground">
                       {student.email_institucional}
-                    </td>
-                    <td className="px-5 py-4 text-right">
-                      {examId && canManage ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openEdit(student)}
-                          className="cursor-pointer gap-1 text-xs"
-                          aria-label={`Editar ${fullName(student)}`}
-                        >
-                          <Edit3 className="h-3.5 w-3.5" /> Editar
-                        </Button>
-                      ) : (
-                        <span
-                          className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold border ${
+                    </TableCell>
+
+                    <TableCell className="px-5 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Badge
+                          variant={student.activo ? 'secondary' : 'destructive'}
+                          className={`text-[11px] font-semibold ${
                             student.activo
-                              ? 'border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy'
-                              : 'border-sci-red/30 bg-sci-red/10 text-sci-red'
+                              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700'
+                              : 'border-red-500/30 bg-red-500/10 text-red-600'
                           }`}
                         >
-                          {student.pivot?.estado ?? (student.activo ? 'Activo' : 'Inactivo')}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
+                          {student.activo ? 'Activo' : 'Inactivo'}
+                        </Badge>
+
+                        {canManage && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openEdit(student)}
+                            className="h-8 cursor-pointer gap-1 text-xs"
+                          >
+                            <Edit3 className="h-3.5 w-3.5" /> Editar
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 ))}
-                {visibleStudents.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-5 py-12 text-center text-muted-foreground">
+
+                {students.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-12 text-center text-muted-foreground">
                       No se encontraron estudiantes registrados.
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )}
-              </tbody>
-            </table>
-          </section>
+              </TableBody>
+            </Table>
+          </div>
 
-          {/* Vista Tarjetas Móvil */}
-          <section className="space-y-3 md:hidden">
-            {visibleStudents.map((student) => (
-              <article
-                key={student.id}
-                className="rounded-2xl border border-border bg-card p-4 shadow-xs"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <h2 className="min-w-0 break-words font-bold text-sm text-sci-navy">
-                    {fullName(student)}
-                  </h2>
-                  <span
-                    className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold border ${
-                      student.activo
-                        ? 'border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy'
-                        : 'border-sci-red/30 bg-sci-red/10 text-sci-red'
-                    }`}
-                  >
-                    {student.pivot?.estado ?? (student.activo ? 'Activo' : 'Inactivo')}
-                  </span>
-                </div>
+          {/* Tarjetas Móviles */}
+          <div className="space-y-3 md:hidden">
+            {students.map((student) => (
+              <Card key={student.id} className="rounded-2xl border-border bg-card shadow-xs">
+                <CardContent className="p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <h2 className="text-sm font-bold text-sci-navy">
+                      {formatNombreCompleto(student)}
+                    </h2>
+                    <Badge
+                      variant={student.activo ? 'secondary' : 'destructive'}
+                      className={`text-[11px] font-semibold ${
+                        student.activo
+                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700'
+                          : 'border-red-500/30 bg-red-500/10 text-red-600'
+                      }`}
+                    >
+                      {student.activo ? 'Activo' : 'Inactivo'}
+                    </Badge>
+                  </div>
 
-                <dl className="mt-3 space-y-1.5 text-xs">
-                  <div className="flex justify-between gap-2">
-                    <dt className="text-muted-foreground">Código SIS:</dt>
-                    <dd className="font-medium text-foreground">{student.codigo_sis}</dd>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <dt className="text-muted-foreground">CI:</dt>
-                    <dd className="font-medium text-foreground">
-                      {student.ci}
-                      {student.ci_extension ? ` ${student.ci_extension}` : ''}
-                    </dd>
-                  </div>
-                  <div className="flex flex-col gap-0.5 pt-1">
-                    <dt className="text-muted-foreground">Correo:</dt>
-                    <dd className="break-all font-medium text-foreground">
-                      {student.email_institucional}
-                    </dd>
-                  </div>
-                </dl>
+                  <dl className="mt-3 space-y-1.5 text-xs border-t border-border pt-3">
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-muted-foreground">Código SIS:</dt>
+                      <dd className="font-medium text-foreground">{student.codigo_sis}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-muted-foreground">CI:</dt>
+                      <dd className="font-medium text-foreground">
+                        {student.ci ? `${student.ci} ${student.ci_extension ?? ''}` : '—'}
+                      </dd>
+                    </div>
+                    <div className="flex flex-col gap-0.5 pt-1">
+                      <dt className="text-muted-foreground">Correo:</dt>
+                      <dd className="break-all font-medium text-foreground">
+                        {student.email_institucional}
+                      </dd>
+                    </div>
+                  </dl>
 
-                {examId && canManage && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openEdit(student)}
-                    className="mt-3 w-full cursor-pointer gap-1.5 text-xs"
-                  >
-                    <Edit3 className="h-3.5 w-3.5" /> Editar datos
-                  </Button>
-                )}
-              </article>
+                  {canManage && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openEdit(student)}
+                      className="mt-3 w-full cursor-pointer gap-1.5 text-xs"
+                    >
+                      <Edit3 className="h-3.5 w-3.5" /> Editar datos
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
             ))}
 
-            {visibleStudents.length === 0 && (
+            {students.length === 0 && (
               <div className="rounded-2xl border border-dashed border-border bg-card p-8 text-center text-xs text-muted-foreground">
                 No se encontraron estudiantes.
               </div>
             )}
-          </section>
+          </div>
         </>
       )}
 
-      {/* Paginación */}
+      {/* Paginador con Shadcn */}
       {!loading && total > 0 && (
-        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between shadow-xs">
+        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 text-xs text-muted-foreground shadow-xs sm:flex-row sm:items-center sm:justify-between">
           <span>
-            Página {page} de {lastPage} · {total} estudiantes
+            Página {page} de {lastPage} · {total} estudiantes registrados
           </span>
           <div className="flex items-center gap-2">
             <Button
@@ -465,41 +395,16 @@ export default function EstudiantesPage() {
         </div>
       )}
 
-      {modalOpen && examId && exam && (
-       <EstudianteFormModal
-  key={editingStudent?.id ?? 'new'}
-  estudiante={editingStudent}
-  examMode={Boolean(examId)}
-  onClose={() => setModalOpen(false)}
-  onSubmit={saveStudent}
- onBulkUpload={async (archivo) => {
-  if (!examId) return
-
-  const response = await estudiantesService.cargaMasiva(examId, archivo)
-
-  setSuccess(
-    response.message ||
-      `Carga masiva completada. Se registraron ${response.total_insertados} estudiantes.`,
-  )
-
-  setModalOpen(false)
-  setPage(1)
-  await loadStudents()
-}}
-/>
+      {/* Reutilización del Modal para Editar */}
+      {editingStudent && (
+        <EstudianteFormModal
+          key={editingStudent.id}
+          estudiante={editingStudent}
+          examMode={false}
+          onClose={() => setEditingStudent(null)}
+          onSubmit={handleUpdateStudent}
+        />
       )}
-      {associateModalOpen && examId && exam && (
-  <AsociarEstudiantesModal
-    examId={examId}
-    examName={exam.nombre}
-    onClose={() => setAssociateModalOpen(false)}
-    onSuccess={() => {
-      setAssociateModalOpen(false)
-      setPage(1)
-      void loadStudents()
-    }}
-  />
-)}
     </div>
   )
 }

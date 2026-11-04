@@ -5,9 +5,11 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  Download,
   LoaderCircle,
   Plus,
   RefreshCw,
+  Smartphone,
 } from 'lucide-react'
 
 import {
@@ -114,15 +116,37 @@ export default function ExamenesPage() {
           </p>
         </div>
 
-        {canManage && (
+        {/* Acciones superiores: Descarga de APK y Programación de Examen */}
+        <div className="flex flex-wrap items-center gap-2.5">
+         
           <Button
-            type="button"
-            onClick={() => navigate('/programar-examen')}
-            className="cursor-pointer gap-2 bg-sci-blue font-semibold text-white shadow-xs hover:opacity-90"
+            asChild
+            variant="outline"
+            className="cursor-pointer gap-2 border-sci-cyan/40 bg-sci-cyan/5 font-semibold text-sci-navy shadow-xs hover:bg-sci-cyan/15 hover:text-sci-blue"
           >
-            <Plus className="h-4 w-4" /> Programar examen
+            <a
+              href="/apk/sci-control-ingreso.apk" /* <-- RUTA LOCAL DENTRO DE public/apk */
+              download="SCI_Control_Ingreso.apk" 
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Descargar instalador APK para control de ingreso"
+            >
+              <Smartphone className="h-4 w-4 text-sci-cyan" aria-hidden="true" />
+              <span>Descargar APK</span>
+              <Download className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+            </a>
           </Button>
-        )}
+
+          {canManage && (
+            <Button
+              type="button"
+              onClick={() => navigate('/programar-examen')}
+              className="cursor-pointer gap-2 bg-sci-blue font-semibold text-white shadow-xs hover:opacity-90"
+            >
+              <Plus className="h-4 w-4" /> Programar examen
+            </Button>
+          )}
+        </div>
       </header>
 
       {/* Resumen numérico */}

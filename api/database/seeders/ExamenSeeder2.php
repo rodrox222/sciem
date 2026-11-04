@@ -14,30 +14,25 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
-
-// toma los 4 estudiantes del seeder estudiantes y pone al segundo parcial
-// toma 2 estudiantes 202104512 / 202209123 y pone 20202020 como inhabilitado, y el 202301641 no esta en el sistema
-// los 3 auxiliares se van a primer parcial y seegundo parcial
 class ExamenSeeder2 extends Seeder
 {
     use DistribuyeAuxiliares;
 
     public function run(): void
     {
-        $materia = Materia::firstOrCreate(
-            ['nombre' => 'Introduccion a la programacion'],
-            ['id' => (string) Str::uuid()]
-        );
+        // Obtener la materia creada por MateriaSeeder
+        $materia = Materia::where('nombre', 'Introducción a la Programación')
+            ->orWhere('nombre', 'ilike', 'Introduccion a la programacion')
+            ->firstOrFail();
 
-        $aula = Aula::firstOrCreate(
-            ['nombre' => 'Aula 691B'],
-            [
-                'id'        => (string) Str::uuid(),
-                'ubicacion' => 'Edificio Nuevo FCyT - Planta Baja',
-                'estado'    => 'Disponible',
-                'capacidad' => 50,
-            ]
-        );
+        // Obtener las aulas creadas por AulaSeeder
+        $aula691 = Aula::where('nombre', 'Aula 691B')
+            ->orWhere('nombre', 'Aula 691-B')
+            ->firstOrFail();
+
+        $aula692 = Aula::where('nombre', 'Aula 692B')
+            ->orWhere('nombre', 'Aula 692-B')
+            ->firstOrFail();
 
         $docente = Docente::firstOrCreate(
             ['email' => 'docente@fcyt.umss.edu.bo'],
@@ -116,14 +111,14 @@ class ExamenSeeder2 extends Seeder
 
         $ahora = Carbon::now('America/La_Paz');
 
-        // Examen Activo
+        // Examen Activo -> Aula 691B
         $examenActivo = Examen::firstOrNew(['nombre' => 'Segundo Parcial - Activo']);
         if (!$examenActivo->exists) {
             $examenActivo->id = (string) Str::uuid();
         }
         $examenActivo->fill([
             'id_materia' => $materia->id,
-            'id_aula'    => $aula->id,
+            'id_aula'    => $aula691->id,
             'id_docente' => $docente->id,
             'estado'     => 'Programado',
             'fecha'      => $ahora->format('Y-m-d'),
@@ -132,14 +127,14 @@ class ExamenSeeder2 extends Seeder
         ]);
         $examenActivo->save();
 
-        // Examen por concluir
+        // Examen por concluir -> Aula 692B (evita colisión de aula)
         $examenExpirado = Examen::firstOrNew(['nombre' => 'Primer Parcial - por concluir']);
         if (!$examenExpirado->exists) {
             $examenExpirado->id = (string) Str::uuid();
         }
         $examenExpirado->fill([
             'id_materia' => $materia->id,
-            'id_aula'    => $aula->id,
+            'id_aula'    => $aula692->id,
             'id_docente' => $docente->id,
             'estado'     => 'Programado',
             'fecha'      => $ahora->format('Y-m-d'),
@@ -180,7 +175,6 @@ class ExamenSeeder2 extends Seeder
                 ];
             }
             $examenActivo->estudiantes()->sync($syncTodos);
-            // Repartir automáticamente entre los auxiliares (50/50 o en tercios)
             $this->redistribuirEstudiantesExamen($examenActivo->id);
         }
 

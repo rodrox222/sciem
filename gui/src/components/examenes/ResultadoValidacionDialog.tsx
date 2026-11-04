@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   AlertTriangle,
   BookOpen,
@@ -32,9 +33,14 @@ export type CodigoRechazoValidacion =
   | 'YA_INGRESO'
   | 'ERROR_VALIDACION'
 
-interface EstudianteValidado {
+export interface EstudianteValidado {
+  id?: string
   nombreCompleto?: string
   codigoSis?: string
+  ci?: string
+  ciExtension?: string
+  fotoPerfilUrl?: string | null
+  foto_url?: string | null // Compatible con la respuesta directa del backend
 }
 
 export type ResultadoValidacionAcceso =
@@ -82,6 +88,23 @@ const formatDate = (date: string) => {
     year: 'numeric',
     timeZone: 'UTC',
   }).format(new Date(`${normalized}T00:00:00Z`))
+}
+
+// Función universal para construir la URL absoluta de la fotografía
+function formatearUrlFoto(foto?: string | null): string | null {
+  if (!foto) return null
+
+  // Si ya es una URL completa (http/https), se devuelve tal cual
+  if (foto.startsWith('http://') || foto.startsWith('https://')) {
+    return foto
+  }
+
+  // Si es relativa (/storage/...), le anteponemos el origen del backend
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+  const backendOrigin = apiUrl.replace(/\/api\/?$/, '')
+  const rutaLimpia = foto.startsWith('/') ? foto : `/${foto}`
+
+  return `${backendOrigin}${rutaLimpia}`
 }
 
 const getRejectionCopy = (
@@ -181,6 +204,8 @@ export function ResultadoValidacionDialog({
   examen,
   onClose,
 }: ResultadoValidacionDialogProps) {
+  const [imgError, setImgError] = useState(false)
+
   if (!resultado) return null
 
   const isAuthorized = resultado.estado === 'autorizado'
@@ -190,6 +215,10 @@ export function ResultadoValidacionDialog({
   const student = resultado.estado === 'pendiente' ? undefined : resultado.estudiante
   const visibleNorms = examen.normas?.slice(0, 3) ?? []
   const hiddenNormCount = Math.max((examen.normas?.length ?? 0) - visibleNorms.length, 0)
+
+  // Obtener la URL compatible de fotoPerfilUrl o foto_url
+  const rawFoto = student?.fotoPerfilUrl || (student as any)?.foto_url
+  const urlFotoEstudiante = formatearUrlFoto(rawFoto)
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
@@ -302,25 +331,46 @@ export function ResultadoValidacionDialog({
             </section>
           )}
 
-          {student && (student.nombreCompleto || student.codigoSis) && (
+          {/* Tarjeta del estudiante con Foto y Carnet de Identidad */}
+          {student && (student.nombreCompleto || student.codigoSis || student.ci) && (
             <section
-              className={`flex items-center gap-3 rounded-xl border border-border bg-muted/30 ${
-                isDuplicate ? 'p-2.5' : 'p-3'
+              className={`flex items-center gap-4 rounded-2xl border border-border bg-muted/30 ${
+                isDuplicate ? 'p-3' : 'p-4'
               }`}
             >
-              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-sci-cyan/10">
-                <UserRound className="h-5 w-5 text-sci-cyan" aria-hidden="true" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Estudiante
+              {urlFotoEstudiante && !imgError ? (
+                <img
+                  src={urlFotoEstudiante}
+                  alt={student.nombreCompleto || 'Fotografía del estudiante'}
+                  onError={() => setImgError(true)}
+                  className="h-16 w-16 shrink-0 rounded-2xl border-2 border-border object-cover shadow-xs"
+                />
+              ) : (
+                <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl border border-border bg-sci-cyan/10">
+                  <UserRound className="h-8 w-8 text-sci-cyan" aria-hidden="true" />
+                </div>
+              )}
+
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-sci-cyan">
+                  Identidad del estudiante
                 </p>
                 {student.nombreCompleto && (
-                  <p className="truncate text-sm font-bold text-sci-navy">{student.nombreCompleto}</p>
+                  <p className="truncate text-base font-extrabold text-sci-navy">
+                    {student.nombreCompleto}
+                  </p>
                 )}
-                {student.codigoSis && (
-                  <p className="text-xs text-muted-foreground">Código SIS: {student.codigoSis}</p>
-                )}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-xs text-muted-foreground">
+                  {student.ci && (
+                    <span className="font-semibold text-foreground">
+                      CI: {student.ci}
+                      {student.ciExtension ? ` ${student.ciExtension}` : ''}
+                    </span>
+                  )}
+                  {student.codigoSis && (
+                    <span>SIS: {student.codigoSis}</span>
+                  )}
+                </div>
               </div>
             </section>
           )}
@@ -419,7 +469,7 @@ export function ResultadoValidacionDialog({
         >
           <Button
             type="button"
-            className="w-full bg-sci-blue font-bold text-white hover:opacity-90"
+            className="w-full bg-sci-blue font-bold text-white hover:opacity-90 cursor-pointer"
             onClick={onClose}
           >
             Continuar escaneando

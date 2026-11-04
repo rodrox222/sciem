@@ -24,7 +24,7 @@ class CargaMasivaEstudianteController extends Controller
     {   
         set_time_limit(300);
         ini_set('memory_limit', '512M');
-        // Validar existencia del examen
+
         $examen = Examen::find($idExamen);
         if (!$examen) {
             return response()->json([
@@ -33,7 +33,6 @@ class CargaMasivaEstudianteController extends Controller
             ], 404);
         }
 
-        // Control de pertenencia del docente
         $user = $request->user();
         if ($user instanceof Docente && $examen->id_docente !== $user->id) {
             return response()->json([
@@ -42,7 +41,6 @@ class CargaMasivaEstudianteController extends Controller
             ], 403);
         }
 
-        // Cargar el archivo con PhpSpreadsheet
         $archivo = $request->file('archivo');
         try {
             $spreadsheet = IOFactory::load($archivo->getRealPath());
@@ -54,7 +52,6 @@ class CargaMasivaEstudianteController extends Controller
             ], 422);
         }
 
-        // Pre-cargar identificadores existentes en BD
         $estudiantesBdPorSis = Estudiante::pluck('id', 'codigo_sis')->toArray();
         $inscritosEnEsteExamen = DB::table('estudiante_examen')
             ->where('id_examen', $idExamen)
@@ -62,7 +59,6 @@ class CargaMasivaEstudianteController extends Controller
             ->flip()
             ->toArray();
 
-        // Obtener prerrequisitos que ya tenga asignados el examen
         $prerrequisitosExamen = DB::table('prerrequisitos_examen')
             ->where('id_examen', $idExamen)
             ->pluck('id')
@@ -72,11 +68,9 @@ class CargaMasivaEstudianteController extends Controller
         $sisProcesados = [];
         $totalOmitidosPorDuplicado = 0;
 
-        // Procesar hojas del archivo
         foreach ($spreadsheet->getAllSheets() as $hoja) {
             $maxFila = $hoja->getHighestRow();
 
-            // Buscar celda '#' en las primeras 30 filas
             $filaCabecera = null;
             $colNumero = null;
             $limiteBusqueda = min(30, $maxFila);
@@ -109,7 +103,6 @@ class CargaMasivaEstudianteController extends Controller
                 $rawNombres   = trim((string) $hoja->getCell("{$colNombres}{$fila}")->getValue());
                 $rawEmail     = trim((string) $hoja->getCell("{$colEmail}{$fila}")->getValue());
 
-                // Detectar fila vacía
                 if ($rawSis === '' && $rawApellidos === '' && $rawNombres === '') {
                     $filasVaciasConsecutivas++;
                     if ($filasVaciasConsecutivas >= 3) {
@@ -120,18 +113,15 @@ class CargaMasivaEstudianteController extends Controller
 
                 $filasVaciasConsecutivas = 0;
 
-                // Omitir filas sin formato SIS numérico válido
                 if (!preg_match('/^[0-9]{6,12}$/', $rawSis)) {
                     continue;
                 }
 
-                // Se ignora y se pasa al siguiente (sin rollback) si ve duplicado
                 if (isset($sisProcesados[$rawSis])) {
                     $totalOmitidosPorDuplicado++;
                     continue;
                 }
 
-                // Se ignora y se pasa al siguiente (sin rollback) si ve duplicado
                 if (isset($estudiantesBdPorSis[$rawSis])) {
                     $idExistente = $estudiantesBdPorSis[$rawSis];
                     if (isset($inscritosEnEsteExamen[$idExistente])) {
@@ -140,7 +130,6 @@ class CargaMasivaEstudianteController extends Controller
                     }
                 }
 
-                // Separar apellidos
                 $partesApellidos = preg_split('/\s+/', $rawApellidos);
                 $apellidoPaterno = $partesApellidos[0] ?? '';
                 $apellidoMaterno = count($partesApellidos) > 1 ? implode(' ', array_slice($partesApellidos, 1)) : null;
@@ -158,7 +147,6 @@ class CargaMasivaEstudianteController extends Controller
             }
         }
 
-        // Si el archivo no tenía alumnos nuevos procesables
         if (count($filasValidadas) === 0) {
             return response()->json([
                 'message'    => 'No se encontraron nuevos registros para inscribir. Es posible que todos los alumnos del archivo ya estuvieran registrados o duplicados.',
@@ -167,7 +155,6 @@ class CargaMasivaEstudianteController extends Controller
             ], 422);
         }
 
-        // FASE DE INSERCIÓN TRANSACCIONAL
         DB::beginTransaction();
 
         try {
@@ -176,7 +163,6 @@ class CargaMasivaEstudianteController extends Controller
             $lotePrerrequisitos = [];
 
             foreach ($filasValidadas as $datos) {
-                // Si existe en tabla estudiantes, actualiza datos
                 if (isset($estudiantesBdPorSis[$datos['codigo_sis']])) {
                     $idEstudiante = $estudiantesBdPorSis[$datos['codigo_sis']];
 
@@ -188,11 +174,9 @@ class CargaMasivaEstudianteController extends Controller
                         'updated_at'          => now(),
                     ]);
                 } else {
-                    // Si no existe en estudiantes, se prepara para crearlo
                     $idEstudiante = (string) Str::uuid();
                     $estudiantesBdPorSis[$datos['codigo_sis']] = $idEstudiante;
 
-                    // Generar contraseña por defecto con cod sis + iniciales mayúsculas
                     $passwordPlano = Estudiante::generarPasswordPorDefecto(
                         $datos['codigo_sis'],
                         $datos['nombre'],
@@ -210,32 +194,30 @@ class CargaMasivaEstudianteController extends Controller
                         'apellido_materno'         => $datos['apellido_materno'],
                         'email_institucional'      => $datos['email_institucional'],
                         'password'                 => Hash::make($passwordPlano),
-                        'primer_acceso_completado' => false,
-                        'activo'                   => true,
+                        'primer_acceso_completado' => DB::raw('false'),
+                        'activo'                   => DB::raw('true'),
                         'created_at'               => now(),
                         'updated_at'               => now(),
                     ];
                 }
 
-                // habilitado por defecto
                 $lotePivote[] = [
                     'id_examen'                 => $idExamen,
                     'id_estudiante'             => $idEstudiante,
-                    'estado'                    => 'Habilitado', // <--- Habilitado por defecto
+                    'estado'                    => 'Habilitado',
                     'motivo_estado'             => null,
-                    'ajuste_manual'             => false,
+                    'ajuste_manual'             => DB::raw('false'),
                     'modificado_por_docente_id' => null,
                     'fecha_ajuste_manual'       => null,
                     'created_at'                => now(),
                     'updated_at'                => now(),
                 ];
 
-                // Crear prerrequisitos existentes en TRUE
                 foreach ($prerrequisitosExamen as $idPrerreq) {
                     $lotePrerrequisitos[] = [
                         'id_prerrequisito'        => $idPrerreq,
                         'id_estudiante'           => $idEstudiante,
-                        'cumplido'                => true,
+                        'cumplido'                => DB::raw('true'),
                         'fecha_cumplimiento'      => now(),
                         'revisado_por_docente_id' => $user instanceof Docente ? $user->id : null,
                         'created_at'              => now(),
@@ -243,7 +225,6 @@ class CargaMasivaEstudianteController extends Controller
                     ];
                 }
 
-                // Inserción por lotes
                 if (count($lotePivote) >= self::TAMANO_LOTE) {
                     if (!empty($loteNuevosEstudiantes)) {
                         Estudiante::insert($loteNuevosEstudiantes);
@@ -260,7 +241,6 @@ class CargaMasivaEstudianteController extends Controller
                 }
             }
 
-            // Vaciar remanentes
             if (!empty($loteNuevosEstudiantes)) {
                 Estudiante::insert($loteNuevosEstudiantes);
             }
@@ -271,8 +251,9 @@ class CargaMasivaEstudianteController extends Controller
                 DB::table('estudiante_prerrequisito')->insert($lotePrerrequisitos);
             }
 
-            // Registrar auditoría
             $this->registrarAuditoria($request, 'CARGA_MASIVA_EXITOSA', [
+                'target_type'      => 'estudiante_examen',
+                'target_id'        => $idExamen,
                 'examen_id'        => $idExamen,
                 'total_insertados' => count($filasValidadas),
                 'total_omitidos'   => $totalOmitidosPorDuplicado,

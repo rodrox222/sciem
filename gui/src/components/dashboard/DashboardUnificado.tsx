@@ -2,8 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
   BookOpenCheck, CalendarDays, ChevronRight, CircleAlert,
-  ClipboardList, DoorOpen, GraduationCap, RefreshCw,
-  ShieldCheck, UsersRound,
+  ClipboardList, DoorOpen, Download, GraduationCap, RefreshCw,
+  ShieldCheck, Smartphone, UsersRound,
 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -16,6 +16,8 @@ import {
   type ResumenAdmin, type ResumenConExamenes, type ResumenDocente,
   type RolDashboard,
 } from '@/services/dashboard.service'
+import { examenesService } from '@/services/examenes.service'
+import { estudiantesService } from '@/services/estudiantes.service'
 
 const TITULOS: Record<RolDashboard, string> = {
   admin: 'Administración',
@@ -91,11 +93,12 @@ function ListaExamenes({ examenes, rol }: { examenes: ExamenDashboard[]; rol: Ro
               {rol === 'auxiliar' && examen.docente && <p className="break-words">Docente: {examen.docente}</p>}
               {rol === 'estudiante' && examen.estado_habilitacion === 'Inhabilitado' && examen.motivo_estado &&
                 <p className="break-words text-destructive">Motivo: {examen.motivo_estado}</p>}
+              
               <Link
-                to={rol === 'estudiante' ? '/estudiante' : `/examenes/${encodeURIComponent(String(examen.id))}`}
-                className="inline-flex items-center gap-1 font-semibold text-sci-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                to={rol === 'estudiante' ? `/estudiante/examenes/${encodeURIComponent(String(examen.id))}` : `/examenes/${encodeURIComponent(String(examen.id))}`}
+                className="inline-flex items-center gap-1 font-semibold text-sci-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary cursor-pointer pt-2"
               >
-                {rol === 'estudiante' ? 'Abrir mi módulo' : 'Ver examen'}
+                {rol === 'estudiante' ? 'Ver evaluación' : 'Gestionar evaluación'}
                 <ChevronRight className="h-4 w-4" aria-hidden="true" />
               </Link>
             </CardContent>
@@ -174,6 +177,25 @@ export function DashboardUnificado() {
     }
   })
 
+  // Escuchar el cambio de rol originado desde el tab del Header
+  useEffect(() => {
+    const handleRolCambiado = (e: Event) => {
+      const customEvent = e as CustomEvent<string>
+      const nuevo = normalizarRolDashboard(customEvent.detail || localStorage.getItem('user_role'))
+      if (nuevo) {
+        setRolActivo(nuevo)
+      }
+    }
+
+    window.addEventListener('rolCambiado', handleRolCambiado)
+    window.addEventListener('storage', handleRolCambiado)
+
+    return () => {
+      window.removeEventListener('rolCambiado', handleRolCambiado)
+      window.removeEventListener('storage', handleRolCambiado)
+    }
+  }, [])
+
   const [revision, setRevision] = useState(0)
   const [respuesta, setRespuesta] = useState<DashboardResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -184,55 +206,87 @@ export function DashboardUnificado() {
     setLoading(true)
     setError('')
 
-    dashboardService.obtener()
-      .then((data) => {
+    const cargarDatos = async () => {
+      try {
+        const data = await dashboardService.obtener()
         if (!activo) return
-        if (!data.success || !data.secciones?.resumen) {
-          setError('El servidor no devolvió información válida para el dashboard.')
-          setRespuesta(null)
-          return
-        }
 
-        // Si es usuario dual, adaptamos la visualización al rol seleccionado
-        const dataAdaptada: DashboardResponse = {
+        let dataAdaptada: DashboardResponse = {
           ...data,
           rol: esUsuarioDual ? rolActivo : data.rol,
         }
 
+        // Si es AUXILIAR, traemos los exámenes y excluimos los que cursa como estudiante
+        if (rolActivo === 'auxiliar') {
+          try {
+            let idsComoEstudiante: string[] = []
+            try {
+              const resMisEx = await estudiantesService.misExamenes()
+              const examenesEstudiante = Array.isArray(resMisEx.examenes) ? resMisEx.examenes : []
+              idsComoEstudiante = examenesEstudiante.map((e) => String(e.id_examen))
+            } catch (errMisEx) {
+              console.warn('No se pudieron obtener exámenes de estudiante para exclusión:', errMisEx)
+            }
+
+            const res = await examenesService.list({ perPage: 50 })
+            const lista = Array.isArray(res.data) ? res.data : []
+
+            const examenesParaGestionar = lista.filter(
+              (ex: any) => !idsComoEstudiante.includes(String(ex.id))
+            )
+
+            const examenesMapeados: ExamenDashboard[] = examenesParaGestionar.map((ex: any) => ({
+              id: ex.id,
+              nombre: ex.nombre,
+              materia: ex.materia?.nombre || ex.materia || 'Sin asignatura',
+              fecha: ex.fecha,
+              hora_ini: ex.hora_ini,
+              hora_fin: ex.hora_fin,
+              aula: ex.aula?.nombre || ex.aula || 'Aula asignada',
+              docente: ex.docente?.nombre 
+                ? `${ex.docente.nombre} ${ex.docente.apellido_paterno || ''}`.trim()
+                : (typeof ex.docente === 'string' ? ex.docente : 'Docente titular'),
+              estado: ex.estado || 'Programado',
+            }))
+
+            dataAdaptada = {
+              ...dataAdaptada,
+              secciones: {
+                ...dataAdaptada.secciones,
+                resumen: {
+                  total_examenes: examenesMapeados.length,
+                  examenes: examenesMapeados,
+                } as any,
+              },
+            }
+          } catch (errEx) {
+            console.error('Error al cargar exámenes para auxiliar:', errEx)
+          }
+        }
+
         setRespuesta(dataAdaptada)
         setError('')
-      })
-      .catch((e: unknown) => {
+      } catch (e: unknown) {
         if (!activo) return
         setRespuesta(null)
-        setError(e instanceof ApiError && e.status === 403
-          ? 'No tienes autorización para consultar este dashboard.'
-          : e instanceof ApiError && e.status === 401
+        setError(
+          e instanceof ApiError && e.status === 403
+            ? 'No tienes autorización para consultar este dashboard.'
+            : e instanceof ApiError && e.status === 401
             ? 'La sesión ha expirado. Inicia sesión nuevamente.'
-            : 'No se pudo obtener el dashboard. Revisa la conexión e inténtalo de nuevo.')
-      })
-      .finally(() => { if (activo) setLoading(false) })
-    return () => { activo = false }
-  }, [revision, rolActivo, esUsuarioDual])
-
-  const alternarModo = (nuevoRol: RolDashboard) => {
-    if (nuevoRol === rolActivo) return
-    setRolActivo(nuevoRol)
-    
-    localStorage.setItem('user_role', nuevoRol)
-
-    try {
-      const rawUser = localStorage.getItem('user_data')
-      if (rawUser) {
-        const parsed = JSON.parse(rawUser)
-        parsed.rol = nuevoRol
-        localStorage.setItem('user_data', JSON.stringify(parsed))
+            : 'No se pudo obtener el dashboard. Revisa la conexión e inténtalo de nuevo.'
+        )
+      } finally {
+        if (activo) setLoading(false)
       }
-    } catch {
     }
 
-    window.dispatchEvent(new CustomEvent('rolCambiado', { detail: nuevoRol }))
-  }
+    void cargarDatos()
+
+    return () => {
+      activo = false
+    }
+  }, [revision, rolActivo, esUsuarioDual])
 
   const reintentar = () => {
     setLoading(true)
@@ -252,43 +306,35 @@ export function DashboardUnificado() {
           <p className="mt-1 text-sm text-muted-foreground">
             Resumen del usuario autenticado, según los datos autorizados por el servidor.
           </p>
-
-          {/* Switch de modo para estudiantes que son auxiliares */}
-          {esUsuarioDual && (
-            <div className="mt-3 inline-flex items-center gap-1 rounded-xl border border-border bg-muted/50 p-1 shadow-2xs">
-              <span className="px-2.5 text-xs font-semibold text-muted-foreground">
-                Vista actual:
-              </span>
-              <button
-                type="button"
-                onClick={() => alternarModo('estudiante')}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-                  rolActivo === 'estudiante'
-                    ? 'bg-card text-sci-navy shadow-xs border border-border'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Estudiante
-              </button>
-              <button
-                type="button"
-                onClick={() => alternarModo('auxiliar')}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-                  rolActivo === 'auxiliar'
-                    ? 'bg-card text-sci-navy shadow-xs border border-border'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Auxiliar
-              </button>
-            </div>
-          )}
         </div>
 
-        <Button type="button" variant="outline" onClick={reintentar} disabled={loading}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
-          Actualizar
-        </Button>
+        {/* Acciones superiores: Solo Auxiliar puede ver la descarga del APK institucional */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {rolActivo === 'auxiliar' && (
+            <Button
+              asChild
+              variant="outline"
+              className="cursor-pointer gap-2 border-sci-cyan/40 bg-sci-cyan/5 font-semibold text-sci-navy shadow-xs hover:bg-sci-cyan/15 hover:text-sci-blue"
+            >
+              <a
+                href="/apk/sci-control-ingreso.apk"
+                download="SCI_Control_Ingreso.apk"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Descargar instalador APK para control de ingreso"
+              >
+                <Smartphone className="h-4 w-4 text-sci-cyan" aria-hidden="true" />
+                <span>Descargar APK</span>
+                <Download className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+              </a>
+            </Button>
+          )}
+
+          <Button type="button" variant="outline" onClick={reintentar} disabled={loading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+            Actualizar
+          </Button>
+        </div>
       </div>
 
       {loading && (
@@ -309,13 +355,6 @@ export function DashboardUnificado() {
       )}
 
       {!loading && respuesta && <ResumenPorRol data={respuesta} />}
-
-      {!loading && rolActivo === 'estudiante' && (
-        <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
-          Para generar tu QR, verificar habilitación o actualizar tu fotografía, visita{' '}
-          <Link to="/estudiante" className="font-semibold text-sci-blue underline underline-offset-2">Mi módulo de estudiante</Link>.
-        </div>
-      )}
     </div>
   )
 }

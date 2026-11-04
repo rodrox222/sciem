@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Models\LogAuditoria;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,36 +14,48 @@ use Inertia\Response;
 
 class ProfileController extends Controller
 {
-    /**
-     * Display the user's profile form.
-     */
     public function edit(Request $request): Response
     {
         return Inertia::render('Profile/Edit', [
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
-            'status' => session('status'),
+            'status'          => session('status'),
         ]);
     }
 
-    /**
-     * Update the user's profile information.
-     */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $request->user()->fill($request->validated());
+        $user = $request->user();
+        $valoresAnteriores = $user->only(array_keys($request->validated()));
 
-        if ($request->user()->isDirty('email')) {
-            $request->user()->email_verified_at = null;
+        $user->fill($request->validated());
+
+        if ($user->isDirty('email')) {
+            $user->email_verified_at = null;
         }
 
-        $request->user()->save();
+        $user->save();
+
+        LogAuditoria::create([
+            'user_type'         => get_class($user),
+            'user_id'           => $user->id,
+            'rol_en_el_momento' => strtolower(class_basename($user)),
+            'usuario_nombre'    => trim("{$user->nombre} {$user->apellido_paterno}"),
+            'usuario_email'     => $user->email ?? $user->email_institucional ?? null,
+            'modulo'            => 'PERFIL',
+            'accion'            => 'PERFIL_ACTUALIZADO',
+            'ip_origen'         => $request->ip() ?? '127.0.0.1',
+            'user_agent'        => $request->userAgent(),
+            'detalles'          => [
+                'target_type'        => strtolower(class_basename($user)),
+                'target_id'          => $user->id,
+                'valores_anteriores' => $valoresAnteriores,
+                'valores_nuevos'     => $request->validated(),
+            ],
+        ]);
 
         return Redirect::route('profile.edit');
     }
 
-    /**
-     * Delete the user's account.
-     */
     public function destroy(Request $request): RedirectResponse
     {
         $request->validate([

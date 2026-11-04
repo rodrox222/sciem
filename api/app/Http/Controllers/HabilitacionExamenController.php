@@ -3,9 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\CambiarHabilitacionRequest;
+use App\Models\Admin;
+use App\Models\Auxiliar;
 use App\Models\Docente;
 use App\Models\Estudiante;
 use App\Models\Examen;
+use App\Models\LogAuditoria;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,14 +18,10 @@ class HabilitacionExamenController extends Controller
     public function index(Request $request, string $examenId): JsonResponse
     {
         $user = $request->user();
-
-        // Obtener examen base
         $examen = Examen::findOrFail($examenId);
 
-        // Determinar si es docente titular o admin
         $esDocenteOAdmin = \App\Services\AccesoExamen::permite($request, $examen);
 
-        // Determinar si es auxiliar asignado
         $tablaAuxiliar = DB::getSchemaBuilder()->hasTable('examen_auxiliares')
             ? 'examen_auxiliares'
             : 'examen_auxiliar';
@@ -35,7 +34,6 @@ class HabilitacionExamenController extends Controller
 
         abort_unless($esDocenteOAdmin || $esAuxiliar, 403, 'Acceso denegado: no tienes permisos para ver el padrón de este examen.');
 
-        // Consultar estudiantes: si es auxiliar, filtrar por su id_auxiliar
         $examen->load(['estudiantes' => function ($query) use ($esDocenteOAdmin, $esAuxiliar, $user) {
             $query->select(
                 'estudiantes.id', 
@@ -47,21 +45,27 @@ class HabilitacionExamenController extends Controller
                 'apellido_materno', 
                 'email_institucional'
             )
-            ->withPivot('estado', 'motivo_estado', 'ajuste_manual', 'fecha_ajuste_manual', 'id_auxiliar');
+            ->withPivot('estado', 'motivo_estado', 'ajuste_manual', 'fecha_ajuste_manual', 'id_auxiliar')
+            ->orderBy('estudiantes.apellido_paterno', 'asc')
+            ->orderBy('estudiantes.apellido_materno', 'asc')
+            ->orderBy('estudiantes.nombre', 'asc');
 
-            // Filtro por la columna asignada por DistribuyeAuxiliares
             if (!$esDocenteOAdmin && $esAuxiliar) {
                 $query->wherePivot('id_auxiliar', $user->id);
             }
         }]);
 
         $estudiantes = $examen->estudiantes->map(function ($estudiante) {
+            // Formato ordenado: Apellido Paterno [Apellido Materno] Nombre
+            $apellidos = trim("{$estudiante->apellido_paterno} {$estudiante->apellido_materno}");
+            $nombreCompleto = trim("{$apellidos} {$estudiante->nombre}");
+
             return [
                 'id'                  => $estudiante->id,
                 'codigo_sis'          => $estudiante->codigo_sis,
                 'ci'                  => $estudiante->ci,
                 'ci_extension'        => $estudiante->ci_extension,
-                'nombre_completo'     => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
+                'nombre_completo'     => $nombreCompleto,
                 'email_institucional' => $estudiante->email_institucional,
                 'estado'              => $estudiante->pivot->estado,
                 'motivo_estado'       => $estudiante->pivot->motivo_estado,
@@ -81,8 +85,12 @@ class HabilitacionExamenController extends Controller
     {
         $examen = Examen::findOrFail($examenId);
 
-        $existe = $examen->estudiantes()->where('estudiantes.id', $estudianteId)->exists();
-        if (!$existe) {
+        $pivoteAnterior = DB::table('estudiante_examen')
+            ->where('id_examen', $examenId)
+            ->where('id_estudiante', $estudianteId)
+            ->first();
+
+        if (!$pivoteAnterior) {
             return response()->json(['message' => 'El estudiante no se encuentra registrado en este examen.'], 404);
         }
 
@@ -90,7 +98,6 @@ class HabilitacionExamenController extends Controller
         $motivo = trim($request->input('motivo_estado'));
         
         $user = $request->user();
-        // Solo guardamos el ID si el usuario autenticado existe en la tabla 'docente'
         $docenteId = null;
         if ($user) {
             if ($user instanceof Docente) {
@@ -100,13 +107,55 @@ class HabilitacionExamenController extends Controller
             }
         }
 
+        $valoresPrevios = [
+            'estado'                    => $pivoteAnterior->estado,
+            'motivo_estado'             => $pivoteAnterior->motivo_estado,
+            'ajuste_manual'             => filter_var($pivoteAnterior->ajuste_manual, FILTER_VALIDATE_BOOLEAN),
+            'modificado_por_docente_id' => $pivoteAnterior->modificado_por_docente_id,
+            'fecha_ajuste_manual'       => $pivoteAnterior->fecha_ajuste_manual,
+        ];
+
         $examen->estudiantes()->updateExistingPivot($estudianteId, [
             'estado'                    => $estado,
             'motivo_estado'             => $motivo,
-            'ajuste_manual'             => true,
+            'ajuste_manual'             => DB::raw('true'),
             'modificado_por_docente_id' => $docenteId,
             'fecha_ajuste_manual'       => now(),
             'updated_at'                => now(),
+        ]);
+
+        $rol = match ($user ? get_class($user) : null) {
+            Admin::class    => 'admin',
+            Docente::class  => 'docente',
+            Auxiliar::class => 'auxiliar',
+            default         => 'desconocido',
+        };
+        $nombreCompleto = $user ? trim("{$user->nombre} {$user->apellido_paterno} {$user->apellido_materno}") : 'Sistema';
+
+        LogAuditoria::create([
+            'user_type'         => $user ? get_class($user) : null,
+            'user_id'           => $user?->id,
+            'rol_en_el_momento' => $rol,
+            'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : ($user?->nombre ?? 'Sistema'),
+            'usuario_email'     => $user?->email ?? null,
+            'modulo'            => 'EXAMENES',
+            'accion'            => 'ESTUDIANTE_HABILITACION_MODIFICADA',
+            'ip_origen'         => $request->ip() ?? '127.0.0.1',
+            'user_agent'        => $request->userAgent(),
+            'detalles'          => [
+                'target_type'        => 'estudiante_examen',
+                'target_id'          => $estudianteId,
+                'id_examen'          => $examenId,
+                'id_estudiante'      => $estudianteId,
+                'valores_anteriores' => $valoresPrevios,
+                'valores_nuevos'     => [
+                    'estado'                    => $estado,
+                    'motivo_estado'             => $motivo,
+                    'ajuste_manual'             => true,
+                    'modificado_por_docente_id' => $docenteId,
+                    'fecha_ajuste_manual'       => now()->toDateTimeString(),
+                ],
+            ],
         ]);
 
         return response()->json([

@@ -42,9 +42,28 @@ export const materiasService = {
     if (cachedMateriasAll && cachedMateriasAll.length > 0) {
       return cachedMateriasAll
     }
-    const res = await api.get<Materia[]>('/materias?all=1')
-    cachedMateriasAll = res
-    return res
+
+    // Si no hay red, leer desde el respaldo en localStorage
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const local = localStorage.getItem('sciem_materias_cache')
+      if (local) {
+        cachedMateriasAll = JSON.parse(local)
+        return cachedMateriasAll || []
+      }
+    }
+
+    try {
+      const res = await api.get<Materia[]>('/materias?all=1')
+      cachedMateriasAll = res
+      localStorage.setItem('sciem_materias_cache', JSON.stringify(res))
+      return res
+    } catch (error) {
+      const local = localStorage.getItem('sciem_materias_cache')
+      if (local) {
+        return JSON.parse(local)
+      }
+      throw error
+    }
   },
 
   get(id: string) {

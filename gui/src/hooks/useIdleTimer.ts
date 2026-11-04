@@ -107,7 +107,7 @@ export const useIdleTimer = () => {
     return true
   }, [handleLogout, verificarConexionReal])
 
-  const resetTimer = useCallback(() => {
+  const resetTimer = useCallback((forzar = false) => {
     if (isOfflineRef.current) {
       localStorage.setItem(STORAGE_KEY, Date.now().toString())
       limpiarTemporizador()
@@ -115,7 +115,7 @@ export const useIdleTimer = () => {
       return
     }
 
-    if (showModal) return
+    if (showModal && !forzar) return
 
     limpiarTemporizador()
     const { warningMs } = getLimits()
@@ -133,12 +133,12 @@ export const useIdleTimer = () => {
     }, warningMs)
   }, [showModal, limpiarTemporizador, verificarConexionReal])
 
-  const handleStayActive = () => {
+  const handleStayActive = useCallback(() => {
     setShowModal(false)
     setSecondsRemaining(COUNTDOWN_SECONDS)
     localStorage.setItem(STORAGE_KEY, Date.now().toString())
-    resetTimer()
-  }
+    resetTimer(true)
+  }, [resetTimer])
 
   useEffect(() => {
     // 1. Listeners de eventos nativos de red (0 consumo de peticiones HTTP en reposo)

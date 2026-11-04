@@ -18,7 +18,12 @@ class AuxiliarOfflineController extends Controller
     {
         $user = $request->user();
 
-        $examen = Examen::with(['materia:id,nombre', 'aula:id,nombre'])->find($idExamen);
+        $examen = Examen::with([
+            'materia:id,nombre',
+            'aula:id,nombre,ubicacion',
+            'docente:id,nombre,apellido_paterno,apellido_materno',
+        ])->find($idExamen);
+
         if (!$examen) {
             return response()->json(['message' => 'Examen no encontrado.'], 404);
         }
@@ -56,35 +61,29 @@ class AuxiliarOfflineController extends Controller
             ->orderBy('e.nombre', 'asc')
             ->get();
 
-        // 1. Docente descarga TODO el padrón completo
         if ($esDocente) {
             $estudiantesParaEscanear = $todosEstudiantes;
             $otrosModulosSis = [];
         } else {
-            // 2. Auxiliar descarga solo SUS estudiantes asignados
             $estudiantesParaEscanear = $todosEstudiantes->filter(function ($item) use ($user) {
                 return $item->id_auxiliar === $user->id;
             })->values();
 
-            // Lista ligera de códigos SIS del resto del examen para detectar "NO_ASIGNADO" offline
             $otrosModulosSis = $todosEstudiantes->filter(function ($item) use ($user) {
                 return $item->id_auxiliar !== $user->id;
             })->pluck('codigo_sis')->toArray();
         }
 
-        // Expulsiones vigentes para validar offline igual que en el online
         $expulsiones = DB::table('expulsiones')
             ->where('id_examen', $idExamen)
             ->pluck('id_estudiante')
             ->toArray();
 
-        // Prerrequisitos
         $prerrequisitos = DB::table('prerrequisitos_examen')
             ->where('id_examen', $idExamen)
             ->select(['id', 'id_examen', 'titulo as nombre', 'descripcion'])
             ->get();
 
-        // Normas activas
         $normas = DB::table('examen_norma as en')
             ->join('normas as n', 'en.id_norma', '=', 'n.id')
             ->where('en.id_examen', $idExamen)
@@ -92,18 +91,29 @@ class AuxiliarOfflineController extends Controller
             ->select(['n.id', 'n.titulo', 'n.descripcion', 'n.tipo'])
             ->get();
 
+        $docenteNombre = $examen->docente
+            ? trim("{$examen->docente->nombre} {$examen->docente->apellido_paterno} {$examen->docente->apellido_materno}")
+            : 'Docente titular';
+
         return response()->json([
             'examen' => [
-                'id'            => $examen->id,
-                'id_examen'     => $examen->id,
-                'nombre'        => $examen->nombre ?? 'Examen',
-                'fecha'         => $examen->fecha ? substr((string)$examen->fecha, 0, 10) : null,
-                'hora_ini'      => $examen->hora_ini,
-                'hora_fin'      => $examen->hora_fin,
-                'estado'        => $examen->estado ?? 'Activo',
-                'materia'       => $examen->materia?->nombre,
-                'aula'          => $examen->aula?->nombre,
-                'descargado_el' => now('America/La_Paz')->toIso8601String(),
+                'id'             => $examen->id,
+                'id_examen'      => $examen->id,
+                'nombre'         => $examen->nombre ?? 'Examen',
+                'fecha'          => $examen->fecha ? substr((string)$examen->fecha, 0, 10) : null,
+                'hora_ini'       => substr((string)$examen->hora_ini, 0, 5),
+                'hora_fin'       => substr((string)$examen->hora_fin, 0, 5),
+                'estado'         => $examen->estado ?? 'Activo',
+                // UUIDs requeridos para la base de datos PostgreSQL
+                'id_materia'     => $examen->id_materia,
+                'materia'        => $examen->materia?->nombre,
+                'id_aula'        => $examen->id_aula,
+                'aula'           => $examen->aula?->nombre ?? 'Aula asignada',
+                'aula_nombre'    => $examen->aula?->nombre ?? 'Aula asignada',
+                'id_docente'     => $examen->id_docente,
+                'docente'        => $docenteNombre,
+                'docente_nombre' => $docenteNombre,
+                'descargado_el'  => now('America/La_Paz')->toIso8601String(),
             ],
             'id_usuario_solicitante' => $user->id,
             'rol'                    => $esDocente ? 'docente' : 'auxiliar',
@@ -177,14 +187,12 @@ class AuxiliarOfflineController extends Controller
                         ->where('id_estudiante', $estudiante->id)
                         ->first();
 
-                    // Control de Asignación Estricta (Opción B)
                     if (!$esDocente && isset($inscripcion->id_auxiliar) && $inscripcion->id_auxiliar !== $user->id) {
                         $errores[] = [
                             'codigo_sis' => $codigoSis,
                             'error'      => 'Estudiante no asignado al módulo de este auxiliar.',
                         ];
 
-                        // Registrar como intento no autorizado
                         $this->registrarIntentoDirecto(
                             $idExamen,
                             $estudiante->id,
@@ -201,16 +209,61 @@ class AuxiliarOfflineController extends Controller
                         || \App\Models\Expulsion::where('id_examen', $idExamen)->where('id_estudiante', $estudiante->id)->exists()
                         || !\App\Services\AccesoExamen::enHorario($examen, \Carbon\CarbonImmutable::instance($fechaIngreso))
                         || $fechaIngreso->isFuture()) {
-                        $errores[] = ['codigo_sis' => $codigoSis, 'error' => 'Ingreso no conciliable: inscripción, habilitación, expulsión u horario inválidos.'];
+                        $errores[] = [
+                            'codigo_sis' => $codigoSis,
+                            'error'      => 'Ingreso no conciliable: inhabilitado, expulsado u horario inválido.'
+                        ];
                         continue;
                     }
 
-                    $yaIngreso = LogAsistencia::where('id_examen', $idExamen)
+                    $ingresoPrevio = LogAsistencia::where('id_examen', $idExamen)
                         ->where('id_estudiante', $estudiante->id)
                         ->where('resultado', 'PERMITIDO')
-                        ->exists();
+                        ->first();
 
-                    if (!$yaIngreso) {
+                    if ($ingresoPrevio) {
+                        $fechaPrevio = Carbon::parse($ingresoPrevio->fecha_escaneo);
+
+                        if ($fechaIngreso->lt($fechaPrevio)) {
+                            $ingresoPrevio->update([
+                                'resultado' => 'RECHAZADO_YA_INGRESO',
+                                'mensaje'   => 'Sustituido por ingreso offline cronológicamente anterior (R3).',
+                            ]);
+
+                            LogAsistencia::create([
+                                'id_examen'            => $idExamen,
+                                'id_estudiante'        => $estudiante->id,
+                                'codigo_sis_escaneado' => substr($codigoSis, 0, 30),
+                                'resultado'            => 'PERMITIDO',
+                                'mensaje'              => 'Ingreso prioritario cronológico offline (R3).',
+                                'payload_qr_recibido'  => ['modo' => 'OFFLINE_SYNC_R3_GANADOR'],
+                                'fecha_escaneo'        => $fechaIngreso,
+                            ]);
+
+                            DB::table('estudiante_examen')
+                                ->where('id_examen', $idExamen)
+                                ->where('id_estudiante', $estudiante->id)
+                                ->update([
+                                    'fecha_ingreso' => $fechaIngreso,
+                                    'updated_at'    => now('America/La_Paz'),
+                                ]);
+                        } else {
+                            $this->registrarIntentoDirecto(
+                                $idExamen,
+                                $estudiante->id,
+                                'CONFLICTO_DUPLICADO_R3',
+                                $rolAuditor,
+                                $user,
+                                $codigoSis,
+                                $fechaIngreso
+                            );
+
+                            $errores[] = [
+                                'codigo_sis' => $codigoSis,
+                                'error'      => 'Conflicto (R3): Se conservó el primer ingreso y se marcó como conflicto para revisión.',
+                            ];
+                        }
+                    } else {
                         LogAsistencia::create([
                             'id_examen'            => $idExamen,
                             'id_estudiante'        => $estudiante->id,

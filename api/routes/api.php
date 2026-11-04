@@ -36,11 +36,9 @@ Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword'
 Route::get('noticias', [NoticiaController::class, 'index']);
 
 // Comprobación ligera de conectividad para el temporizador de sesión.
-// No revela información interna ni requiere autenticación.
 Route::get('health', fn () => response()->noContent());
 
 Route::get('examenes', [ExamenController::class, 'index']);
-
 
 Route::pattern('idExamen', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}');
 Route::pattern('expulsionId', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}');
@@ -93,7 +91,7 @@ Route::middleware('auth:sanctum')->group(function () {
         return response()->json($docentes);
     });
 
-    // --- ADMINISTRACIÓN ---
+    // --- ADMINISTRACIÓN Y AUDITORÍA ---
     Route::middleware('role:admin,administrador')->group(function () {
         Route::get('dashboard/stats', function () {
             $totalUsuarios = \App\Models\Admin::count() 
@@ -113,7 +111,10 @@ Route::middleware('auth:sanctum')->group(function () {
         });
 
         Route::apiResource('users', UserController::class);
+
+        // Módulo de Auditoría y Reversión Compensatoria
         Route::get('auditoria', [AuditoriaController::class, 'index']);
+        Route::post('auditoria/{id}/revertir', [AuditoriaController::class, 'revertir']);
 
         // Parámetro de inactividad de sesión
         Route::get('configuracion/inactividad', [ConfiguracionSistemaController::class, 'getTiempoInactividad']);
@@ -175,6 +176,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('estudiantes', [EstudianteController::class, 'index']);
         Route::get('estudiantes/buscar', [EstudianteController::class, 'buscar']);
         Route::get('estudiantes/{identificador}', [EstudianteController::class, 'show']);
+        Route::middleware('role:admin,administrador,docente')->group(function () {
+            Route::patch('estudiantes/{id}/toggle-auxiliar', [EstudianteController::class, 'toggleAuxiliar']);
+        });
     });
 
     // --- INSCRIPCIÓN Y GESTIÓN EN EXAMEN ---
@@ -184,20 +188,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('examenes/{idExamen}/estudiantes/carga-masiva', [CargaMasivaEstudianteController::class, 'storePorExamen']);
     });
 
-       // --- HU 9: PRERREQUISITOS Y HABILITACIÓN ---
-
-    // Consultas de estudiantes del examen y motivos de inhabilitación
+    // --- HU 9: PRERREQUISITOS Y HABILITACIÓN ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('examenes/{examen}/estudiantes', [HabilitacionExamenController::class, 'index']);
         Route::get('examenes/{examen}/estudiantes/{estudiante}/motivo', [HabilitacionExamenController::class, 'motivoInhabilitacion']);
     });
 
-    // Consulta de prerrequisitos: también permite el acceso al estudiante
     Route::middleware('role:admin,administrador,docente,auxiliar,estudiante')->group(function () {
         Route::get('examenes/{examen}/prerrequisitos', [PrerrequisitoController::class, 'index']);
     });
 
-    // Gestión de prerrequisitos y habilitación
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::post('examenes/{examen}/prerrequisitos', [PrerrequisitoController::class, 'store']);
         Route::patch('prerrequisitos/{prerrequisito}/estudiantes/{estudiante}', [PrerrequisitoController::class, 'toggleCumplimiento']);
@@ -208,34 +208,22 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- HU 10: ESCANEO QR Y CONTROL DE ACCESO ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::post('examenes/{id}/verificar-ingreso', [VerificacionController::class, 'verificarIngreso']);
+        Route::post('/examenes/{id}/registro-manual', [VerificacionController::class, 'registrarIngresoManual']);
     });
 
     // --- HU 15: REGISTRO Y CONSULTA DE EXPULSIONES ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
-        Route::get(
-            'examenes/{id}/expulsiones',
-            [ExpulsionController::class, 'index']
-        );
-
+        Route::get('examenes/{id}/expulsiones', [ExpulsionController::class, 'index']);
         Route::get('examenes/{id}/expulsiones/estudiantes', [ExpulsionController::class, 'estudiantes']);
         Route::delete('examenes/{id}/expulsiones/{expulsionId}', [ExpulsionController::class, 'destroy']);
-        Route::post(
-            'examenes/{id}/expulsiones',
-            [ExpulsionController::class, 'store']
-        );
-        Route::patch(
-            'examenes/{id}/expulsiones/{expulsionId}',
-            [ExpulsionController::class, 'updateMotivo']
-        );
+        Route::post('examenes/{id}/expulsiones', [ExpulsionController::class, 'store']);
+        Route::patch('examenes/{id}/expulsiones/{expulsionId}', [ExpulsionController::class, 'updateMotivo']);
     });
-
-    Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
-        Route::post('/examenes/{id}/registro-manual', [VerificacionController::class, 'registrarIngresoManual']);
-});
 
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::get('/examenes/{id}/asistencias', [VerificacionController::class, 'listarAsistencias']);
     });
+
     // HU 13: REGISTRO Y CONSULTA DE INTENTOS NO CORRESPONDIENTES 
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('examenes/{id_examen}/intentos-no-autorizados', [IntentoNoAutorizadoController::class, 'index']);
@@ -243,70 +231,32 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // MONITOREO EN TIEMPO REAL (HU16) 
-    Route::middleware('role:admin,administrador,docente')
-        ->get('examenes/{idExamen}/monitoreo', [MonitoreoController::class, 'resumen']);
-    Route::middleware('role:admin,administrador,docente')
-    ->get('examenes/{idExamen}/monitoreo/estudiantes', [MonitoreoController::class, 'estudiantes']);
+    Route::middleware('role:admin,administrador,docente')->group(function () {
+        Route::get('examenes/{idExamen}/monitoreo', [MonitoreoController::class, 'resumen']);
+        Route::get('examenes/{idExamen}/monitoreo/estudiantes', [MonitoreoController::class, 'estudiantes']);
+    });
 
     // HU 17: REPORTES ESTADÍSTICOS
-    Route::middleware('role:admin,administrador,docente')
-    ->get(
-        'examenes/{idExamen}/reportes/estadisticas',
-        [ReporteEstadisticoController::class, 'resumen']
-    );
-
-    Route::middleware('role:admin,administrador,docente')
-    ->get(
-        'examenes/{idExamen}/reportes/estadisticas/franjas-horarias',
-        [ReporteEstadisticoController::class, 'franjasHorarias']
-    );
-    Route::middleware('role:admin,administrador,docente')
-    ->get(
-        'examenes/{idExamen}/reportes/estadisticas/descargar',
-        [ReporteEstadisticoController::class, 'descargar']
-    );
-    Route::middleware('role:admin,administrador,docente')
-    ->get(
-        'examenes/{idExamen}/reportes/acta-disciplinaria/descargar',
-        [ReporteEstadisticoController::class, 'descargarActaDisciplinaria']
-    );
-    Route::middleware('role:admin,administrador,docente')
-    ->get(
-        'examenes/{idExamen}/reportes/auditoria-puerta/descargar',
-        [ReporteEstadisticoController::class, 'descargarAuditoriaPuerta']
-    );
-    Route::middleware('role:admin,administrador,docente')
-    ->get(
-        'examenes/{idExamen}/reportes/matriz-habilitacion-asistencia/descargar',
-        [ReporteEstadisticoController::class, 'descargarMatrizHabilitacionAsistencia']
-    );
-    
-    Route::middleware('role:admin,administrador,docente')
-    ->get(
-        'examenes/{idExamen}/reportes/estadisticas/graficos',
-        [ReporteEstadisticoController::class, 'graficosEstadisticos']
-    );
-
+    Route::middleware('role:admin,administrador,docente')->group(function () {
+        Route::get('examenes/{idExamen}/reportes/estadisticas', [ReporteEstadisticoController::class, 'resumen']);
+        Route::get('examenes/{idExamen}/reportes/estadisticas/franjas-horarias', [ReporteEstadisticoController::class, 'franjasHorarias']);
+        Route::get('examenes/{idExamen}/reportes/estadisticas/descargar', [ReporteEstadisticoController::class, 'descargar']);
+        Route::get('examenes/{idExamen}/reportes/acta-disciplinaria/descargar', [ReporteEstadisticoController::class, 'descargarActaDisciplinaria']);
+        Route::get('examenes/{idExamen}/reportes/auditoria-puerta/descargar', [ReporteEstadisticoController::class, 'descargarAuditoriaPuerta']);
+        Route::get('examenes/{idExamen}/reportes/matriz-habilitacion-asistencia/descargar', [ReporteEstadisticoController::class, 'descargarMatrizHabilitacionAsistencia']);
+        Route::get('examenes/{idExamen}/reportes/estadisticas/graficos', [ReporteEstadisticoController::class, 'graficosEstadisticos']);
+    });
 
     // HU 18: MODULO DE ESTUDIANTES
     Route::middleware('role:estudiante')->prefix('estudiante')->group(function () {
-        // Completar o cambiar CI
         Route::match(['post', 'patch'], '/completar-datos', [EstudianteController::class, 'completarDatos']);
-        
-        // Subir foto facial a laravel
         Route::post('/foto', [EstudianteController::class, 'subirFoto']);
-        
-        // Consultar exámenes inscritos y estado de habilitación
         Route::get('/mis-examenes', [EstudianteController::class, 'misExamenes']);
-        
-        // Generar token QR dinámico para un examen específico
         Route::post('/examenes/{idExamen}/qr-token', [EstudianteController::class, 'generarTokenQr']);
-
-        // cambio de contraseña
         Route::put('/cambiar-password', [EstudianteController::class, 'cambiarPassword']);
     });
 
-    //HU 19: GESTIÓN DE AUXILIARES
+    // HU 19: GESTIÓN DE AUXILIARES
     Route::middleware('role:auxiliar')->prefix('auxiliar')->group(function () {
         Route::get('/mis-examenes', [AuxiliarModuloController::class, 'misExamenesAsignados']);
     });
@@ -317,17 +267,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('examenes/{id_examen}/auxiliares/{id_auxiliar}', [AuxiliarModuloController::class, 'desvincularAuxiliar']);
     });
 
-    // todos tienen acceso a ver la foto del estudiante, pero solo el propio estudiante puede subirla
     Route::middleware('role:admin,administrador,docente,auxiliar,estudiante')->group(function () {
         Route::get('estudiante/foto/{idEstudiante}', [EstudianteController::class, 'verFoto']);
     });
 
-    // modod offline
+    // MODO OFFLINE
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
-        // Descargar padrón para la base de datos local del móvil
         Route::get('/examenes/{id}/descargar-padron', [AuxiliarOfflineController::class, 'descargarPadron']);
-
-        // Subir lote de escaneos acumulados offline
         Route::post('/examenes/{id}/sincronizar-asistencias', [AuxiliarOfflineController::class, 'sincronizarAsistencias']);
     });
 
@@ -342,7 +288,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('noticias/{id}', [NoticiaController::class, 'destroy']);
     });
 });
-// Sprint 3: serialize the existing producers with expulsions; preserve their routes.
+
+// Middleware dinámicos por patrón de rutas
 foreach (Route::getRoutes() as $route) {
     if (in_array('POST', $route->methods()) || in_array('PATCH', $route->methods()) || in_array('DELETE', $route->methods())) {
         if (preg_match('~^api/examenes/\{id\}/(verificar-ingreso|registro-manual|sincronizar-asistencias|expulsiones)(/.*)?$~', $route->uri())) {
