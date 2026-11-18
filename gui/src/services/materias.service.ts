@@ -71,6 +71,10 @@ export const materiasService = {
     }
   },
 
+  async listMisMaterias(): Promise<Materia[]> {
+    return api.get<Materia[]>('/materias?mis_materias=1&all=1')
+  },
+
   get(id: string) {
     return api.get<Materia>(`/materias/${id}`)
   },

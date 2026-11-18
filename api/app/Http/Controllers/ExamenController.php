@@ -115,6 +115,24 @@ class ExamenController extends Controller
 
         if ($user instanceof Docente || ($user->rol ?? '') === 'docente') {
             $data['id_docente'] = $user->id;
+
+            // Validar que el docente sea titular de la materia asignada en docente_materia
+            if ($user instanceof Docente) {
+                $esTitular = $user->materias()->where('materias.id', $data['id_materia'])->exists();
+                if (!$esTitular) {
+                    return response()->json([
+                        'message' => 'No tienes asignada esta materia. Solo puedes crear exámenes de las materias en las que eres docente titular.',
+                    ], 422);
+                }
+            }
+        } else {
+            // Si el Admin crea el examen, vincula la materia al docente responsable en docente_materia
+            if (!empty($data['id_docente']) && !empty($data['id_materia'])) {
+                $docenteObj = Docente::find($data['id_docente']);
+                if ($docenteObj) {
+                    $docenteObj->materias()->syncWithoutDetaching([$data['id_materia']]);
+                }
+            }
         }
 
         $examen = DB::transaction(function () use ($data, $request) {
@@ -260,12 +278,59 @@ class ExamenController extends Controller
             ], 403);
         }
 
+        // 1. Validar que el examen aún no haya iniciado
+        $ahora = \Carbon\Carbon::now('America/La_Paz');
+        $fechaExamen = $examen->fecha ? $examen->fecha->format('Y-m-d') : null;
+        $horaIni = $examen->hora_ini ?? '00:00:00';
+        if ($fechaExamen) {
+            $inicioExamen = \Carbon\Carbon::parse("{$fechaExamen} {$horaIni}", 'America/La_Paz');
+            if ($ahora->greaterThanOrEqualTo($inicioExamen)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No se puede eliminar un examen que ya ha iniciado o finalizado.',
+                ], 422);
+            }
+        }
+
+        // 2. Validar que no tenga registros en logs_asistencias
+        $tieneAsistencias = DB::table('logs_asistencias')->where('id_examen', $examen->id)->exists();
+        if ($tieneAsistencias) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No se puede eliminar el examen porque ya cuenta con registros de asistencia o escaneos.',
+            ], 422);
+        }
+
+        // 3. Validar que no tenga estudiante_examen con ingreso registrado
+        $tieneIngresos = DB::table('estudiante_examen')
+            ->where('id_examen', $examen->id)
+            ->whereNotNull('fecha_ingreso')
+            ->exists();
+        if ($tieneIngresos) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No se puede eliminar el examen porque ya cuenta con ingresos registrados de estudiantes.',
+            ], 422);
+        }
+
+        // 4. Validar que no tenga intentos_no_autorizados
+        $tieneIntentos = DB::table('intentos_no_autorizados')->where('id_examen', $examen->id)->exists();
+        if ($tieneIntentos) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No se puede eliminar el examen porque cuenta con registros de intentos no autorizados.',
+            ], 422);
+        }
+
         $detalles = [
             'target_type' => 'examen',
             'target_id'   => $examen->id,
             'examen_id'   => $examen->id,
             'nombre'      => $examen->nombre,
         ];
+
+        // Limpiar asignaciones en auxiliar_examen si existen (FK RESTRICT)
+        DB::table('auxiliar_examen')->where('id_examen', $examen->id)->delete();
 
         $examen->delete();
 

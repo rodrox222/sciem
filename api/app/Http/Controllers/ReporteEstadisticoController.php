@@ -52,6 +52,9 @@ class ReporteEstadisticoController extends Controller
                 'message' => 'No tienes permiso para generar el reporte de este examen.',
             ], 403);
         }
+
+        $this->validarExamenFinalizado($examen);
+
         $filtros = $this->validarFiltrosFecha($request);
 
 $fechaExamen = $examen->fecha?->format('Y-m-d');
@@ -134,6 +137,8 @@ $examenDentroDelRango =
             'message' => 'No tienes permiso para generar el reporte de este examen.',
         ], 403);
     }
+
+    $this->validarExamenFinalizado($examen);
 
     $filtros = $this->validarFiltrosFecha($request);
     $formato = $request->query('formato', 'xlsx');
@@ -589,6 +594,8 @@ public function descargarAuditoriaPuerta(Request $request, string $idExamen)
         ], 403);
     }
 
+    $this->validarExamenFinalizado($examen);
+
     $filtros = $this->validarFiltrosFecha($request);
     $formato = $request->query('formato', 'pdf');
 
@@ -613,8 +620,6 @@ public function descargarAuditoriaPuerta(Request $request, string $idExamen)
         ->select([
             'i.fecha_hora',
             'i.tipo_intento',
-            'i.identificador_presentado',
-            'i.motivo',
             'i.registrado_por_user_type',
             'i.registrado_por_user_id',
             'e.codigo_sis',
@@ -662,15 +667,14 @@ public function descargarAuditoriaPuerta(Request $request, string $idExamen)
         $registros->push([
             'fecha' => $intento->fecha_hora,
             'tipo' => $intento->tipo_intento,
-            'identificador' => $intento->identificador_presentado
-                ?: ($intento->codigo_sis ?? ''),
+            'identificador' => $intento->codigo_sis ?? '',
             'ci' => $intento->ci ?? '',
             'estudiante' => trim(implode(' ', array_filter([
                 $intento->nombre,
                 $intento->apellido_paterno,
                 $intento->apellido_materno,
             ]))),
-            'motivo' => $intento->motivo ?? '',
+            'motivo' => $intento->tipo_intento ?? '',
             'responsable' => $intento->registrado_por_user_type ?? '',
             'id_responsable' => $intento->registrado_por_user_id ?? '',
             'fuente' => 'Intento no autorizado',
@@ -859,6 +863,8 @@ public function descargarMatrizHabilitacionAsistencia(Request $request, string $
             'mensaje' => 'No tienes permiso para consultar este examen.'
         ], 403);
     }
+
+    $this->validarExamenFinalizado($examen);
 
     // 3. Comprobar si el examen está dentro del rango de fechas
     $fechaExamen = \Carbon\Carbon::parse($examen->fecha)->toDateString();
@@ -1178,6 +1184,8 @@ public function descargarActaDisciplinaria(Request $request, string $idExamen)
         ], 403);
     }
 
+    $this->validarExamenFinalizado($examen);
+
     $formato = $request->query('formato', 'pdf');
 
     if (!in_array($formato, ['pdf', 'xlsx'], true)) {
@@ -1369,7 +1377,9 @@ public function descargarActaDisciplinaria(Request $request, string $idExamen)
             ], 403);
         }
 
-                $filtros = $this->validarFiltrosFecha($request);
+        $this->validarExamenFinalizado($examen);
+
+        $filtros = $this->validarFiltrosFecha($request);
 
         $fechaExamen = $examen->fecha?->format('Y-m-d');
 
@@ -1445,6 +1455,8 @@ public function graficosEstadisticos(Request $request, string $idExamen): JsonRe
             'message' => 'No tienes permiso para consultar reportes de este examen.',
         ], 403);
     }
+
+    $this->validarExamenFinalizado($examen);
 
     // 4. Validar intervalo de la curva.
     $validator = Validator::make($request->query(), [
@@ -1751,4 +1763,25 @@ $evaluadosEfectivos = $idsPresentesEfectivos->count();
     ]);
 }
 
+    private function validarExamenFinalizado(Examen $examen): void
+    {
+        if (strtolower($examen->estado ?? '') === 'terminado') {
+            return;
+        }
+
+        $ahora = \Carbon\Carbon::now('America/La_Paz');
+        $fechaExamen = $examen->fecha ? $examen->fecha->format('Y-m-d') : null;
+        $horaFin = $examen->hora_fin ?? '23:59:59';
+
+        if ($fechaExamen) {
+            $finExamen = \Carbon\Carbon::parse("{$fechaExamen} {$horaFin}", 'America/La_Paz');
+            if ($ahora->greaterThanOrEqualTo($finExamen)) {
+                return;
+            }
+        }
+
+        abort(response()->json([
+            'message' => 'No se pueden generar reportes de una evaluación que aún no ha concluido.',
+        ], 422));
+    }
 }

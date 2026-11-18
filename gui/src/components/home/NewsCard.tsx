@@ -42,6 +42,11 @@ export const NewsCard: React.FC<NewsCardProps> = ({ noticia, canManage, onEdit, 
                 ? 'Noticia de Examen' 
                 : noticia.publico_objetivo === 'Todos' ? 'Noticia General' : `Noticia: ${noticia.publico_objetivo}`}
             </span>
+            {noticia.materia?.nombre && (
+              <span className="inline-flex items-center rounded-full bg-sci-navy/10 px-2 py-0.5 text-[10px] font-semibold text-sci-navy">
+                {noticia.materia.nombre}
+              </span>
+            )}
           </div>
 
           {canManage && (

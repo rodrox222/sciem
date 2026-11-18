@@ -22,6 +22,21 @@ class MateriaController extends Controller
         $search = $request->query('search');
         $incluirInactivas = $request->boolean('incluir_inactivas');
         $activoParam = $request->query('activo');
+        $user = $request->user();
+
+        // Si se solicitan materias del docente autenticado
+        if ($request->boolean('mis_materias') || ($request->boolean('para_examen') && $user instanceof Docente)) {
+            if ($user instanceof Docente) {
+                $queryDocente = $user->materias()->orderBy('nombre', 'asc');
+                if (!$incluirInactivas) {
+                    $queryDocente->whereRaw('materias.activo is true');
+                }
+                if ($search) {
+                    $queryDocente->where('materias.nombre', 'ilike', "%{$search}%");
+                }
+                return response()->json($queryDocente->get());
+            }
+        }
 
         if ($request->boolean('all') && empty($search)) {
             $cacheKey = $incluirInactivas ? 'catalogo_materias_todas' : 'catalogo_materias_all';

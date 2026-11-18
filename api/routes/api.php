@@ -112,6 +112,10 @@ Route::middleware('auth:sanctum')->group(function () {
         });
 
         Route::apiResource('users', UserController::class);
+        Route::get('users/{id}/materias', [UserController::class, 'getMateriasDocente']);
+        Route::post('users/{id}/materias', [UserController::class, 'syncMateriasDocente']);
+        Route::post('users/{id}/materias/{idMateria}', [UserController::class, 'vincularMateriaDocente']);
+        Route::delete('users/{id}/materias/{idMateria}', [UserController::class, 'desvincularMateriaDocente']);
 
         // Módulo de Auditoría y Reversión Compensatoria
         Route::get('auditoria', [AuditoriaController::class, 'index']);
@@ -278,6 +282,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::post('examenes/{id_examen}/auxiliares', [AuxiliarModuloController::class, 'invitarAuxiliar']);
         Route::get('examenes/{id_examen}/auxiliares', [AuxiliarModuloController::class, 'listarAuxiliaresExamen']);
+        Route::get('examenes/{id_examen}/auxiliares-disponibles', [AuxiliarModuloController::class, 'auxiliaresDisponibles']);
         Route::delete('examenes/{id_examen}/auxiliares/{id_auxiliar}', [AuxiliarModuloController::class, 'desvincularAuxiliar']);
     });
 

@@ -108,6 +108,8 @@ class UpdateUserRequest extends FormRequest
                     }
                 },
             ],
+            'materias_ids'     => ['nullable', 'array'],
+            'materias_ids.*'   => ['uuid', 'exists:materias,id'],
         ];
     }
 

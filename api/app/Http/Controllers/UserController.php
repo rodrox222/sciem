@@ -34,7 +34,7 @@ class UserController extends Controller
         }
 
         if (!$tipo || $tipo === 'docente') {
-            $query = Docente::query();
+            $query = Docente::query()->with('materias:id,nombre');
             $this->aplicarFiltros($query, $search, $activo, true);
             $coleccion = $coleccion->concat($query->get()->map(fn ($u) => $this->formatearUsuario($u, 'docente')));
         }
@@ -88,6 +88,10 @@ class UserController extends Controller
         $user = new $modelClass();
         $user->fill($data);
         $user->save();
+
+        if ($tipo === 'docente' && $request->has('materias_ids') && is_array($request->input('materias_ids'))) {
+            $user->materias()->sync($request->input('materias_ids'));
+        }
 
         try {
             $this->registrarLog($request, 'USUARIO_CREADO', [
@@ -158,6 +162,10 @@ class UserController extends Controller
         }
 
         $user->update($data);
+
+        if ($tipoActual === 'docente' && $request->has('materias_ids') && is_array($request->input('materias_ids'))) {
+            $user->materias()->sync($request->input('materias_ids'));
+        }
 
         try {
             $this->registrarLog($request, 'USUARIO_ACTUALIZADO', [
@@ -300,7 +308,7 @@ class UserController extends Controller
 
     private function formatearUsuario(Model $u, string $tipo): array
     {
-        return [
+        $res = [
             'id'               => $u->id,
             'ci'               => $u->ci,
             'ci_extension'     => $u->ci_extension,
@@ -314,6 +322,132 @@ class UserController extends Controller
             'created_at'       => $u->created_at,
             'updated_at'       => $u->updated_at,
         ];
+
+        if ($tipo === 'docente') {
+            $res['materias'] = $u->relationLoaded('materias')
+                ? $u->materias->map(fn ($m) => ['id' => $m->id, 'nombre' => $m->nombre])->values()
+                : $u->materias()->select('materias.id', 'materias.nombre')->get();
+        }
+
+        return $res;
+    }
+
+    public function getMateriasDocente(string $id): JsonResponse
+    {
+        $docente = Docente::with('materias:id,nombre')->find($id);
+        if (!$docente) {
+            return response()->json(['message' => 'Docente no encontrado.'], 404);
+        }
+
+        $todasMaterias = \App\Models\Materia::whereRaw('activo is true')
+            ->orderBy('nombre', 'asc')
+            ->get(['id', 'nombre']);
+
+        $asignadasIds = $docente->materias->pluck('id')->toArray();
+
+        $materias = $todasMaterias->map(function ($m) use ($asignadasIds) {
+            return [
+                'id'       => $m->id,
+                'nombre'   => $m->nombre,
+                'asignada' => in_array($m->id, $asignadasIds),
+            ];
+        });
+
+        return response()->json([
+            'docente'   => [
+                'id'     => $docente->id,
+                'nombre' => trim("{$docente->nombre} {$docente->apellido_paterno} {$docente->apellido_materno}"),
+                'email'  => $docente->email,
+            ],
+            'materias'  => $materias,
+            'asignadas' => $docente->materias,
+        ]);
+    }
+
+    public function syncMateriasDocente(Request $request, string $id): JsonResponse
+    {
+        $docente = Docente::find($id);
+        if (!$docente) {
+            return response()->json(['message' => 'Docente no encontrado.'], 404);
+        }
+
+        $materiasIds = $request->input('materias_ids', []);
+        $docente->materias()->sync($materiasIds);
+
+        try {
+            $this->registrarLog($request, 'DOCENTE_MATERIAS_SINCRONIZADAS', [
+                'target_type'  => 'docente',
+                'target_id'    => $docente->id,
+                'docente_id'   => $docente->id,
+                'materias_ids' => $materiasIds,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Error en log auditoria materias: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'message'  => 'Materias del docente actualizadas exitosamente.',
+            'materias' => $docente->materias()->get(['materias.id', 'materias.nombre']),
+        ]);
+    }
+
+    public function vincularMateriaDocente(Request $request, string $id, string $idMateria): JsonResponse
+    {
+        $docente = Docente::find($id);
+        if (!$docente) {
+            return response()->json(['message' => 'Docente no encontrado.'], 404);
+        }
+
+        $materia = \App\Models\Materia::find($idMateria);
+        if (!$materia) {
+            return response()->json(['message' => 'Materia no encontrada.'], 404);
+        }
+
+        $docente->materias()->syncWithoutDetaching([$idMateria]);
+
+        try {
+            $this->registrarLog($request, 'DOCENTE_MATERIA_VINCULADA', [
+                'target_type' => 'docente',
+                'target_id'   => $docente->id,
+                'id_materia'  => $idMateria,
+                'materia'     => $materia->nombre,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Error en log auditoria: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'message'  => "Materia '{$materia->nombre}' vinculada al docente exitosamente.",
+            'materias' => $docente->materias()->get(['materias.id', 'materias.nombre']),
+        ]);
+    }
+
+    public function desvincularMateriaDocente(Request $request, string $id, string $idMateria): JsonResponse
+    {
+        $docente = Docente::find($id);
+        if (!$docente) {
+            return response()->json(['message' => 'Docente no encontrado.'], 404);
+        }
+
+        $materia = \App\Models\Materia::find($idMateria);
+
+        $docente->materias()->detach($idMateria);
+
+        try {
+            $this->registrarLog($request, 'DOCENTE_MATERIA_DESVINCULADA', [
+                'target_type' => 'docente',
+                'target_id'   => $docente->id,
+                'id_materia'  => $idMateria,
+                'materia'     => $materia?->nombre,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Error en log auditoria: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'message'  => 'Materia desvinculada del docente exitosamente.',
+            'materias' => $docente->materias()->get(['materias.id', 'materias.nombre']),
+        ]);
     }
 
     private function aplicarFiltros($query, ?string $search, ?bool $activo, bool $tieneEmail): void

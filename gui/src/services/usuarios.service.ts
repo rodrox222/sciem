@@ -14,6 +14,11 @@ export interface Usuario {
   ultimo_acceso?: string | null
   created_at: string
   updated_at: string
+  materias?: {
+    id: string
+    nombre: string
+    codigo?: string | null
+  }[]
 }
 
 export interface Rol {
@@ -45,6 +50,24 @@ export interface UsuarioPayload {
   password?: string
   tipo_usuario: string
   activo?: boolean
+  materias_ids?: string[]
+}
+
+export interface MateriaDocenteItem {
+  id: string
+  nombre: string
+  codigo?: string | null
+  asignada: boolean
+}
+
+export interface MateriasDocenteResponse {
+  docente: {
+    id: string
+    nombre: string
+    email?: string | null
+  }
+  materias: MateriaDocenteItem[]
+  asignadas: { id: string; nombre: string; codigo?: string | null }[]
 }
 
 export interface UsuarioFilters {
@@ -93,6 +116,29 @@ export const usuariosService = {
 
   activar(id: string) {
     return api.put<{ message: string; user: Usuario }>(`/users/${id}`, { activo: true })
+  },
+
+  getMateriasDocente(idDocente: string) {
+    return api.get<MateriasDocenteResponse>(`/users/${idDocente}/materias`)
+  },
+
+  syncMateriasDocente(idDocente: string, materiasIds: string[]) {
+    return api.post<{ message: string; materias: { id: string; nombre: string; codigo?: string | null }[] }>(
+      `/users/${idDocente}/materias`,
+      { materias_ids: materiasIds }
+    )
+  },
+
+  vincularMateria(idDocente: string, idMateria: string) {
+    return api.post<{ message: string; materias: { id: string; nombre: string; codigo?: string | null }[] }>(
+      `/users/${idDocente}/materias/${idMateria}`
+    )
+  },
+
+  desvincularMateria(idDocente: string, idMateria: string) {
+    return api.delete<{ message: string; materias: { id: string; nombre: string; codigo?: string | null }[] }>(
+      `/users/${idDocente}/materias/${idMateria}`
+    )
   },
 
   async listRoles(): Promise<Rol[]> {

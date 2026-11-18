@@ -67,6 +67,8 @@ class StoreUserRequest extends FormRequest
             'apellido_materno' => ['nullable', 'string', 'max:100'],
             'password'         => ['required', 'string', 'min:8', 'max:64'],
             'activo'           => ['nullable', 'boolean'],
+            'materias_ids'     => ['nullable', 'array'],
+            'materias_ids.*'   => ['uuid', 'exists:materias,id'],
 
             // Email obligatorio para docente y auxiliar con dominio institucional estricto
             'email'            => [

@@ -7,9 +7,15 @@ export interface Noticia {
   publico_objetivo: 'Todos' | 'Docentes' | 'Estudiantes';
   es_publica: boolean;
   id_examen?: string | null;
+  id_materia?: string | null;
   examen?: {
     id: string;
     materia_id?: string;
+  } | null;
+  materia?: {
+    id: string;
+    nombre: string;
+    codigo?: string;
   } | null;
   autor: {
     id: string;
@@ -32,6 +38,7 @@ export interface StoreNoticiaPayload {
   publico_objetivo: 'Todos' | 'Docentes' | 'Estudiantes';
   es_publica: boolean;
   id_examen?: string | null;
+  id_materia?: string | null;
 }
 
 export const noticiasService = {
