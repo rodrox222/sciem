@@ -133,11 +133,13 @@ export function UsuarioFormModal({
       nuevosErrores.ci = 'El CI es obligatorio.'
     }
 
+    const EMAIL_PERMITIDO_REGEX = /^[a-zA-Z0-9._%+-]+@(fcyt\.umss\.edu\.bo|est\.umss\.edu|gmail\.com)$/i
+
     if (formulario.tipo_usuario !== 'admin') {
       if (!formulario.email.trim()) {
-        nuevosErrores.email = 'El correo es obligatorio.'
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formulario.email)) {
-        nuevosErrores.email = 'Ingrese un correo válido.'
+        nuevosErrores.email = 'El correo electrónico es obligatorio.'
+      } else if (!EMAIL_PERMITIDO_REGEX.test(formulario.email.trim())) {
+        nuevosErrores.email = 'El correo electrónico ingresado no es un correo permitido.'
       }
     }
 
@@ -153,6 +155,11 @@ export function UsuarioFormModal({
 
     if (!formulario.tipo_usuario) {
       nuevosErrores.tipo_usuario = 'Seleccione un rol.'
+    } else if (!modoEdicion && formulario.tipo_usuario === 'admin') {
+      const rolAdmin = roles.find((r) => r.codigo === 'admin')
+      if (rolAdmin && rolAdmin.disponible === false) {
+        nuevosErrores.tipo_usuario = 'Ya existe un administrador en el sistema. No se permite crear otro.'
+      }
     }
 
     setErrores(nuevosErrores)
@@ -336,13 +343,13 @@ export function UsuarioFormModal({
               {formulario.tipo_usuario !== 'admin' && (
                 <div>
                   <Label className="mb-1.5 block text-xs font-semibold">
-                    Correo institucional *
+                    Correo electrónico *
                   </Label>
                   <Input
                     type="email"
                     value={formulario.email}
                     onChange={(e) => actualizarCampo('email', e.target.value)}
-                    placeholder="correo@fcyt.umss.edu.bo"
+                    placeholder="ejemplo@correo.com"
                     className={errores.email ? 'border-sci-red' : ''}
                   />
                   {errores.email && (
@@ -395,11 +402,21 @@ export function UsuarioFormModal({
                     />
                   </SelectTrigger>
                   <SelectContent>
-                    {roles.map((item) => (
-                      <SelectItem key={item.codigo} value={item.codigo}>
-                        {item.nombre}
-                      </SelectItem>
-                    ))}
+                    {roles.map((item) => {
+                      const esAdmin = item.codigo === 'admin'
+                      const ocultarAdmin =
+                        esAdmin &&
+                        item.disponible === false &&
+                        (!modoEdicion || usuario?.tipo_usuario !== 'admin')
+
+                      if (ocultarAdmin) return null
+
+                      return (
+                        <SelectItem key={item.codigo} value={item.codigo}>
+                          {item.nombre}
+                        </SelectItem>
+                      )
+                    })}
                   </SelectContent>
                 </Select>
                 {errores.tipo_usuario && (

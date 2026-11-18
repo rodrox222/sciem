@@ -19,6 +19,7 @@ export interface Usuario {
 export interface Rol {
   codigo: string
   nombre: string
+  disponible?: boolean
 }
 
 interface RawRolItem {
@@ -31,6 +32,7 @@ interface RawRolItem {
   label?: string
   descripcion?: string
   nombre_rol?: string
+  disponible?: boolean
 }
 
 export interface UsuarioPayload {
@@ -105,8 +107,13 @@ export const usuariosService = {
     cachedRoles = lista.map((item: RawRolItem) => ({
       codigo: String(item.codigo ?? item.value ?? item.valor ?? item.id ?? item.tipo_usuario ?? ''),
       nombre: item.nombre ?? item.label ?? item.descripcion ?? item.nombre_rol ?? '',
+      disponible: item.disponible !== false,
     }))
 
     return cachedRoles
+  },
+
+  clearRolesCache() {
+    cachedRoles = null
   },
 }

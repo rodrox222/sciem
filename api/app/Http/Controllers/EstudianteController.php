@@ -194,6 +194,14 @@ class EstudianteController extends Controller
             ->where('id_estudiante', $estudianteExistente->id)
             ->first() : null;
 
+        if ($inscripcionPrevia) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'El estudiante ya se encuentra inscrito en este examen.',
+                'error_type' => 'ESTUDIANTE_YA_INSCRITO',
+            ], 422);
+        }
+
         $estadoAnterior = $inscripcionPrevia ? $inscripcionPrevia->estado : null;
 
         $estudiante = DB::transaction(function () use ($examen, $data, $estado) {

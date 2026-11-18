@@ -7,7 +7,9 @@ use App\Http\Requests\UpdateUserRequest;
 use App\Models\Admin;
 use App\Models\Auxiliar;
 use App\Models\Docente;
+use App\Models\Examen;
 use App\Models\LogAuditoria;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -60,6 +62,16 @@ class UserController extends Controller
     {
         $data = $request->validated();
         $tipo = $data['tipo_usuario'];
+
+        if ($tipo === 'admin' && Admin::count() > 0) {
+            return response()->json([
+                'message' => 'Ya existe un administrador registrado en el sistema. No se permite crear más de un administrador.',
+                'errors'  => [
+                    'tipo_usuario' => ['Ya existe un administrador registrado en el sistema. No se permite crear más de un administrador.'],
+                ],
+            ], 422);
+        }
+
         unset($data['tipo_usuario']);
 
         $activoBool = isset($data['activo'])
@@ -187,6 +199,31 @@ class UserController extends Controller
 
         $user->newQuery()->where('id', $user->id)->update(['activo' => DB::raw('false')]);
 
+        // Desactivación en cascada: si es auxiliar, dar de baja sus asignaciones activas en exámenes pendientes
+        if ($tipo === 'auxiliar') {
+            $ahora = Carbon::now('America/La_Paz');
+            $examenesPendientesIds = Examen::whereIn('estado', ['Programado', 'En proceso'])
+                ->where(function ($q) use ($ahora) {
+                    $q->where('fecha', '>', $ahora->toDateString())
+                      ->orWhere(function ($sub) use ($ahora) {
+                          $sub->where('fecha', $ahora->toDateString())
+                              ->where('hora_fin', '>=', $ahora->toTimeString());
+                      });
+                })
+                ->pluck('id');
+
+            if ($examenesPendientesIds->isNotEmpty()) {
+                DB::table('examen_auxiliar')
+                    ->where('id_auxiliar', $user->id)
+                    ->whereIn('id_examen', $examenesPendientesIds)
+                    ->where('estado', 'Activo')
+                    ->update([
+                        'estado'     => 'Inactivo',
+                        'updated_at' => $ahora,
+                    ]);
+            }
+        }
+
         try {
             $this->registrarLog($request, 'USUARIO_DESACTIVADO', [
                 'target_type'        => $tipo,
@@ -310,6 +347,26 @@ class UserController extends Controller
             if ($adminsActivos <= 1) {
                 return response()->json([
                     'message' => 'No se puede desactivar al único administrador activo.'
+                ], 422);
+            }
+        }
+
+        if ($tipo === 'docente' && filter_var($user->activo, FILTER_VALIDATE_BOOLEAN)) {
+            $ahora = Carbon::now('America/La_Paz');
+            $tieneExamenesPendientes = Examen::where('id_docente', $user->id)
+                ->whereIn('estado', ['Programado', 'En proceso'])
+                ->where(function ($q) use ($ahora) {
+                    $q->where('fecha', '>', $ahora->toDateString())
+                      ->orWhere(function ($sub) use ($ahora) {
+                          $sub->where('fecha', $ahora->toDateString())
+                              ->where('hora_fin', '>=', $ahora->toTimeString());
+                      });
+                })
+                ->exists();
+
+            if ($tieneExamenesPendientes) {
+                return response()->json([
+                    'message' => 'No se puede desactivar al docente porque tiene exámenes programados pendientes o en curso.',
                 ], 422);
             }
         }

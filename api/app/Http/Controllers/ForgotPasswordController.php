@@ -22,10 +22,10 @@ class ForgotPasswordController extends Controller
                 'required',
                 'string',
                 'email',
-                'regex:/^[a-zA-Z0-9._%+-]+@(est\.umss\.edu|gmail\.com)$/i',
+                'regex:/^[a-zA-Z0-9._%+-]+@(fcyt\.umss\.edu\.bo|est\.umss\.edu|gmail\.com)$/i',
             ],
         ], [
-            'email.regex' => 'Solo se permiten correos validos.',
+            'email.regex' => 'El correo electrónico ingresado no es un correo permitido.',
         ]);
 
         $cuenta = $this->buscarPorEmail($request->email);

@@ -15,9 +15,17 @@ class UpdateAulaRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'nombre'    => ['sometimes', 'required', 'string', 'max:50'],
+            'nombre'    => [
+                'sometimes',
+                'required',
+                'string',
+                'max:50',
+                Rule::unique('aulas', 'nombre')
+                    ->where(fn ($q) => $q->where('estado', '!=', 'Inactiva'))
+                    ->ignore($this->route('id') ?? $this->route('aula')),
+            ],
             'ubicacion' => ['sometimes', 'required', 'string', 'max:100'],
-            'estado'    => ['sometimes', 'required', 'string', Rule::in(['Disponible', 'Mantenimiento', 'Ocupada'])],
+            'estado'    => ['sometimes', 'required', 'string', Rule::in(['Disponible', 'Mantenimiento', 'Ocupada', 'Inactiva'])],
             'capacidad' => ['sometimes', 'required', 'integer', 'min:1', 'max:32767'],
         ];
     }

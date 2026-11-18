@@ -11,6 +11,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Trash2,
   Users,
   Wrench,
 } from 'lucide-react'
@@ -33,12 +34,14 @@ const estadoStyles: Record<AulaEstado, string> = {
   Disponible: 'border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy',
   Mantenimiento: 'border-sci-amber/30 bg-sci-amber/10 text-sci-amber',
   Ocupada: 'border-sci-red/30 bg-sci-red/10 text-sci-red',
+  Inactiva: 'border-border bg-muted/60 text-muted-foreground',
 }
 
 const topBorderStyles: Record<AulaEstado, string> = {
   Disponible: 'bg-sci-cyan',
   Mantenimiento: 'bg-sci-amber',
   Ocupada: 'bg-sci-red',
+  Inactiva: 'bg-muted-foreground',
 }
 
 const todayLocal = () => {
@@ -65,6 +68,30 @@ export default function AulasPage() {
   // Estados para validación de exámenes programados
   const [aulaPorConfirmar, setAulaPorConfirmar] = useState<Aula | null>(null)
   const [examenesFuturos, setExamenesFuturos] = useState<Examen[]>([])
+
+  // Estados para borrado lógico (desactivación)
+  const [aulaEliminar, setAulaEliminar] = useState<Aula | null>(null)
+  const [eliminando, setEliminando] = useState(false)
+  const [errorEliminar, setErrorEliminar] = useState('')
+
+  const confirmarDesactivarAula = async () => {
+    if (!aulaEliminar) return
+
+    try {
+      setEliminando(true)
+      setErrorEliminar('')
+      await aulasService.delete(aulaEliminar.id)
+      setAulaEliminar(null)
+      setSuccess('Ambiente desactivado exitosamente.')
+      await loadAulas()
+    } catch (err) {
+      setErrorEliminar(
+        err instanceof Error ? err.message : 'No se pudo desactivar el ambiente.',
+      )
+    } finally {
+      setEliminando(false)
+    }
+  }
 
   const loadAulas = useCallback(async () => {
     setLoading(true)
@@ -386,7 +413,7 @@ export default function AulasPage() {
                             <Pencil className="h-3.5 w-3.5" /> Editar
                           </Button>
 
-                          {aula.estado !== 'Ocupada' && (
+                          {aula.estado !== 'Ocupada' && aula.estado !== 'Inactiva' && (
                             <Button
                               type="button"
                               variant="ghost"
@@ -407,6 +434,21 @@ export default function AulasPage() {
                               {aula.estado === 'Mantenimiento'
                                 ? 'Habilitar'
                                 : 'Mantenimiento'}
+                            </Button>
+                          )}
+
+                          {aula.estado !== 'Inactiva' && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setErrorEliminar('')
+                                setAulaEliminar(aula)
+                              }}
+                              className="cursor-pointer gap-1 text-xs text-sci-red hover:bg-sci-red/10"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" /> Desactivar
                             </Button>
                           )}
                         </div>
@@ -556,6 +598,28 @@ export default function AulasPage() {
               ? 'destructive'
               : 'default'
           }
+        />
+      )}
+
+      {/* Modal de confirmación para borrado lógico (desactivación) */}
+      {aulaEliminar && (
+        <ConfirmModal
+          open
+          onOpenChange={(abierto) => !abierto && !eliminando && setAulaEliminar(null)}
+          title="Desactivar ambiente"
+          description={
+            errorEliminar ? (
+              <span className="font-semibold text-sci-red">{errorEliminar}</span>
+            ) : (
+              `¿Está seguro de desactivar el ambiente "${aulaEliminar.nombre}"? Si tiene exámenes programados pendientes o en curso, la operación será denegada para proteger la integridad académica.`
+            )
+          }
+          confirmText={eliminando ? 'Desactivando...' : 'Desactivar'}
+          cancelText="Cancelar"
+          onConfirm={() => void confirmarDesactivarAula()}
+          onCancel={() => setAulaEliminar(null)}
+          variant="destructive"
+          showCancel={!eliminando}
         />
       )}
     </div>

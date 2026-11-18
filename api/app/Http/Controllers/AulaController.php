@@ -8,7 +8,9 @@ use App\Models\Admin;
 use App\Models\Aula;
 use App\Models\Auxiliar;
 use App\Models\Docente;
+use App\Models\Examen;
 use App\Models\LogAuditoria;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -41,6 +43,8 @@ class AulaController extends Controller
         }
         if ($estado) {
             $query->where('estado', $estado);
+        } elseif (!$request->boolean('incluir_inactivas')) {
+            $query->where('estado', '!=', 'Inactiva');
         }
 
         return response()->json($query->orderBy('nombre', 'asc')->paginate($perPage));
@@ -121,7 +125,7 @@ class AulaController extends Controller
     }
 
     /**
-     * Eliminar un aula.
+     * Desactivar un aula (borrado lógico).
      */
     public function destroy(Request $request, string $id): JsonResponse
     {
@@ -131,22 +135,41 @@ class AulaController extends Controller
             return response()->json(['message' => 'Aula no encontrada.'], 404);
         }
 
+        $ahora = Carbon::now('America/La_Paz');
+        $tieneExamenesPendientes = Examen::where('id_aula', $aula->id)
+            ->whereIn('estado', ['Programado', 'En proceso'])
+            ->where(function ($q) use ($ahora) {
+                $q->where('fecha', '>', $ahora->toDateString())
+                  ->orWhere(function ($sub) use ($ahora) {
+                      $sub->where('fecha', $ahora->toDateString())
+                          ->where('hora_fin', '>=', $ahora->toTimeString());
+                  });
+            })
+            ->exists();
+
+        if ($tieneExamenesPendientes) {
+            return response()->json([
+                'message' => 'No se puede desactivar el ambiente porque tiene exámenes programados pendientes o en curso.',
+            ], 422);
+        }
+
         $detalles = [
-            'target_type' => 'aula',
-            'target_id'   => $aula->id,
-            'nombre'      => $aula->nombre,
-            'ubicacion'   => $aula->ubicacion,
-            'capacidad'   => $aula->capacidad,
-            'estado'      => $aula->estado,
+            'target_type'        => 'aula',
+            'target_id'          => $aula->id,
+            'nombre'             => $aula->nombre,
+            'ubicacion'          => $aula->ubicacion,
+            'capacidad'          => $aula->capacidad,
+            'valores_anteriores' => ['estado' => $aula->estado],
+            'valores_nuevos'     => ['estado' => 'Inactiva'],
         ];
 
-        $aula->delete();
+        $aula->update(['estado' => 'Inactiva']);
 
         Cache::forget('catalogo_aulas_disponibles');
 
-        $this->registrarAuditoria($request, 'AULA_ELIMINADA', $detalles);
+        $this->registrarAuditoria($request, 'AULA_DESACTIVADA', $detalles);
 
-        return response()->json(['message' => 'Aula eliminada exitosamente.']);
+        return response()->json(['message' => 'Ambiente desactivado exitosamente.']);
     }
 
     /**

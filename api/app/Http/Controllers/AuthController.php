@@ -28,7 +28,7 @@ class AuthController extends Controller
             'password' => 'required|string',
             'role'     => 'nullable|string|in:estudiante,auxiliar,docente,admin',
         ], [
-            'email.regex' => 'Debe ingresar un correo institucional válido o identificador numérico.'
+            'email.regex' => 'Debe ingresar un correo permitido.'
         ]);
 
         $rawIdentifier = trim($request->email);

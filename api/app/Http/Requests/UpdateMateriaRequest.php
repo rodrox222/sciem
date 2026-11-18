@@ -20,7 +20,9 @@ class UpdateMateriaRequest extends FormRequest
                 'required',
                 'string',
                 'max:150',
-                Rule::unique('materias', 'nombre')->ignore($this->route('id')),
+                Rule::unique('materias', 'nombre')
+                    ->where(fn ($q) => $q->whereRaw('activo is true'))
+                    ->ignore($this->route('id') ?? $this->route('materia')),
             ],
         ];
     }

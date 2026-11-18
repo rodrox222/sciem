@@ -69,12 +69,13 @@ Route::middleware('auth:sanctum')->group(function () {
         ]);
     });
 
-    // Endpoint de roles estático para selectores
+    // Endpoint de roles para selectores con disponibilidad según regla de admin único
     Route::get('roles', function () {
+        $adminExiste = \App\Models\Admin::count() > 0;
         return response()->json([
-            ['id' => 'admin', 'nombre' => 'Administrador'],
-            ['id' => 'docente', 'nombre' => 'Docente'],
-            ['id' => 'auxiliar', 'nombre' => 'Auxiliar'],
+            ['id' => 'admin', 'nombre' => 'Administrador', 'disponible' => !$adminExiste],
+            ['id' => 'docente', 'nombre' => 'Docente', 'disponible' => true],
+            ['id' => 'auxiliar', 'nombre' => 'Auxiliar', 'disponible' => true],
         ]);
     });
 
@@ -121,16 +122,21 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('configuracion/inactividad', [ConfiguracionSistemaController::class, 'updateTiempoInactividad']);
     });
 
-    // --- AULAS ---
+    // --- AULAS / AMBIENTES ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('aulas', [AulaController::class, 'index']);
         Route::get('aulas/{id}', [AulaController::class, 'show']);
+        Route::get('ambientes', [AulaController::class, 'index']);
+        Route::get('ambientes/{id}', [AulaController::class, 'show']);
     });
 
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::post('aulas', [AulaController::class, 'store']);
         Route::put('aulas/{id}', [AulaController::class, 'update']);
         Route::delete('aulas/{id}', [AulaController::class, 'destroy']);
+        Route::post('ambientes', [AulaController::class, 'store']);
+        Route::put('ambientes/{id}', [AulaController::class, 'update']);
+        Route::delete('ambientes/{id}', [AulaController::class, 'destroy']);
     });
 
     // --- EXÁMENES ---

@@ -11,6 +11,7 @@ use App\Models\Docente;
 use App\Models\Examen;
 use App\Models\LogAuditoria;
 use App\Models\Norma;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -100,6 +101,29 @@ class NormaController extends Controller
             throw ValidationException::withMessages(['tipo' => 'El tipo de una norma existente no puede cambiarse.']);
         }
 
+        // Si se intenta desactivar la norma, verificar que no tenga exámenes pendientes o en curso
+        if (isset($data['estado']) && $data['estado'] === 'Inactivo' && $norma->estado !== 'Inactivo') {
+            $ahora = Carbon::now('America/La_Paz');
+            $tieneExamenesPendientes = Examen::whereHas('normas', function ($q) use ($norma) {
+                    $q->where('normas.id', $norma->id);
+                })
+                ->whereIn('estado', ['Programado', 'En proceso'])
+                ->where(function ($q) use ($ahora) {
+                    $q->where('fecha', '>', $ahora->toDateString())
+                      ->orWhere(function ($sub) use ($ahora) {
+                          $sub->where('fecha', $ahora->toDateString())
+                              ->where('hora_fin', '>=', $ahora->toTimeString());
+                      });
+                })
+                ->exists();
+
+            if ($tieneExamenesPendientes) {
+                return response()->json([
+                    'message' => 'No se puede desactivar la norma porque está asociada a exámenes programados pendientes o en curso.',
+                ], 422);
+            }
+        }
+
         $camposAfectados = array_keys($data);
         $valoresAnteriores = $norma->only($camposAfectados);
 
@@ -134,18 +158,42 @@ class NormaController extends Controller
             ], 403);
         }
 
+        $ahora = Carbon::now('America/La_Paz');
+        $tieneExamenesPendientes = Examen::whereHas('normas', function ($q) use ($norma) {
+                $q->where('normas.id', $norma->id);
+            })
+            ->whereIn('estado', ['Programado', 'En proceso'])
+            ->where(function ($q) use ($ahora) {
+                $q->where('fecha', '>', $ahora->toDateString())
+                  ->orWhere(function ($sub) use ($ahora) {
+                      $sub->where('fecha', $ahora->toDateString())
+                          ->where('hora_fin', '>=', $ahora->toTimeString());
+                  });
+            })
+            ->exists();
+
+        if ($tieneExamenesPendientes) {
+            return response()->json([
+                'message' => 'No se puede desactivar la norma porque está asociada a exámenes programados pendientes o en curso.',
+            ], 422);
+        }
+
         $detalles = [
-            'target_type' => 'normas',
-            'target_id'   => $norma->id,
-            'titulo'      => $norma->titulo,
-            'tipo'        => $norma->tipo,
+            'target_type'        => 'normas',
+            'target_id'          => $norma->id,
+            'titulo'             => $norma->titulo,
+            'tipo'               => $norma->tipo,
+            'valores_anteriores' => ['estado' => $norma->estado],
+            'valores_nuevos'     => ['estado' => 'Inactivo'],
         ];
 
-        $norma->delete();
+        // Borrado lógico: pasar a Inactivo
+        $norma->update(['estado' => 'Inactivo']);
+        Cache::forget('catalogo_normas_generales');
 
-        $this->registrarAuditoria($request, 'NORMA_ELIMINADA', $detalles);
+        $this->registrarAuditoria($request, 'NORMA_DESACTIVADA', $detalles);
 
-        return response()->json(['message' => 'Norma eliminada exitosamente.']);
+        return response()->json(['message' => 'Norma desactivada exitosamente.']);
     }
 
     public function crearParticularesParaExamen(Request $request, string $id): JsonResponse
