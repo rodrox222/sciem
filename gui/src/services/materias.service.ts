@@ -5,6 +5,7 @@ export interface Materia {
   id: string
   nombre: string
   codigo?: string | null
+  activo?: boolean
   examenes_count?: number
   created_at?: string
   updated_at?: string
@@ -19,6 +20,8 @@ export interface MateriaFilters {
   search?: string
   page?: number
   perPage?: number
+  incluir_inactivas?: boolean
+  activo?: boolean
 }
 
 let cachedMateriasAll: Materia[] | null = null
@@ -28,6 +31,8 @@ const buildQuery = (filters: MateriaFilters): string => {
   if (filters.page) params.set('page', String(filters.page))
   if (filters.search?.trim()) params.set('search', filters.search.trim())
   if (filters.perPage) params.set('per_page', String(filters.perPage))
+  if (filters.incluir_inactivas) params.set('incluir_inactivas', '1')
+  if (filters.activo !== undefined) params.set('activo', filters.activo ? '1' : '0')
 
   const query = params.toString()
   return query ? `?${query}` : ''
@@ -84,6 +89,18 @@ export const materiasService = {
 
   async delete(id: string) {
     const res = await api.delete<{ message: string }>(`/materias/${id}`)
+    cachedMateriasAll = null
+    return res
+  },
+
+  async reactivar(id: string) {
+    const res = await api.patch<{ message: string; materia: Materia }>(`/materias/${id}/reactivar`, {})
+    cachedMateriasAll = null
+    return res
+  },
+
+  async forceDelete(id: string) {
+    const res = await api.delete<{ message: string }>(`/materias/${id}/force`)
     cachedMateriasAll = null
     return res
   },

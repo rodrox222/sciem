@@ -74,6 +74,41 @@ export default function AulasPage() {
   const [eliminando, setEliminando] = useState(false)
   const [errorEliminar, setErrorEliminar] = useState('')
 
+  // Estados para eliminación física definitiva
+  const [aulaForceEliminar, setAulaForceEliminar] = useState<Aula | null>(null)
+  const [eliminandoForce, setEliminandoForce] = useState(false)
+  const [errorForceEliminar, setErrorForceEliminar] = useState('')
+
+  const handleReactivarAula = async (aula: Aula) => {
+    try {
+      setChangingId(aula.id)
+      setError('')
+      const res = await aulasService.reactivar(aula.id)
+      setSuccess(res.message || 'Ambiente reactivado exitosamente.')
+      await loadAulas()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo reactivar el ambiente.')
+    } finally {
+      setChangingId(null)
+    }
+  }
+
+  const confirmarForceEliminarAula = async () => {
+    if (!aulaForceEliminar) return
+    try {
+      setEliminandoForce(true)
+      setErrorForceEliminar('')
+      await aulasService.forceDelete(aulaForceEliminar.id)
+      setAulaForceEliminar(null)
+      setSuccess('Ambiente eliminado permanentemente.')
+      await loadAulas()
+    } catch (err) {
+      setErrorForceEliminar(err instanceof Error ? err.message : 'No se pudo eliminar el ambiente.')
+    } finally {
+      setEliminandoForce(false)
+    }
+  }
+
   const confirmarDesactivarAula = async () => {
     if (!aulaEliminar) return
 
@@ -323,6 +358,7 @@ export default function AulasPage() {
               <option value="Disponible">Disponible</option>
               <option value="Mantenimiento">Mantenimiento</option>
               <option value="Ocupada">Ocupada</option>
+              <option value="Inactiva">Desactivados</option>
             </select>
 
             <Button type="submit" variant="outline" className="h-10 cursor-pointer gap-2 border-border">
@@ -389,11 +425,17 @@ export default function AulasPage() {
                             {aula.ubicacion}
                           </p>
                         </div>
-                        <span
-                          className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${estadoStyles[aula.estado]}`}
-                        >
-                          {aula.estado}
-                        </span>
+                        {aula.estado === 'Inactiva' ? (
+                          <span className="rounded-full border border-slate-300 bg-slate-100 text-slate-700 px-2.5 py-0.5 text-[11px] font-semibold dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                            Desactivado
+                          </span>
+                        ) : (
+                          <span
+                            className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${estadoStyles[aula.estado]}`}
+                          >
+                            {aula.estado}
+                          </span>
+                        )}
                       </div>
 
                       <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -403,53 +445,86 @@ export default function AulasPage() {
                         </span>
 
                         <div className="flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openEdit(aula)}
-                            className="cursor-pointer gap-1 text-xs border-border"
-                          >
-                            <Pencil className="h-3.5 w-3.5" /> Editar
-                          </Button>
+                          {aula.estado === 'Inactiva' ? (
+                            <>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void handleReactivarAula(aula)}
+                                disabled={changingId === aula.id}
+                                className="cursor-pointer gap-1 text-xs border-sci-blue/30 text-sci-blue hover:bg-sci-blue/10"
+                              >
+                                {changingId === aula.id ? (
+                                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <RefreshCw className="h-3.5 w-3.5" />
+                                )}
+                                Reactivar
+                              </Button>
 
-                          {aula.estado !== 'Ocupada' && aula.estado !== 'Inactiva' && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => void handleRequestMaintenance(aula)}
-                              disabled={changingId === aula.id}
-                              className={`cursor-pointer text-xs ${
-                                aula.estado === 'Mantenimiento'
-                                  ? 'text-sci-blue hover:bg-sci-blue/10'
-                                  : 'text-sci-amber hover:bg-sci-amber/10'
-                              }`}
-                            >
-                              {changingId === aula.id ? (
-                                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <Wrench className="h-3.5 w-3.5" />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setErrorForceEliminar('')
+                                  setAulaForceEliminar(aula)
+                                }}
+                                className="cursor-pointer gap-1 text-xs text-sci-red hover:bg-sci-red/10"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" /> Eliminar permanentemente
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openEdit(aula)}
+                                className="cursor-pointer gap-1 text-xs border-border"
+                              >
+                                <Pencil className="h-3.5 w-3.5" /> Editar
+                              </Button>
+
+                              {aula.estado !== 'Ocupada' && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => void handleRequestMaintenance(aula)}
+                                  disabled={changingId === aula.id}
+                                  className={`cursor-pointer text-xs ${
+                                    aula.estado === 'Mantenimiento'
+                                      ? 'text-sci-blue hover:bg-sci-blue/10'
+                                      : 'text-sci-amber hover:bg-sci-amber/10'
+                                  }`}
+                                >
+                                  {changingId === aula.id ? (
+                                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Wrench className="h-3.5 w-3.5" />
+                                  )}
+                                  {aula.estado === 'Mantenimiento'
+                                    ? 'Habilitar'
+                                    : 'Mantenimiento'}
+                                </Button>
                               )}
-                              {aula.estado === 'Mantenimiento'
-                                ? 'Habilitar'
-                                : 'Mantenimiento'}
-                            </Button>
-                          )}
 
-                          {aula.estado !== 'Inactiva' && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setErrorEliminar('')
-                                setAulaEliminar(aula)
-                              }}
-                              className="cursor-pointer gap-1 text-xs text-sci-red hover:bg-sci-red/10"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" /> Desactivar
-                            </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setErrorEliminar('')
+                                  setAulaEliminar(aula)
+                                }}
+                                className="cursor-pointer gap-1 text-xs text-sci-red hover:bg-sci-red/10"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" /> Desactivar
+                              </Button>
+                            </>
                           )}
                         </div>
                       </div>
@@ -620,6 +695,28 @@ export default function AulasPage() {
           onCancel={() => setAulaEliminar(null)}
           variant="destructive"
           showCancel={!eliminando}
+        />
+      )}
+
+      {/* Modal de confirmación para eliminación física permanente */}
+      {aulaForceEliminar && (
+        <ConfirmModal
+          open
+          onOpenChange={(abierto) => !abierto && !eliminandoForce && setAulaForceEliminar(null)}
+          title="Eliminar permanentemente"
+          description={
+            errorForceEliminar ? (
+              <span className="font-semibold text-sci-red">{errorForceEliminar}</span>
+            ) : (
+              `¿Está seguro de eliminar PERMANENTEMENTE el ambiente "${aulaForceEliminar.nombre}"? Esta acción borrará el registro de la base de datos de forma definitiva. Solo es posible si no cuenta con exámenes históricos vinculados.`
+            )
+          }
+          confirmText={eliminandoForce ? 'Eliminando...' : 'Eliminar permanentemente'}
+          cancelText="Cancelar"
+          onConfirm={() => void confirmarForceEliminarAula()}
+          onCancel={() => setAulaForceEliminar(null)}
+          variant="destructive"
+          showCancel={!eliminandoForce}
         />
       )}
     </div>

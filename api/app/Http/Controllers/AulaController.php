@@ -41,10 +41,14 @@ class AulaController extends Controller
                   ->orWhere('ubicacion', 'ilike', "%{$search}%");
             });
         }
-        if ($estado) {
-            $query->where('estado', $estado);
+        if ($estado === 'Inactiva' || $estado === 'Desactivado' || $estado === 'Desactivada') {
+            $query->where(function ($q) {
+                $q->where('estado', 'Inactiva')->orWhereRaw('activo is false');
+            });
+        } elseif ($estado) {
+            $query->where('estado', $estado)->whereRaw('activo is true');
         } elseif (!$request->boolean('incluir_inactivas')) {
-            $query->where('estado', '!=', 'Inactiva');
+            $query->where('estado', '!=', 'Inactiva')->whereRaw('activo is true');
         }
 
         return response()->json($query->orderBy('nombre', 'asc')->paginate($perPage));
@@ -163,13 +167,82 @@ class AulaController extends Controller
             'valores_nuevos'     => ['estado' => 'Inactiva'],
         ];
 
-        $aula->update(['estado' => 'Inactiva']);
+        $aula->update([
+            'estado' => 'Inactiva',
+            'activo' => false,
+        ]);
 
         Cache::forget('catalogo_aulas_disponibles');
 
         $this->registrarAuditoria($request, 'AULA_DESACTIVADA', $detalles);
 
         return response()->json(['message' => 'Ambiente desactivado exitosamente.']);
+    }
+
+    /**
+     * Reactivar un aula desactivada.
+     */
+    public function reactivar(Request $request, string $id): JsonResponse
+    {
+        $aula = Aula::find($id);
+
+        if (!$aula) {
+            return response()->json(['message' => 'Ambiente no encontrado.'], 404);
+        }
+
+        $aula->update([
+            'estado' => 'Disponible',
+            'activo' => true,
+        ]);
+
+        Cache::forget('catalogo_aulas_disponibles');
+
+        $this->registrarAuditoria($request, 'AULA_REACTIVADA', [
+            'target_type' => 'aula',
+            'target_id'   => $aula->id,
+            'nombre'      => $aula->nombre,
+        ]);
+
+        return response()->json([
+            'message' => 'Ambiente reactivado exitosamente.',
+            'aula'    => $aula,
+        ]);
+    }
+
+    /**
+     * Eliminación permanente física de un aula (únicamente si no tiene historial).
+     */
+    public function forceDelete(Request $request, string $id): JsonResponse
+    {
+        $aula = Aula::find($id);
+
+        if (!$aula) {
+            return response()->json(['message' => 'Ambiente no encontrado.'], 404);
+        }
+
+        // Verificar si tiene exámenes históricos o dependencias asociadas
+        $tieneExamenes = Examen::where('id_aula', $aula->id)->exists();
+        if ($tieneExamenes) {
+            return response()->json([
+                'message' => 'No se puede eliminar permanentemente el ambiente porque cuenta con historial de evaluaciones asociadas. Solo puede mantenerse desactivado.',
+            ], 422);
+        }
+
+        $detalles = [
+            'target_type' => 'aula',
+            'target_id'   => $aula->id,
+            'nombre'      => $aula->nombre,
+            'ubicacion'   => $aula->ubicacion,
+            'capacidad'   => $aula->capacidad,
+        ];
+
+        $aula->delete();
+
+        Cache::forget('catalogo_aulas_disponibles');
+
+        $this->registrarAuditoria($request, 'AULA_ELIMINADA_DEFINITIVAMENTE', $detalles);
+
+        return response()->json(['message' => 'Ambiente eliminado permanentemente del sistema.']);
     }
 
     /**

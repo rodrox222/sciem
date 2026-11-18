@@ -196,6 +196,65 @@ class NormaController extends Controller
         return response()->json(['message' => 'Norma desactivada exitosamente.']);
     }
 
+    /**
+     * Reactivar una norma inactiva.
+     */
+    public function reactivar(Request $request, string $id): JsonResponse
+    {
+        $norma = Norma::find($id);
+
+        if (!$norma) {
+            return response()->json(['message' => 'Norma no encontrada.'], 404);
+        }
+
+        $norma->update(['estado' => 'Activo']);
+        Cache::forget('catalogo_normas_generales');
+
+        $this->registrarAuditoria($request, 'NORMA_REACTIVADA', [
+            'target_type' => 'normas',
+            'target_id'   => $norma->id,
+            'titulo'      => $norma->titulo,
+        ]);
+
+        return response()->json([
+            'message' => 'Norma reactivada exitosamente.',
+            'norma'   => $norma,
+        ]);
+    }
+
+    /**
+     * Eliminación permanente física de una norma (únicamente si no tiene historial en examen_norma).
+     */
+    public function forceDelete(Request $request, string $id): JsonResponse
+    {
+        $norma = Norma::find($id);
+
+        if (!$norma) {
+            return response()->json(['message' => 'Norma no encontrada.'], 404);
+        }
+
+        $tieneHistorial = DB::table('examen_norma')->where('id_norma', $norma->id)->exists();
+        if ($tieneHistorial) {
+            return response()->json([
+                'message' => 'No se puede eliminar permanentemente la norma porque cuenta con historial en evaluaciones asociadas. Solo puede mantenerse desactivada.',
+            ], 422);
+        }
+
+        $detalles = [
+            'target_type' => 'normas',
+            'target_id'   => $norma->id,
+            'titulo'      => $norma->titulo,
+            'tipo'        => $norma->tipo,
+        ];
+
+        $norma->delete();
+        Cache::forget('catalogo_normas_generales');
+
+        $this->registrarAuditoria($request, 'NORMA_ELIMINADA_DEFINITIVAMENTE', $detalles);
+
+        return response()->json(['message' => 'Norma eliminada permanentemente del sistema.']);
+    }
+
     public function crearParticularesParaExamen(Request $request, string $id): JsonResponse
     {
         $examen = Examen::find($id);

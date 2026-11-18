@@ -63,4 +63,12 @@ export const aulasService = {
   delete(id: string) {
     return api.delete<{ message: string }>(`/aulas/${id}`)
   },
+
+  reactivar(id: string) {
+    return api.patch<{ message: string; aula: Aula }>(`/aulas/${id}/reactivar`, {})
+  },
+
+  forceDelete(id: string) {
+    return api.delete<{ message: string }>(`/aulas/${id}/force`)
+  },
 }
