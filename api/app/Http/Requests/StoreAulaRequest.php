@@ -15,9 +15,14 @@ class StoreAulaRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'nombre'    => ['required', 'string', 'max:50'],
+            'nombre'    => [
+                'required',
+                'string',
+                'max:50',
+                Rule::unique('aulas', 'nombre')->where(fn ($q) => $q->where('estado', '!=', 'Inactiva')),
+            ],
             'ubicacion' => ['required', 'string', 'max:100'],
-            'estado'    => ['nullable', 'string', Rule::in(['Disponible', 'Mantenimiento', 'Ocupada'])],
+            'estado'    => ['nullable', 'string', Rule::in(['Disponible', 'Mantenimiento', 'Ocupada', 'Inactiva'])],
             'capacidad' => ['required', 'integer', 'min:1', 'max:32767'],
         ];
     }

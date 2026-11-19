@@ -12,8 +12,10 @@ import {
   ShieldAlert,
   Activity,
   UserX,
+  Trash2,
 } from 'lucide-react'
 
+import { ConfirmModal } from '@/components/ConfirmModal'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -42,6 +44,16 @@ const estadoBadges: Record<ExamenEstado, string> = {
   Terminado: 'border-muted-foreground/30 bg-muted text-muted-foreground',
 }
 
+function examenNoIniciado(examen: Examen | null): boolean {
+  if (!examen) return false
+  if (examen.estado !== 'Programado') return false
+  if (!examen.fecha || !examen.hora_ini) return true
+  const dia = examen.fecha.slice(0, 10)
+  const hora = examen.hora_ini.slice(0, 5)
+  const inicio = new Date(`${dia}T${hora}:00`)
+  return !Number.isNaN(inicio.getTime()) && inicio > new Date()
+}
+
 export default function DetalleExamenPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -64,6 +76,25 @@ export default function DetalleExamenPage() {
   const [exam, setExam] = useState<Examen | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  // Modal para eliminar examen reciente
+  const [modalEliminarAbierto, setModalEliminarAbierto] = useState(false)
+  const [eliminandoExamen, setEliminandoExamen] = useState(false)
+  const [errorEliminarExamen, setErrorEliminarExamen] = useState('')
+
+  const handleEliminarExamen = async () => {
+    if (!exam) return
+    try {
+      setEliminandoExamen(true)
+      setErrorEliminarExamen('')
+      await examenesService.delete(exam.id)
+      navigate('/examenes', { state: { success: 'Examen eliminado exitosamente.' } })
+    } catch (err) {
+      setErrorEliminarExamen(err instanceof Error ? err.message : 'No se pudo eliminar el examen.')
+    } finally {
+      setEliminandoExamen(false)
+    }
+  }
 
   const actualizarEstadoExamen = useCallback((estado: ExamenEstado) => {
     setExam((actual) => actual && actual.estado !== estado ? { ...actual, estado } : actual)
@@ -178,6 +209,21 @@ export default function DetalleExamenPage() {
               {exam.materia?.nombre ?? 'Asignatura'} · {exam.aula?.nombre ?? 'Aula asignada'}
             </p>
           </div>
+
+          {canEditExam && examenNoIniciado(exam) && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setErrorEliminarExamen('')
+                setModalEliminarAbierto(true)
+              }}
+              className="cursor-pointer gap-1.5 text-xs text-sci-red border-sci-red/30 hover:bg-sci-red/10"
+            >
+              <Trash2 className="h-4 w-4" /> Eliminar examen
+            </Button>
+          )}
         </div>
 
         {/* Controles Offline accesibles en todas las pestañas */}
@@ -314,6 +360,27 @@ export default function DetalleExamenPage() {
           </TabsContent>
         )}
       </Tabs>
+
+      {modalEliminarAbierto && exam && (
+        <ConfirmModal
+          open
+          onOpenChange={(open) => !open && !eliminandoExamen && setModalEliminarAbierto(false)}
+          title="Eliminar examen programado"
+          description={
+            errorEliminarExamen ? (
+              <span className="font-semibold text-sci-red">{errorEliminarExamen}</span>
+            ) : (
+              `¿Está seguro de eliminar el examen "${exam.nombre}"? Esta acción borrará la evaluación programada. Solo es posible si aún no ha iniciado y no cuenta con registros de asistencia ni ingresos en puerta.`
+            )
+          }
+          confirmText={eliminandoExamen ? 'Eliminando...' : 'Eliminar examen'}
+          cancelText="Cancelar"
+          onConfirm={() => void handleEliminarExamen()}
+          onCancel={() => setModalEliminarAbierto(false)}
+          variant="destructive"
+          showCancel={!eliminandoExamen}
+        />
+      )}
     </div>
   )
 }

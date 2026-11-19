@@ -80,4 +80,16 @@ export const normasService = {
       { normas: normIds },
     )
   },
+
+  delete(id: string) {
+    return api.delete<{ message: string }>(`/normas/${id}`)
+  },
+
+  reactivar(id: string) {
+    return api.patch<{ message: string; norma: Norma }>(`/normas/${id}/reactivar`, {})
+  },
+
+  forceDelete(id: string) {
+    return api.delete<{ message: string }>(`/normas/${id}/force`)
+  },
 }

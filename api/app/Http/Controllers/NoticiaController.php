@@ -25,6 +25,23 @@ class NoticiaController extends Controller
         }
 
         $data = $request->validated();
+        $idMateria = $data['id_materia'] ?? $data['materia_id'] ?? null;
+
+        if ($user instanceof Docente) {
+            if (isset($data['publico_objetivo']) && $data['publico_objetivo'] === 'Todos') {
+                return response()->json(['message' => 'La opción "Todos" está restringida al administrador.'], 422);
+            }
+            if (empty($idMateria)) {
+                return response()->json(['message' => 'Debe especificar una materia para la noticia.'], 422);
+            }
+            if (!$user->materias()->where('materias.id', $idMateria)->exists()) {
+                return response()->json(['message' => 'No tiene asignada la materia seleccionada.'], 422);
+            }
+            $data['id_materia'] = $idMateria;
+        } elseif (!empty($idMateria)) {
+            $data['id_materia'] = $idMateria;
+        }
+        unset($data['materia_id']);
 
         if (!empty($data['id_examen'])) {
             $examen = Examen::find($data['id_examen']);
@@ -106,7 +123,7 @@ class NoticiaController extends Controller
                     });
                 }
             })
-            ->with(['autor:id,nombre,apellido_paterno', 'examen:id,id_materia'])
+            ->with(['autor:id,nombre,apellido_paterno', 'examen:id,id_materia', 'materia:id,nombre'])
             ->orderBy('created_at', 'desc')
             ->paginate(10);
 
@@ -127,6 +144,23 @@ class NoticiaController extends Controller
         }
 
         $data = $request->validated();
+        $idMateria = $data['id_materia'] ?? $data['materia_id'] ?? null;
+
+        if ($user instanceof Docente) {
+            if (isset($data['publico_objetivo']) && $data['publico_objetivo'] === 'Todos') {
+                return response()->json(['message' => 'La opción "Todos" está restringida al administrador.'], 422);
+            }
+            if (empty($idMateria)) {
+                return response()->json(['message' => 'Debe especificar una materia para la noticia.'], 422);
+            }
+            if (!$user->materias()->where('materias.id', $idMateria)->exists()) {
+                return response()->json(['message' => 'No tiene asignada la materia seleccionada.'], 422);
+            }
+            $data['id_materia'] = $idMateria;
+        } elseif (!empty($idMateria)) {
+            $data['id_materia'] = $idMateria;
+        }
+        unset($data['materia_id']);
 
         if (!empty($data['id_examen'])) {
             $examen = Examen::find($data['id_examen']);

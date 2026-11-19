@@ -20,12 +20,14 @@ class Aula extends Model
         'ubicacion',
         'estado',
         'capacidad',
+        'activo',
     ];
 
     protected function casts(): array
     {
         return [
             'capacidad' => 'integer',
+            'activo'    => 'boolean',
         ];
     }
 }

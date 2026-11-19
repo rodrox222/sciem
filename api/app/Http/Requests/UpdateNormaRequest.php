@@ -18,7 +18,15 @@ class UpdateNormaRequest extends FormRequest
         $esAdmin = $this->user() instanceof Admin;
 
         return [
-            'titulo'      => ['sometimes', 'required', 'string', 'max:150'],
+            'titulo'      => [
+                'sometimes',
+                'required',
+                'string',
+                'max:150',
+                Rule::unique('normas', 'titulo')
+                    ->where(fn ($q) => $q->where('estado', '!=', 'Inactivo'))
+                    ->ignore($this->route('id') ?? $this->route('norma')),
+            ],
             'descripcion' => ['sometimes', 'required', 'string'],
             'tipo'        => [
                 'sometimes',

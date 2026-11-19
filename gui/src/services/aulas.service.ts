@@ -1,7 +1,7 @@
 import { api } from './api'
 import type { PaginatedResponse } from '@/types/api'
 
-export type AulaEstado = 'Disponible' | 'Mantenimiento' | 'Ocupada'
+export type AulaEstado = 'Disponible' | 'Mantenimiento' | 'Ocupada' | 'Inactiva'
 
 export interface Aula {
   id: string
@@ -58,5 +58,17 @@ export const aulasService = {
 
   update(id: string, payload: AulaPayload) {
     return api.put<AulaMutationResponse>(`/aulas/${id}`, payload)
+  },
+
+  delete(id: string) {
+    return api.delete<{ message: string }>(`/aulas/${id}`)
+  },
+
+  reactivar(id: string) {
+    return api.patch<{ message: string; aula: Aula }>(`/aulas/${id}/reactivar`, {})
+  },
+
+  forceDelete(id: string) {
+    return api.delete<{ message: string }>(`/aulas/${id}/force`)
   },
 }

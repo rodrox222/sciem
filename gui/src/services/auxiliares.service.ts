@@ -52,6 +52,17 @@ export const auxiliaresService = {
     )
   },
 
+  listarDisponiblesParaExamen(examenId: string, params: { search?: string; page?: number; perPage?: number } = {}) {
+    const q = new URLSearchParams()
+    if (params.search) q.set('search', params.search)
+    if (params.page) q.set('page', String(params.page))
+    if (params.perPage) q.set('per_page', String(params.perPage))
+    const queryStr = q.toString() ? `?${q.toString()}` : ''
+    return api.get<{ data: import('./estudiantes.service').Estudiante[]; total: number; last_page: number; current_page: number }>(
+      `/examenes/${examenId}/auxiliares-disponibles${queryStr}`,
+    )
+  },
+
   asignar(examenId: string, email: string) {
     return api.post<AsignarAuxiliarResponse>(
       `/examenes/${examenId}/auxiliares`,

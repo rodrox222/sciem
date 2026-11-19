@@ -30,6 +30,23 @@ class EstudianteController extends Controller
     {
         $query = Estudiante::query();
 
+        $user = $request->user();
+        $rol = \App\Services\RolOperativo::actual($request);
+        $esDocente = ($rol === 'docente') || ($user instanceof Docente);
+
+        // Si se solicita filtrar exclusivamente por mis estudiantes matriculados
+        if ($request->boolean('mis_estudiantes', false) && $esDocente && $user instanceof Docente) {
+            $materiasIds = $user->materias()->pluck('materias.id');
+
+            $estudiantesIds = DB::table('estudiante_examen as ee')
+                ->join('examenes as ex', 'ee.id_examen', '=', 'ex.id')
+                ->whereIn('ex.id_materia', $materiasIds)
+                ->pluck('ee.id_estudiante')
+                ->unique();
+
+            $query->whereIn('estudiantes.id', $estudiantesIds);
+        }
+
         if ($request->boolean('solo_alumnos', false)) {
             $query->whereRaw('es_auxiliar is false');
         }
@@ -193,6 +210,14 @@ class EstudianteController extends Controller
             ->where('id_examen', $examen->id)
             ->where('id_estudiante', $estudianteExistente->id)
             ->first() : null;
+
+        if ($inscripcionPrevia) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'El estudiante ya se encuentra inscrito en este examen.',
+                'error_type' => 'ESTUDIANTE_YA_INSCRITO',
+            ], 422);
+        }
 
         $estadoAnterior = $inscripcionPrevia ? $inscripcionPrevia->estado : null;
 

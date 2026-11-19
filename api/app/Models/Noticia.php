@@ -20,6 +20,7 @@ class Noticia extends Model
         'autor_id',
         'autor_tipo',
         'id_examen',
+        'id_materia',
     ];
 
     protected function casts(): array
@@ -39,5 +40,10 @@ class Noticia extends Model
     public function examen()
     {
         return $this->belongsTo(Examen::class, 'id_examen');
+    }
+
+    public function materia()
+    {
+        return $this->belongsTo(Materia::class, 'id_materia');
     }
 }

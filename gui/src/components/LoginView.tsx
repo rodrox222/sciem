@@ -11,8 +11,8 @@ interface LoginViewProps {
   onForgotPassword: () => void
 }
 
-// Dominios oficiales institucionales (o gmail si aplica a la HU)
-const EMAIL_INSTITUCIONAL_REGEX =
+// Dominios permitidos por el sistema
+const EMAIL_PERMITIDO_REGEX =
   /^[a-zA-Z0-9._%+-]+@(est\.umss\.edu|fcyt\.umss\.edu\.bo|gmail\.com)$/i
 const NUMERIC_REGEX = /^\d+$/
 
@@ -31,12 +31,12 @@ export const LoginView: React.FC<LoginViewProps> = ({
     setError(null)
 
     const cleanIdentifier = email.trim().toLowerCase()
-    const esInstitucional = EMAIL_INSTITUCIONAL_REGEX.test(cleanIdentifier)
+    const esPermitido = EMAIL_PERMITIDO_REGEX.test(cleanIdentifier)
     const esIdentificadorNumerico = NUMERIC_REGEX.test(cleanIdentifier)
 
-    if (!esInstitucional && !esIdentificadorNumerico) {
+    if (!esPermitido && !esIdentificadorNumerico) {
       setError(
-        'Ingrese un correo institucional válido (@fcyt.umss.edu.bo o @est.umss.edu).'
+        'Ingrese un correo permitido o un identificador numérico válido.'
       )
       return
     }
@@ -94,7 +94,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 htmlFor="login-email"
                 className="text-xs font-semibold text-foreground"
               >
-                Correo institucional
+                Correo permitido
               </Label>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -102,7 +102,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   id="login-email"
                   type="text"
                   required
-                  placeholder="ejemplo@fcyt.umss.edu.bo"
+                  placeholder="correo@ejemplo.com o carnet"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="h-11 pl-10 text-sm bg-background border-input rounded-xl"

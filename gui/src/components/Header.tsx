@@ -189,7 +189,7 @@ export const Header: React.FC = () => {
                   {userName.charAt(0).toUpperCase()}
                 </span>
                 <div className="hidden sm:flex flex-col text-left">
-                  <span className="max-w-[140px] truncate text-sm font-semibold text-foreground">
+                  <span className="max-w-[180px] lg:max-w-[240px] truncate text-sm font-semibold text-foreground" title={userName}>
                     {userName}
                   </span>
                   <span className="text-[11px] capitalize text-muted-foreground">

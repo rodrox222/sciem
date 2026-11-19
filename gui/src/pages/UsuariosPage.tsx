@@ -7,6 +7,7 @@ import { ConfirmModal } from '@/components/ConfirmModal'
 import { UsuarioFilters } from '@/components/usuarios/UsuarioFilters'
 import { UsuarioCard } from '@/components/usuarios/UsuarioCard'
 import { UsuarioFormModal } from '@/components/usuarios/UsuarioFormModal'
+import { AsignarMateriasDocenteModal } from '@/components/usuarios/AsignarMateriasDocenteModal'
 import { UsuariosPagination } from '@/components/usuarios/UsuariosPagination'
 
 import {
@@ -65,6 +66,11 @@ export default function UsuariosPage() {
 
   const [guardando, setGuardando] = useState(false)
   const [resultadoFormulario, setResultadoFormulario] = useState('')
+
+  // ============================================================
+  // GESTIÓN DE MATERIAS DOCENTE
+  // ============================================================
+  const [docenteGestionarMaterias, setDocenteGestionarMaterias] = useState<Usuario | null>(null)
 
   // ============================================================
   // CAMBIO DE ESTADO
@@ -312,6 +318,7 @@ export default function UsuariosPage() {
               nombreRol={obtenerNombreRol(usuario.tipo_usuario)}
               onEditar={abrirModalEditarUsuario}
               onCambiarEstado={abrirConfirmacionEstado}
+              onGestionarMaterias={setDocenteGestionarMaterias}
               cambiandoEstado={cambiandoEstado}
             />
           ))}
@@ -343,6 +350,18 @@ export default function UsuariosPage() {
           }
         }}
         onSubmit={manejarGuardarUsuario}
+      />
+
+      {/* MODAL GESTIONAR MATERIAS DOCENTE */}
+      <AsignarMateriasDocenteModal
+        open={Boolean(docenteGestionarMaterias)}
+        docente={docenteGestionarMaterias}
+        onOpenChange={(abierto) => {
+          if (!abierto) setDocenteGestionarMaterias(null)
+        }}
+        onSuccess={() => {
+          void cargarUsuarios()
+        }}
       />
 
       {/* CONFIRMACIÓN DE ESTADO */}

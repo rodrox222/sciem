@@ -41,6 +41,16 @@ function formatoFecha(fecha: string | null | undefined): string {
     .format(new Date(`${dia}T00:00:00Z`))
 }
 
+function examenHaFinalizado(examen: Examen | undefined): boolean {
+  if (!examen) return false
+  if (examen.estado?.toLowerCase() === 'terminado') return true
+  if (!examen.fecha || !examen.hora_fin) return false
+  const dia = examen.fecha.slice(0, 10)
+  const hora = examen.hora_fin.slice(0, 5)
+  const fin = new Date(`${dia}T${hora}:00`)
+  return !Number.isNaN(fin.getTime()) && fin <= new Date()
+}
+
 function claveConsulta(examenId: string, filtros: FiltrosReporte, intervalo: IntervaloFlujo): string {
   return `${examenId}:${filtros.fecha_desde}:${filtros.fecha_hasta}:${intervalo}`
 }
@@ -79,6 +89,7 @@ export default function ReportesEstadisticosPage() {
   const filtrosActivos = Boolean(filtros.fecha_desde || filtros.fecha_hasta)
   const filtrosSinAplicar = borrador.fecha_desde !== filtros.fecha_desde || borrador.fecha_hasta !== filtros.fecha_hasta
   const examenElegido = useMemo(() => examenes.find((examen) => String(examen.id) === examenId), [examenes, examenId])
+  const examenFinalizado = useMemo(() => examenHaFinalizado(examenElegido), [examenElegido])
 
   // El endpoint general /examenes no filtra por docente.
   // Mostrar solo los examenes asociados al usuario autenticado en el selector.
@@ -132,6 +143,13 @@ export default function ReportesEstadisticosPage() {
     if (!examenId || cargandoExamenes || !examenElegido) return
     const controlador = new AbortController()
     const consultaActual = clave
+
+    if (!examenHaFinalizado(examenElegido)) {
+      setDatos(null)
+      setFallo({ clave: consultaActual, mensaje: 'No se pueden generar reportes de una evaluación que aún no ha concluido.' })
+      return
+    }
+
     async function cargar() {
       setCargandoClave(consultaActual)
       setFallo(null)
@@ -389,11 +407,11 @@ export default function ReportesEstadisticosPage() {
             <Button
               type="button"
               className="min-h-11 w-full gap-2 px-5 sm:w-auto"
-              disabled={!reporte || !examenId || !examenElegido || (formatoDescarga !== 'xlsx' && formatoDescarga !== 'pdf') || descargando || cargando || filtrosSinAplicar}
+              disabled={!reporte || !examenId || !examenElegido || !examenFinalizado || (formatoDescarga !== 'xlsx' && formatoDescarga !== 'pdf') || descargando || cargando || filtrosSinAplicar}
               onClick={() => void descargar()}
             >
               {descargando ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <Download className="size-4" aria-hidden="true" />}
-              {descargando ? 'Preparando descarga...' : 'Descargar reporte'}
+              {descargando ? 'Preparando descarga...' : !examenFinalizado ? 'Evaluación no concluida' : 'Descargar reporte'}
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">Descarga el reporte completo o un informe individual en PDF/Excel desde el servidor. Se conservan el examen y las fechas aplicadas. Los formatos CSV y hojas sueltas dentro del Excel completo no están habilitados por el backend.</p>

@@ -21,7 +21,16 @@ class StoreUserRequest extends FormRequest
         $extensionLimpia = trim((string) $this->input('ci_extension'));
 
         return [
-            'tipo_usuario'     => ['required', 'string', 'in:admin,docente,auxiliar'],
+            'tipo_usuario'     => [
+                'required',
+                'string',
+                'in:admin,docente,auxiliar',
+                function ($attribute, $value, $fail) {
+                    if ($value === 'admin' && Admin::count() > 0) {
+                        $fail('Ya existe un administrador registrado en el sistema. No se permite crear más de un administrador.');
+                    }
+                },
+            ],
             'ci'               => [
                 'required',
                 'string',
@@ -58,13 +67,15 @@ class StoreUserRequest extends FormRequest
             'apellido_materno' => ['nullable', 'string', 'max:100'],
             'password'         => ['required', 'string', 'min:8', 'max:64'],
             'activo'           => ['nullable', 'boolean'],
+            'materias_ids'     => ['nullable', 'array'],
+            'materias_ids.*'   => ['uuid', 'exists:materias,id'],
 
             // Email obligatorio para docente y auxiliar con dominio institucional estricto
             'email'            => [
                 in_array($tipo, ['docente', 'auxiliar']) ? 'required' : 'nullable',
                 'string',
                 'max:150',
-                'regex:/^[a-zA-Z0-9._%+-]+@(est\.umss\.edu|gmail\.com)$/i',
+                'regex:/^[a-zA-Z0-9._%+-]+@(fcyt\.umss\.edu\.bo|est\.umss\.edu|gmail\.com)$/i',
                 function ($attribute, $value, $fail) {
                     $emailLimpio = trim((string) $value);
                     if (empty($emailLimpio)) {
@@ -90,7 +101,7 @@ class StoreUserRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'email.regex'    => 'El correo debe ser institucional.',
+            'email.regex'    => 'El correo electrónico ingresado no es un correo permitido.',
             'email.required' => 'El correo electrónico es obligatorio.',
         ];
     }

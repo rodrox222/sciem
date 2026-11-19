@@ -238,6 +238,69 @@ class AuxiliarModuloController extends Controller
         ], 200);
     }
 
+    public function auxiliaresDisponibles(Request $request, string $idExamen): JsonResponse
+    {
+        $docente = $request->user();
+        $examen = Examen::findOrFail($idExamen);
+
+        if ($docente instanceof Docente && $examen->id_docente !== $docente->id) {
+            return response()->json(['message' => 'No autorizado.'], 403);
+        }
+
+        $search = trim((string) $request->query('search', ''));
+        $perPage = (int) $request->query('per_page', 8);
+
+        // Alumnos inscritos en este examen (para evitar conflicto de roles)
+        $alumnosInscritosIds = DB::table('estudiante_examen')
+            ->where('id_examen', $examen->id)
+            ->pluck('id_estudiante')
+            ->toArray();
+
+        // 1. Obtener auxiliares asignados a exámenes de esta materia dictados por este docente
+        $auxiliaresMateriaDocenteIds = DB::table('examen_auxiliar as ea')
+            ->join('examenes as ex', 'ea.id_examen', '=', 'ex.id')
+            ->where('ex.id_materia', $examen->id_materia)
+            ->where('ex.id_docente', $examen->id_docente)
+            ->pluck('ea.id_auxiliar')
+            ->unique()
+            ->toArray();
+
+        // Auxiliares que tienen rol auxiliar activo y no están inscritos como alumnos en este examen
+        $query = Estudiante::query()
+            ->where('es_auxiliar', true)
+            ->where('activo', true)
+            ->whereNotIn('id', $alumnosInscritosIds);
+
+        // Si existen auxiliares vinculados a esta materia y docente, filtrar estrictamente por ellos
+        if (!empty($auxiliaresMateriaDocenteIds)) {
+            $query->whereIn('id', $auxiliaresMateriaDocenteIds);
+        } else {
+            // Si aún no hay auxiliares en esta materia específica, buscar auxiliares asociados al docente en sus otras materias
+            $auxiliaresDocenteIds = DB::table('examen_auxiliar as ea')
+                ->join('examenes as ex', 'ea.id_examen', '=', 'ex.id')
+                ->where('ex.id_docente', $examen->id_docente)
+                ->pluck('ea.id_auxiliar')
+                ->unique()
+                ->toArray();
+
+            if (!empty($auxiliaresDocenteIds)) {
+                $query->whereIn('id', $auxiliaresDocenteIds);
+            }
+        }
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('nombre', 'ilike', "%{$search}%")
+                  ->orWhere('apellido_paterno', 'ilike', "%{$search}%")
+                  ->orWhere('apellido_materno', 'ilike', "%{$search}%")
+                  ->orWhere('codigo_sis', 'ilike', "%{$search}%")
+                  ->orWhere('email_institucional', 'ilike', "%{$search}%");
+            });
+        }
+
+        return response()->json($query->orderBy('apellido_paterno')->paginate($perPage));
+    }
+
     public function misExamenesAsignados(Request $request): JsonResponse
     {
         $auxiliar = $request->user();

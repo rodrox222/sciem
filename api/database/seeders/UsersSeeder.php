@@ -217,5 +217,31 @@ class UsersSeeder extends Seeder
         $idAuxiliar1 = DB::table('estudiantes')->where('email_institucional', '11111111@est.umss.edu')->value('id');
         $idAuxiliar2 = DB::table('estudiantes')->where('email_institucional', '22222222@est.umss.edu')->value('id');
         $idAuxiliar3 = DB::table('estudiantes')->where('email_institucional', '33333333@est.umss.edu')->value('id');
+
+        // 3. Asignación de materias a docentes en la tabla pivote docente_materia
+        $docentes = DB::table('docente')->get();
+        $materias = DB::table('materias')->get();
+
+        if ($materias->isNotEmpty()) {
+            foreach ($docentes as $index => $doc) {
+                // Asignar al menos 2 materias por docente
+                $materia1 = $materias[$index % $materias->count()];
+                $materia2 = $materias[($index + 1) % $materias->count()];
+
+                DB::table('docente_materia')->insertOrIgnore([
+                    'id_docente' => $doc->id,
+                    'id_materia' => $materia1->id,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                DB::table('docente_materia')->insertOrIgnore([
+                    'id_docente' => $doc->id,
+                    'id_materia' => $materia2->id,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+        }
     }
 }
