@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreMateriaRequest extends FormRequest
 {
@@ -14,7 +15,12 @@ class StoreMateriaRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'nombre' => ['required', 'string', 'max:150', 'unique:materias,nombre'],
+            'nombre' => [
+                'required',
+                'string',
+                'max:150',
+                Rule::unique('materias', 'nombre')->where(fn ($q) => $q->whereRaw('activo is true')),
+            ],
         ];
     }
 }

@@ -14,11 +14,17 @@ export interface Usuario {
   ultimo_acceso?: string | null
   created_at: string
   updated_at: string
+  materias?: {
+    id: string
+    nombre: string
+    codigo?: string | null
+  }[]
 }
 
 export interface Rol {
   codigo: string
   nombre: string
+  disponible?: boolean
 }
 
 interface RawRolItem {
@@ -31,6 +37,7 @@ interface RawRolItem {
   label?: string
   descripcion?: string
   nombre_rol?: string
+  disponible?: boolean
 }
 
 export interface UsuarioPayload {
@@ -43,6 +50,24 @@ export interface UsuarioPayload {
   password?: string
   tipo_usuario: string
   activo?: boolean
+  materias_ids?: string[]
+}
+
+export interface MateriaDocenteItem {
+  id: string
+  nombre: string
+  codigo?: string | null
+  asignada: boolean
+}
+
+export interface MateriasDocenteResponse {
+  docente: {
+    id: string
+    nombre: string
+    email?: string | null
+  }
+  materias: MateriaDocenteItem[]
+  asignadas: { id: string; nombre: string; codigo?: string | null }[]
 }
 
 export interface UsuarioFilters {
@@ -93,6 +118,29 @@ export const usuariosService = {
     return api.put<{ message: string; user: Usuario }>(`/users/${id}`, { activo: true })
   },
 
+  getMateriasDocente(idDocente: string) {
+    return api.get<MateriasDocenteResponse>(`/users/${idDocente}/materias`)
+  },
+
+  syncMateriasDocente(idDocente: string, materiasIds: string[]) {
+    return api.post<{ message: string; materias: { id: string; nombre: string; codigo?: string | null }[] }>(
+      `/users/${idDocente}/materias`,
+      { materias_ids: materiasIds }
+    )
+  },
+
+  vincularMateria(idDocente: string, idMateria: string) {
+    return api.post<{ message: string; materias: { id: string; nombre: string; codigo?: string | null }[] }>(
+      `/users/${idDocente}/materias/${idMateria}`
+    )
+  },
+
+  desvincularMateria(idDocente: string, idMateria: string) {
+    return api.delete<{ message: string; materias: { id: string; nombre: string; codigo?: string | null }[] }>(
+      `/users/${idDocente}/materias/${idMateria}`
+    )
+  },
+
   async listRoles(): Promise<Rol[]> {
     // Si ya los tenemos en memoria, retornamos de inmediato sin ir a la red
     if (cachedRoles && cachedRoles.length > 0) {
@@ -105,8 +153,13 @@ export const usuariosService = {
     cachedRoles = lista.map((item: RawRolItem) => ({
       codigo: String(item.codigo ?? item.value ?? item.valor ?? item.id ?? item.tipo_usuario ?? ''),
       nombre: item.nombre ?? item.label ?? item.descripcion ?? item.nombre_rol ?? '',
+      disponible: item.disponible !== false,
     }))
 
     return cachedRoles
+  },
+
+  clearRolesCache() {
+    cachedRoles = null
   },
 }

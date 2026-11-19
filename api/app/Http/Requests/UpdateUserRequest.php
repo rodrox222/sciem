@@ -23,7 +23,19 @@ class UpdateUserRequest extends FormRequest
         $extensionLimpia = $this->has('ci_extension') ? trim((string) $this->input('ci_extension')) : null;
 
         return [
-            'tipo_usuario'     => ['sometimes', 'string', 'in:admin,docente,auxiliar'],
+            'tipo_usuario'     => [
+                'sometimes',
+                'string',
+                'in:admin,docente,auxiliar',
+                function ($attribute, $value, $fail) use ($userId) {
+                    if ($value === 'admin') {
+                        $adminExistente = Admin::first();
+                        if ($adminExistente && (string) $adminExistente->id !== (string) $userId) {
+                            $fail('Ya existe un administrador en el sistema. No se permite asignar el rol de administrador a otro usuario.');
+                        }
+                    }
+                },
+            ],
             'ci'               => [
                 'sometimes',
                 'required',
@@ -69,8 +81,8 @@ class UpdateUserRequest extends FormRequest
             'email'            => [
                 'nullable',
                 'string',
-                'email',
                 'max:150',
+                'regex:/^[a-zA-Z0-9._%+-]+@(fcyt\.umss\.edu\.bo|est\.umss\.edu|gmail\.com)$/i',
                 function ($attribute, $value, $fail) use ($userId) {
                     $emailLimpio = trim((string) $value);
                     if (empty($emailLimpio)) {
@@ -96,6 +108,15 @@ class UpdateUserRequest extends FormRequest
                     }
                 },
             ],
+            'materias_ids'     => ['nullable', 'array'],
+            'materias_ids.*'   => ['uuid', 'exists:materias,id'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'email.regex' => 'El correo electrónico ingresado no es un correo permitido.',
         ];
     }
 }

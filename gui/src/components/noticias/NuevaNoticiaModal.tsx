@@ -1,5 +1,5 @@
 import React, { useState, useEffect, type FormEvent } from 'react';
-import { Megaphone, AlertCircle, LoaderCircle, Link2 } from 'lucide-react';
+import { Megaphone, AlertCircle, LoaderCircle, Link2, BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -10,6 +10,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { noticiasService, type StoreNoticiaPayload, type Noticia } from '@/services/noticias.service';
+import { materiasService, type Materia } from '@/services/materias.service';
 import { api } from '@/services/api';
 
 interface NuevaNoticiaModalProps {
@@ -24,7 +25,9 @@ interface ExamenOption {
   nombre?: string; 
   fecha?: string;
   hora_ini?: string;
+  id_materia?: string;
   materia?: {
+    id?: string;
     nombre?: string;
   };
 }
@@ -38,8 +41,13 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
+  const userRole = (localStorage.getItem('user_role') ?? '').toLowerCase();
+  const isDocente = userRole === 'docente';
+
   const [examenes, setExamenes] = useState<ExamenOption[]>([]); 
   const [loadingExamenes, setLoadingExamenes] = useState(false);
+  const [misMaterias, setMisMaterias] = useState<Materia[]>([]);
+  const [loadingMaterias, setLoadingMaterias] = useState(false);
   
   // Estados para controlar la UI de vinculación
   const [isVincularExamen, setIsVincularExamen] = useState(false);
@@ -48,12 +56,13 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
   const [formData, setFormData] = useState<StoreNoticiaPayload>({
     titulo: '',
     contenido: '',
-    publico_objetivo: 'Todos',
+    publico_objetivo: isDocente ? 'Estudiantes' : 'Todos',
     es_publica: true,
     id_examen: null,
+    id_materia: null,
   });
 
-  // 1. Cargar exámenes al abrir el modal
+  // 1. Cargar exámenes y materias del docente al abrir el modal
   useEffect(() => {
     let isMounted = true;
     if (isOpen) {
@@ -73,22 +82,40 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
           .finally(() => {
             if (isMounted) setLoadingExamenes(false);
           });
+
+        if (isDocente) {
+          if (isMounted) setLoadingMaterias(true);
+          materiasService.listMisMaterias()
+            .then((res) => {
+              if (isMounted) setMisMaterias(Array.isArray(res) ? res : []);
+            })
+            .catch((err) => {
+              if (isMounted) console.error('Error al cargar materias:', err);
+            })
+            .finally(() => {
+              if (isMounted) setLoadingMaterias(false);
+            });
+        }
       }, 0);
     }
     return () => { isMounted = false; };
-  }, [isOpen]);
+  }, [isOpen, isDocente]);
 
   // 2. Inicializar los datos del formulario (Modo Crear vs Editar)
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => {
         if (noticiaEditando) {
+          const rawPub = noticiaEditando.publico_objetivo;
+          const targetPub = (isDocente && rawPub === 'Todos') ? 'Estudiantes' : rawPub;
+
           setFormData({
             titulo: noticiaEditando.titulo,
             contenido: noticiaEditando.contenido,
-            publico_objetivo: noticiaEditando.publico_objetivo,
+            publico_objetivo: targetPub,
             es_publica: noticiaEditando.es_publica,
             id_examen: noticiaEditando.id_examen || null,
+            id_materia: noticiaEditando.id_materia || null,
           });
           
           if (noticiaEditando.id_examen) {
@@ -101,9 +128,10 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
           setFormData({
             titulo: '',
             contenido: '',
-            publico_objetivo: 'Todos',
+            publico_objetivo: isDocente ? 'Estudiantes' : 'Todos',
             es_publica: true,
             id_examen: null,
+            id_materia: null,
           });
           setIsVincularExamen(false);
           setSelectedMateriaName('');
@@ -111,28 +139,30 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
         setError('');
       }, 0);
     }
-  }, [isOpen, noticiaEditando]);
+  }, [isOpen, noticiaEditando, isDocente]);
 
   // 3. Sincronizar la materia si estamos editando y los exámenes ya cargaron
   useEffect(() => {
-      const timer = setTimeout(() => {
-        if (isOpen && noticiaEditando?.id_examen && examenes.length > 0) {
-          const exam = examenes.find(e => e.id === noticiaEditando.id_examen);
-          if (exam?.materia?.nombre && selectedMateriaName !== exam.materia.nombre) {
-            setSelectedMateriaName(exam.materia.nombre);
-          }
+    const timer = setTimeout(() => {
+      if (isOpen && noticiaEditando?.id_examen && examenes.length > 0) {
+        const exam = examenes.find(e => e.id === noticiaEditando.id_examen);
+        if (exam?.materia?.nombre && selectedMateriaName !== exam.materia.nombre) {
+          setSelectedMateriaName(exam.materia.nombre);
         }
-      }, 0);
-      
-      return () => clearTimeout(timer);
-    }, [isOpen, noticiaEditando, examenes, selectedMateriaName]);
+      }
+    }, 0);
+    
+    return () => clearTimeout(timer);
+  }, [isOpen, noticiaEditando, examenes, selectedMateriaName]);
 
   // Manejador del Toggle "Vincular a Examen"
   const handleToggleVincular = (checked: boolean) => {
     setIsVincularExamen(checked);
-    if (error) setError(''); // Limpiamos el error al cambiar el toggle
+    if (error) setError('');
     if (!checked) {
-      setSelectedMateriaName('');
+      if (!isDocente) {
+        setSelectedMateriaName('');
+      }
       setFormData(prev => ({ ...prev, id_examen: null }));
     } else {
       setFormData(prev => ({ ...prev, publico_objetivo: 'Estudiantes' }));
@@ -142,19 +172,29 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     
-    // Validaciones personalizadas de UI
     if (!formData.titulo.trim()) {
       setError('Por favor, ingresa un título para el aviso.');
       return;
     }
-    
+
     if (!formData.contenido.trim()) {
       setError('Por favor, proporciona una descripción detallada.');
       return;
     }
 
+    if (isDocente) {
+      if (formData.publico_objetivo === 'Todos') {
+        setError('La opción "Todos" está restringida al administrador. Seleccione "Estudiantes" o "Docentes".');
+        return;
+      }
+      if (!formData.id_materia) {
+        setError('Debe seleccionar obligatoriamente una materia asignada para publicar la noticia.');
+        return;
+      }
+    }
+
     if (isVincularExamen && !formData.id_examen) {
-      setError('Si deseas vincular un examen, debes seleccionar la materia y el examen específico.');
+      setError('Si deseas vincular un examen, debes seleccionar el examen específico.');
       return;
     }
 
@@ -176,14 +216,16 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
     }
   };
 
-  // Filtrado de datos para los selectores
+  // Filtrado de datos para los selectores de exámenes
   const materiasDisponibles = Array.from(
     new Set(examenes.map(ex => ex.materia?.nombre).filter(Boolean))
   ).sort() as string[];
 
-  const examenesFiltrados = selectedMateriaName
-    ? examenes.filter(ex => ex.materia?.nombre === selectedMateriaName)
-    : [];
+  const examenesFiltrados = isDocente && formData.id_materia
+    ? examenes.filter(ex => ex.id_materia === formData.id_materia || ex.materia?.id === formData.id_materia)
+    : (selectedMateriaName
+        ? examenes.filter(ex => ex.materia?.nombre === selectedMateriaName)
+        : examenes);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -198,7 +240,7 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
             <DialogDescription className="text-sm text-muted-foreground mt-2">
               {noticiaEditando 
                 ? 'Modifica los datos de la noticia. Asegúrate de revisar a quién va dirigida.' 
-                : 'Crea un aviso general o vincúlalo a un examen (este mismo desaparecerá automáticamente una vez finalizado el examen).'}
+                : 'Crea un aviso para los usuarios o vincúlalo a una materia/examen.'}
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -220,7 +262,7 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
                 value={formData.titulo}
                 onChange={(e) => {
                   setFormData({ ...formData, titulo: e.target.value });
-                  if (error) setError(''); // Oculta el error al escribir
+                  if (error) setError('');
                 }}
                 className="text-sm font-medium transition-all duration-200 focus-visible:ring-sci-cyan"
               />
@@ -235,10 +277,49 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
                 value={formData.contenido}
                 onChange={(e) => {
                   setFormData({ ...formData, contenido: e.target.value });
-                  if (error) setError(''); // Oculta el error al escribir
+                  if (error) setError('');
                 }}
               />
             </div>
+
+            {/* SELECCIÓN OBLIGATORIA DE MATERIA PARA DOCENTES */}
+            {isDocente && (
+              <div className="space-y-1.5 rounded-xl border border-sci-navy/15 bg-slate-50/70 p-3.5">
+                <label className="text-xs font-semibold text-sci-navy uppercase tracking-wider flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <BookOpen className="h-3.5 w-3.5 text-sci-navy" />
+                    Materia <span className="text-sci-red">*</span>
+                  </span>
+                  <span className="text-[10px] text-muted-foreground font-normal">Requerida para docentes</span>
+                </label>
+                <select
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-sci-cyan focus:ring-2 focus:outline-none transition-all duration-200 disabled:opacity-50"
+                  value={formData.id_materia || ''}
+                  onChange={(e) => {
+                    const matId = e.target.value;
+                    const selected = misMaterias.find(m => m.id === matId);
+                    setFormData(prev => ({
+                      ...prev,
+                      id_materia: matId || null,
+                      id_examen: null,
+                    }));
+                    setSelectedMateriaName(selected?.nombre || '');
+                    if (error) setError('');
+                  }}
+                  disabled={loadingMaterias || misMaterias.length === 0}
+                >
+                  <option value="" disabled>Seleccione una de sus materias asignadas...</option>
+                  {misMaterias.map((mat) => (
+                    <option key={mat.id} value={mat.id}>
+                      {mat.codigo ? `[${mat.codigo}] ` : ''}{mat.nombre}
+                    </option>
+                  ))}
+                </select>
+                {misMaterias.length === 0 && !loadingMaterias && (
+                  <p className="text-xs text-amber-600">No tienes materias asignadas actualmente.</p>
+                )}
+              </div>
+            )}
           </div>
 
           <div className={`rounded-xl border transition-all duration-300 ${isVincularExamen ? 'border-sci-cyan/40 bg-sci-cyan/5' : 'border-border bg-slate-50/50'}`}>
@@ -252,45 +333,53 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
               />
               <label htmlFor="toggle-vincular" className="text-sm font-semibold text-sci-navy cursor-pointer flex items-center gap-2 select-none">
                 <Link2 className="h-4 w-4 text-muted-foreground" />
-                Vincular a un examen específico
+                Vincular a un examen específico (opcional)
               </label>
             </div>
 
             {isVincularExamen && (
               <div className="px-4 pb-5 pt-2 flex flex-col gap-4 border-t border-sci-cyan/10">
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    1. Materia
-                  </label>
-                  <select
-                    className="w-full truncate rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-sci-cyan focus:ring-2 focus:outline-none transition-all duration-200 disabled:opacity-50"
-                    value={selectedMateriaName}
-                    onChange={(e) => {
-                      setSelectedMateriaName(e.target.value);
-                      setFormData(prev => ({ ...prev, id_examen: null }));
-                      if (error) setError(''); // Oculta el error al cambiar de materia
-                    }}
-                    disabled={loadingExamenes || materiasDisponibles.length === 0}
-                  >
-                    <option value="" disabled>Seleccione una materia...</option>
-                    {materiasDisponibles.map((mat) => (
-                      <option key={mat} value={mat}>{mat}</option>
-                    ))}
-                  </select>
-                </div>
+                {!isDocente && (
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      1. Materia
+                    </label>
+                    <select
+                      className="w-full truncate rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-sci-cyan focus:ring-2 focus:outline-none transition-all duration-200 disabled:opacity-50"
+                      value={selectedMateriaName}
+                      onChange={(e) => {
+                        setSelectedMateriaName(e.target.value);
+                        setFormData(prev => ({ ...prev, id_examen: null }));
+                        if (error) setError('');
+                      }}
+                      disabled={loadingExamenes || materiasDisponibles.length === 0}
+                    >
+                      <option value="" disabled>Seleccione una materia...</option>
+                      {materiasDisponibles.map((mat) => (
+                        <option key={mat} value={mat}>{mat}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    2. Examen / Horario
+                    {isDocente ? 'Examen asignado' : '2. Examen / Horario'}
                   </label>
                   <select
                     className="w-full truncate rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-sci-cyan focus:ring-2 focus:outline-none transition-all duration-200 disabled:opacity-50"
                     value={formData.id_examen || ''}
                     onChange={(e) => {
-                      setFormData(prev => ({ ...prev, id_examen: e.target.value || null }));
-                      if (error) setError(''); // Oculta el error al seleccionar un examen
+                      const exId = e.target.value || null;
+                      const exObj = examenes.find(x => x.id === exId);
+                      setFormData(prev => ({
+                        ...prev,
+                        id_examen: exId,
+                        id_materia: exObj?.id_materia || exObj?.materia?.id || prev.id_materia,
+                      }));
+                      if (error) setError('');
                     }}
-                    disabled={!selectedMateriaName || loadingExamenes}
+                    disabled={(isDocente ? !formData.id_materia : !selectedMateriaName) || loadingExamenes}
                   >
                     <option value="" disabled>Seleccione un examen...</option>
                     {examenesFiltrados.map((ex) => {
@@ -304,6 +393,9 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
                       );
                     })}
                   </select>
+                  {examenesFiltrados.length === 0 && (
+                    <p className="text-xs text-muted-foreground">No hay exámenes registrados para esta materia.</p>
+                  )}
                 </div>
               </div>
             )}
@@ -318,9 +410,9 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
                 onChange={(e) => setFormData({ ...formData, publico_objetivo: e.target.value as StoreNoticiaPayload['publico_objetivo'] })}
                 disabled={isVincularExamen} 
               >
-                <option value="Todos">Todos</option>
-                <option value="Docentes">Solo Docentes</option>
+                {!isDocente && <option value="Todos">Todos</option>}
                 <option value="Estudiantes">Solo Estudiantes</option>
+                <option value="Docentes">Solo Docentes</option>
               </select>
             </div>
 

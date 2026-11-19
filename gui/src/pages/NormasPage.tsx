@@ -13,6 +13,7 @@ import {
   Power,
   RefreshCw,
   Search,
+  Trash2,
 } from 'lucide-react'
 
 import { NormaFormModal } from '../components/normas/NormaFormModal'
@@ -37,7 +38,7 @@ import { examenesService, type Examen } from '../services/examenes.service'
 
 const topBorderStyles: Record<NormaEstado, string> = {
   Activo: 'bg-sci-cyan',
-  Inactivo: 'bg-sci-red',
+  Inactivo: 'bg-slate-400 dark:bg-slate-600',
 }
 
 const todayLocal = () => {
@@ -64,6 +65,11 @@ export default function NormasPage() {
   // Estados para validación de exámenes asociados
   const [normaPorConfirmar, setNormaPorConfirmar] = useState<Norma | null>(null)
   const [examenesAfectados, setExamenesAfectados] = useState<Examen[]>([])
+
+  // Estados para eliminación definitiva
+  const [normaForceEliminar, setNormaForceEliminar] = useState<Norma | null>(null)
+  const [eliminandoForce, setEliminandoForce] = useState(false)
+  const [errorForceEliminar, setErrorForceEliminar] = useState('')
 
   const loadNormas = useCallback(async () => {
     setLoading(true)
@@ -184,6 +190,38 @@ export default function NormasPage() {
     }
   }
 
+  const handleReactivarNorma = async (norma: Norma) => {
+    try {
+      setChangingId(norma.id)
+      setError('')
+      const res = await normasService.reactivar(norma.id)
+      setSuccess(res.message || 'Norma reactivada correctamente.')
+      await loadNormas()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo reactivar la norma.')
+    } finally {
+      setChangingId(null)
+    }
+  }
+
+  const confirmarForceEliminarNorma = async () => {
+    if (!normaForceEliminar) return
+    try {
+      setEliminandoForce(true)
+      setErrorForceEliminar('')
+      await normasService.forceDelete(normaForceEliminar.id)
+      setNormaForceEliminar(null)
+      setSuccess('Norma eliminada permanentemente del sistema.')
+      await loadNormas()
+    } catch (err) {
+      setErrorForceEliminar(
+        err instanceof Error ? err.message : 'No se pudo eliminar la norma permanentemente.'
+      )
+    } finally {
+      setEliminandoForce(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -266,7 +304,7 @@ export default function NormasPage() {
               <SelectContent>
                 <SelectItem value="ALL">Todos los estados</SelectItem>
                 <SelectItem value="Activo">Activas</SelectItem>
-                <SelectItem value="Inactivo">Inactivas</SelectItem>
+                <SelectItem value="Inactivo">Desactivadas</SelectItem>
               </SelectContent>
             </Select>
 
@@ -330,43 +368,74 @@ export default function NormasPage() {
                           className={
                             norma.estado === 'Activo'
                               ? 'border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy font-semibold'
-                              : 'border-sci-red/30 bg-sci-red/10 text-sci-red font-semibold'
+                              : 'border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 font-semibold'
                           }
                         >
-                          {norma.estado ?? 'Activo'}
+                          {norma.estado === 'Inactivo' ? 'Desactivado' : (norma.estado ?? 'Activo')}
                         </Badge>
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openEdit(norma)}
-                          className="cursor-pointer gap-1 text-xs border-border"
-                        >
-                          <Pencil className="h-3.5 w-3.5" /> Editar
-                        </Button>
+                        {norma.estado === 'Inactivo' ? (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void handleReactivarNorma(norma)}
+                              disabled={changingId === norma.id}
+                              className="cursor-pointer gap-1 text-xs border-sci-blue/30 text-sci-blue hover:bg-sci-blue/10"
+                            >
+                              {changingId === norma.id ? (
+                                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-3.5 w-3.5" />
+                              )}
+                              Reactivar
+                            </Button>
 
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => void handleRequestToggleStatus(norma)}
-                          disabled={changingId === norma.id}
-                          className={`cursor-pointer text-xs gap-1 ${
-                            norma.estado === 'Inactivo'
-                              ? 'text-sci-blue hover:bg-sci-blue/10'
-                              : 'text-sci-red hover:bg-sci-red/10'
-                          }`}
-                        >
-                          {changingId === norma.id ? (
-                            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Power className="h-3.5 w-3.5" />
-                          )}
-                          {norma.estado === 'Inactivo' ? 'Activar' : 'Desactivar'}
-                        </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setErrorForceEliminar('')
+                                setNormaForceEliminar(norma)
+                              }}
+                              className="cursor-pointer gap-1 text-xs text-sci-red hover:bg-sci-red/10"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" /> Eliminar permanentemente
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openEdit(norma)}
+                              className="cursor-pointer gap-1 text-xs border-border"
+                            >
+                              <Pencil className="h-3.5 w-3.5" /> Editar
+                            </Button>
+
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => void handleRequestToggleStatus(norma)}
+                              disabled={changingId === norma.id}
+                              className="cursor-pointer text-xs gap-1 text-sci-red hover:bg-sci-red/10"
+                            >
+                              {changingId === norma.id ? (
+                                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Power className="h-3.5 w-3.5" />
+                              )}
+                              Desactivar
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -519,6 +588,28 @@ export default function NormasPage() {
               ? 'destructive'
               : 'default'
           }
+        />
+      )}
+
+      {/* Modal Confirmación Eliminación Definitiva */}
+      {normaForceEliminar && (
+        <ConfirmModal
+          open
+          onOpenChange={(open) => !open && !eliminandoForce && setNormaForceEliminar(null)}
+          title="Eliminar permanentemente"
+          description={
+            errorForceEliminar ? (
+              <span className="font-semibold text-sci-red">{errorForceEliminar}</span>
+            ) : (
+              `¿Está seguro de eliminar PERMANENTEMENTE la norma "${normaForceEliminar.titulo}"? Esta acción borrará el registro de la base de datos de forma definitiva. Solo es posible si no cuenta con evaluaciones históricas vinculadas.`
+            )
+          }
+          confirmText={eliminandoForce ? 'Eliminando...' : 'Eliminar permanentemente'}
+          cancelText="Cancelar"
+          onConfirm={() => void confirmarForceEliminarNorma()}
+          onCancel={() => setNormaForceEliminar(null)}
+          variant="destructive"
+          showCancel={!eliminandoForce}
         />
       )}
     </div>

@@ -8,7 +8,9 @@ use App\Models\Admin;
 use App\Models\Aula;
 use App\Models\Auxiliar;
 use App\Models\Docente;
+use App\Models\Examen;
 use App\Models\LogAuditoria;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -39,8 +41,14 @@ class AulaController extends Controller
                   ->orWhere('ubicacion', 'ilike', "%{$search}%");
             });
         }
-        if ($estado) {
-            $query->where('estado', $estado);
+        if ($estado === 'Inactiva' || $estado === 'Desactivado' || $estado === 'Desactivada') {
+            $query->where(function ($q) {
+                $q->where('estado', 'Inactiva')->orWhereRaw('activo is false');
+            });
+        } elseif ($estado) {
+            $query->where('estado', $estado)->whereRaw('activo is true');
+        } elseif (!$request->boolean('incluir_inactivas')) {
+            $query->where('estado', '!=', 'Inactiva')->whereRaw('activo is true');
         }
 
         return response()->json($query->orderBy('nombre', 'asc')->paginate($perPage));
@@ -121,7 +129,7 @@ class AulaController extends Controller
     }
 
     /**
-     * Eliminar un aula.
+     * Desactivar un aula (borrado lógico).
      */
     public function destroy(Request $request, string $id): JsonResponse
     {
@@ -131,22 +139,110 @@ class AulaController extends Controller
             return response()->json(['message' => 'Aula no encontrada.'], 404);
         }
 
+        $ahora = Carbon::now('America/La_Paz');
+        $tieneExamenesPendientes = Examen::where('id_aula', $aula->id)
+            ->whereIn('estado', ['Programado', 'En proceso'])
+            ->where(function ($q) use ($ahora) {
+                $q->where('fecha', '>', $ahora->toDateString())
+                  ->orWhere(function ($sub) use ($ahora) {
+                      $sub->where('fecha', $ahora->toDateString())
+                          ->where('hora_fin', '>=', $ahora->toTimeString());
+                  });
+            })
+            ->exists();
+
+        if ($tieneExamenesPendientes) {
+            return response()->json([
+                'message' => 'No se puede desactivar el ambiente porque tiene exámenes programados pendientes o en curso.',
+            ], 422);
+        }
+
+        $detalles = [
+            'target_type'        => 'aula',
+            'target_id'          => $aula->id,
+            'nombre'             => $aula->nombre,
+            'ubicacion'          => $aula->ubicacion,
+            'capacidad'          => $aula->capacidad,
+            'valores_anteriores' => ['estado' => $aula->estado],
+            'valores_nuevos'     => ['estado' => 'Inactiva'],
+        ];
+
+        $aula->update([
+            'estado' => 'Inactiva',
+            'activo' => false,
+        ]);
+
+        Cache::forget('catalogo_aulas_disponibles');
+
+        $this->registrarAuditoria($request, 'AULA_DESACTIVADA', $detalles);
+
+        return response()->json(['message' => 'Ambiente desactivado exitosamente.']);
+    }
+
+    /**
+     * Reactivar un aula desactivada.
+     */
+    public function reactivar(Request $request, string $id): JsonResponse
+    {
+        $aula = Aula::find($id);
+
+        if (!$aula) {
+            return response()->json(['message' => 'Ambiente no encontrado.'], 404);
+        }
+
+        $aula->update([
+            'estado' => 'Disponible',
+            'activo' => true,
+        ]);
+
+        Cache::forget('catalogo_aulas_disponibles');
+
+        $this->registrarAuditoria($request, 'AULA_REACTIVADA', [
+            'target_type' => 'aula',
+            'target_id'   => $aula->id,
+            'nombre'      => $aula->nombre,
+        ]);
+
+        return response()->json([
+            'message' => 'Ambiente reactivado exitosamente.',
+            'aula'    => $aula,
+        ]);
+    }
+
+    /**
+     * Eliminación permanente física de un aula (únicamente si no tiene historial).
+     */
+    public function forceDelete(Request $request, string $id): JsonResponse
+    {
+        $aula = Aula::find($id);
+
+        if (!$aula) {
+            return response()->json(['message' => 'Ambiente no encontrado.'], 404);
+        }
+
+        // Verificar si tiene exámenes históricos o dependencias asociadas
+        $tieneExamenes = Examen::where('id_aula', $aula->id)->exists();
+        if ($tieneExamenes) {
+            return response()->json([
+                'message' => 'No se puede eliminar permanentemente el ambiente porque cuenta con historial de evaluaciones asociadas. Solo puede mantenerse desactivado.',
+            ], 422);
+        }
+
         $detalles = [
             'target_type' => 'aula',
             'target_id'   => $aula->id,
             'nombre'      => $aula->nombre,
             'ubicacion'   => $aula->ubicacion,
             'capacidad'   => $aula->capacidad,
-            'estado'      => $aula->estado,
         ];
 
         $aula->delete();
 
         Cache::forget('catalogo_aulas_disponibles');
 
-        $this->registrarAuditoria($request, 'AULA_ELIMINADA', $detalles);
+        $this->registrarAuditoria($request, 'AULA_ELIMINADA_DEFINITIVAMENTE', $detalles);
 
-        return response()->json(['message' => 'Aula eliminada exitosamente.']);
+        return response()->json(['message' => 'Ambiente eliminado permanentemente del sistema.']);
     }
 
     /**

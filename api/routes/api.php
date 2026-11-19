@@ -69,12 +69,13 @@ Route::middleware('auth:sanctum')->group(function () {
         ]);
     });
 
-    // Endpoint de roles estático para selectores
+    // Endpoint de roles para selectores con disponibilidad según regla de admin único
     Route::get('roles', function () {
+        $adminExiste = \App\Models\Admin::count() > 0;
         return response()->json([
-            ['id' => 'admin', 'nombre' => 'Administrador'],
-            ['id' => 'docente', 'nombre' => 'Docente'],
-            ['id' => 'auxiliar', 'nombre' => 'Auxiliar'],
+            ['id' => 'admin', 'nombre' => 'Administrador', 'disponible' => !$adminExiste],
+            ['id' => 'docente', 'nombre' => 'Docente', 'disponible' => true],
+            ['id' => 'auxiliar', 'nombre' => 'Auxiliar', 'disponible' => true],
         ]);
     });
 
@@ -111,6 +112,10 @@ Route::middleware('auth:sanctum')->group(function () {
         });
 
         Route::apiResource('users', UserController::class);
+        Route::get('users/{id}/materias', [UserController::class, 'getMateriasDocente']);
+        Route::post('users/{id}/materias', [UserController::class, 'syncMateriasDocente']);
+        Route::post('users/{id}/materias/{idMateria}', [UserController::class, 'vincularMateriaDocente']);
+        Route::delete('users/{id}/materias/{idMateria}', [UserController::class, 'desvincularMateriaDocente']);
 
         // Módulo de Auditoría y Reversión Compensatoria
         Route::get('auditoria', [AuditoriaController::class, 'index']);
@@ -121,16 +126,25 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('configuracion/inactividad', [ConfiguracionSistemaController::class, 'updateTiempoInactividad']);
     });
 
-    // --- AULAS ---
+    // --- AULAS / AMBIENTES ---
     Route::middleware('role:admin,administrador,docente,auxiliar')->group(function () {
         Route::get('aulas', [AulaController::class, 'index']);
         Route::get('aulas/{id}', [AulaController::class, 'show']);
+        Route::get('ambientes', [AulaController::class, 'index']);
+        Route::get('ambientes/{id}', [AulaController::class, 'show']);
     });
 
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::post('aulas', [AulaController::class, 'store']);
         Route::put('aulas/{id}', [AulaController::class, 'update']);
         Route::delete('aulas/{id}', [AulaController::class, 'destroy']);
+        Route::patch('aulas/{id}/reactivar', [AulaController::class, 'reactivar']);
+        Route::delete('aulas/{id}/force', [AulaController::class, 'forceDelete']);
+        Route::post('ambientes', [AulaController::class, 'store']);
+        Route::put('ambientes/{id}', [AulaController::class, 'update']);
+        Route::delete('ambientes/{id}', [AulaController::class, 'destroy']);
+        Route::patch('ambientes/{id}/reactivar', [AulaController::class, 'reactivar']);
+        Route::delete('ambientes/{id}/force', [AulaController::class, 'forceDelete']);
     });
 
     // --- EXÁMENES ---
@@ -155,6 +169,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('materias', [MateriaController::class, 'store']);
         Route::put('materias/{id}', [MateriaController::class, 'update']);
         Route::delete('materias/{id}', [MateriaController::class, 'destroy']);
+        Route::patch('materias/{id}/reactivar', [MateriaController::class, 'reactivar']);
+        Route::delete('materias/{id}/force', [MateriaController::class, 'forceDelete']);
     });
 
     // --- NORMAS ---
@@ -167,6 +183,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::put('normas/{id}', [NormaController::class, 'update']);
         Route::delete('normas/{id}', [NormaController::class, 'destroy']);
+        Route::patch('normas/{id}/reactivar', [NormaController::class, 'reactivar']);
+        Route::delete('normas/{id}/force', [NormaController::class, 'forceDelete']);
         Route::post('examenes/{id}/normas', [NormaController::class, 'syncExamenNormas']);
         Route::post('examenes/{id}/normas/particulares', [NormaController::class, 'crearParticularesParaExamen']);
     });
@@ -264,6 +282,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::post('examenes/{id_examen}/auxiliares', [AuxiliarModuloController::class, 'invitarAuxiliar']);
         Route::get('examenes/{id_examen}/auxiliares', [AuxiliarModuloController::class, 'listarAuxiliaresExamen']);
+        Route::get('examenes/{id_examen}/auxiliares-disponibles', [AuxiliarModuloController::class, 'auxiliaresDisponibles']);
         Route::delete('examenes/{id_examen}/auxiliares/{id_auxiliar}', [AuxiliarModuloController::class, 'desvincularAuxiliar']);
     });
 

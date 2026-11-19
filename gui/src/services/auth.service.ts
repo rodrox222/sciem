@@ -65,7 +65,11 @@ export const authService = {
       const data = raw ? JSON.parse(raw) : null;
       if (data) {
         if (data.nombre) {
-          name = `${data.nombre} ${data.apellido || ''}`.trim();
+          const apellidos = data.apellido || [data.apellido_paterno, data.apellido_materno].filter(Boolean).join(' ');
+          const nombreCompleto = `${data.nombre} ${apellidos}`.trim();
+          if (nombreCompleto) {
+            name = nombreCompleto;
+          }
         }
         if (data.id) {
           id = data.id;

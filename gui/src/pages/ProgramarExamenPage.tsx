@@ -83,7 +83,7 @@ export default function ProgramarExamenPage() {
       const currentUser = isAdmin ? null : await api.get<DocenteItem>('/me').catch(() => null)
 
       const [subjectsRes, roomsRes, rulesRes, teachersRes, examRes] = await Promise.allSettled([
-        materiasService.listAll(),
+        isAdmin ? materiasService.listAll() : materiasService.listMisMaterias(),
         aulasService.list({ estado: 'Disponible', perPage: 100 }),
         normasService.listAll({ tipo: 'General' }),
         isAdmin
