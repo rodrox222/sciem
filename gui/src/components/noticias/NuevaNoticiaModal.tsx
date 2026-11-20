@@ -22,7 +22,7 @@ interface NuevaNoticiaModalProps {
 
 interface ExamenOption {
   id: string;
-  nombre?: string; 
+  nombre?: string;
   fecha?: string;
   hora_ini?: string;
   id_materia?: string;
@@ -40,15 +40,15 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
+
   const userRole = (localStorage.getItem('user_role') ?? '').toLowerCase();
   const isDocente = userRole === 'docente';
 
-  const [examenes, setExamenes] = useState<ExamenOption[]>([]); 
+  const [examenes, setExamenes] = useState<ExamenOption[]>([]);
   const [loadingExamenes, setLoadingExamenes] = useState(false);
   const [misMaterias, setMisMaterias] = useState<Materia[]>([]);
   const [loadingMaterias, setLoadingMaterias] = useState(false);
-  
+
   // Estados para controlar la UI de vinculación
   const [isVincularExamen, setIsVincularExamen] = useState(false);
   const [selectedMateriaName, setSelectedMateriaName] = useState<string>('');
@@ -57,7 +57,7 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
     titulo: '',
     contenido: '',
     publico_objetivo: isDocente ? 'Estudiantes' : 'Todos',
-    es_publica: true,
+    es_publica: isDocente ? true : false,
     id_examen: null,
     id_materia: null,
   });
@@ -108,17 +108,18 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
         if (noticiaEditando) {
           const rawPub = noticiaEditando.publico_objetivo;
           const targetPub = (isDocente && rawPub === 'Todos') ? 'Estudiantes' : rawPub;
+          const tieneExamen = Boolean(noticiaEditando.id_examen);
 
           setFormData({
             titulo: noticiaEditando.titulo,
             contenido: noticiaEditando.contenido,
             publico_objetivo: targetPub,
-            es_publica: noticiaEditando.es_publica,
+            es_publica: !isDocente && tieneExamen ? false : noticiaEditando.es_publica,
             id_examen: noticiaEditando.id_examen || null,
             id_materia: noticiaEditando.id_materia || null,
           });
-          
-          if (noticiaEditando.id_examen) {
+
+          if (tieneExamen) {
             setIsVincularExamen(true);
           } else {
             setIsVincularExamen(false);
@@ -129,7 +130,7 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
             titulo: '',
             contenido: '',
             publico_objetivo: isDocente ? 'Estudiantes' : 'Todos',
-            es_publica: true,
+            es_publica: isDocente ? true : false,
             id_examen: null,
             id_materia: null,
           });
@@ -151,9 +152,27 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
         }
       }
     }, 0);
-    
+
     return () => clearTimeout(timer);
   }, [isOpen, noticiaEditando, examenes, selectedMateriaName]);
+
+  // Manejador del Toggle "Publicar como anuncio general" (Solo Admin)
+  const handleToggleAnuncioGeneral = (checked: boolean) => {
+    if (error) setError('');
+    if (checked) {
+      setIsVincularExamen(false);
+      setSelectedMateriaName('');
+      setFormData(prev => ({
+        ...prev,
+        es_publica: true,
+        id_examen: null,
+        id_materia: null,
+        publico_objetivo: 'Todos',
+      }));
+    } else {
+      setFormData(prev => ({ ...prev, es_publica: false }));
+    }
+  };
 
   // Manejador del Toggle "Vincular a Examen"
   const handleToggleVincular = (checked: boolean) => {
@@ -163,15 +182,23 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
       if (!isDocente) {
         setSelectedMateriaName('');
       }
-      setFormData(prev => ({ ...prev, id_examen: null }));
+      setFormData(prev => ({
+        ...prev,
+        id_examen: null,
+        publico_objetivo: isDocente ? prev.publico_objetivo : 'Todos',
+      }));
     } else {
-      setFormData(prev => ({ ...prev, publico_objetivo: 'Estudiantes' }));
+      setFormData(prev => ({
+        ...prev,
+        publico_objetivo: 'Estudiantes',
+        es_publica: isDocente ? prev.es_publica : false,
+      }));
     }
   };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.titulo.trim()) {
       setError('Por favor, ingresa un título para el aviso.');
       return;
@@ -227,33 +254,73 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
         ? examenes.filter(ex => ex.materia?.nombre === selectedMateriaName)
         : examenes);
 
+  const isAnuncioGeneralDisabled = !isDocente && isVincularExamen;
+  const isVincularDisabled = !isDocente && formData.es_publica;
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[550px] p-0 shadow-xl border-slate-200 max-h-[90vh] overflow-y-auto flex flex-col">
-        
-        <div className="p-6 pb-2">
+
+        <div className="px-6 pt-5 pb-1">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl font-bold text-sci-navy">
               <Megaphone className="h-5 w-5 text-sci-cyan" />
               {noticiaEditando ? 'Editar Noticia' : 'Publicar Noticia'}
             </DialogTitle>
-            <DialogDescription className="text-sm text-muted-foreground mt-2">
-              {noticiaEditando 
-                ? 'Modifica los datos de la noticia. Asegúrate de revisar a quién va dirigida.' 
+            <DialogDescription className="text-sm text-muted-foreground mt-1">
+              {noticiaEditando
+                ? 'Modifica los datos de la noticia. Asegúrate de revisar a quién va dirigida.'
                 : 'Crea un aviso para los usuarios o vincúlalo a una materia/examen.'}
             </DialogDescription>
           </DialogHeader>
         </div>
 
-        <form onSubmit={handleSubmit} noValidate className="px-6 pb-6 pt-2 space-y-5">
+        <form onSubmit={handleSubmit} noValidate className="px-6 pb-5 pt-2 space-y-3.5">
           {/* AVISO DE ERROR */}
           {error && (
-            <div className="flex items-center gap-2 rounded-lg border border-sci-red/20 bg-sci-red/5 p-3.5 text-sm text-sci-red font-medium">
+            <div className="flex items-center gap-2 rounded-lg border border-sci-red/20 bg-sci-red/5 p-3 text-sm text-sci-red font-medium">
               <AlertCircle className="h-4 w-4 shrink-0" /> {error}
             </div>
           )}
 
-          <div className="space-y-4">
+          {/* ANUNCIO GENERAL (SOLO ADMIN - AL INICIO DEL MODAL) */}
+          {!isDocente && (
+            <div
+              className={`rounded-xl border p-3 transition-all duration-200 ${
+                isAnuncioGeneralDisabled
+                  ? 'border-border bg-slate-100/70 opacity-50'
+                  : formData.es_publica
+                    ? 'border-sci-cyan/50 bg-sci-cyan/5'
+                    : 'border-border bg-slate-50/70'
+              }`}
+            >
+              <label
+                htmlFor="es_publica_admin"
+                className={`flex items-start gap-3 select-none ${
+                  isAnuncioGeneralDisabled ? 'cursor-not-allowed' : 'cursor-pointer'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  id="es_publica_admin"
+                  checked={formData.es_publica}
+                  disabled={isAnuncioGeneralDisabled}
+                  onChange={(e) => handleToggleAnuncioGeneral(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-sci-cyan focus:ring-sci-cyan cursor-pointer disabled:cursor-not-allowed transition-all"
+                />
+                <div className="leading-tight">
+                  <span className="block text-sm font-semibold text-sci-navy">
+                    Publicar como anuncio general
+                  </span>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Visible para todos los usuarios.
+                  </p>
+                </div>
+              </label>
+            </div>
+          )}
+
+          <div className="space-y-3.5">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-sci-navy uppercase tracking-wider">Título del Aviso</label>
               <Input
@@ -322,23 +389,37 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
             )}
           </div>
 
-          <div className={`rounded-xl border transition-all duration-300 ${isVincularExamen ? 'border-sci-cyan/40 bg-sci-cyan/5' : 'border-border bg-slate-50/50'}`}>
-            <div className="p-4 flex items-center gap-3">
+          <div
+            className={`rounded-xl border transition-all duration-300 ${
+              isVincularDisabled
+                ? 'border-border bg-slate-100/70 opacity-50'
+                : isVincularExamen
+                  ? 'border-sci-cyan/40 bg-sci-cyan/5'
+                  : 'border-border bg-slate-50/50'
+            }`}
+          >
+            <div className="p-3.5 flex items-center gap-3">
               <input
                 type="checkbox"
                 id="toggle-vincular"
                 checked={isVincularExamen}
+                disabled={isVincularDisabled}
                 onChange={(e) => handleToggleVincular(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-sci-cyan focus:ring-sci-cyan transition-all cursor-pointer"
+                className="h-4 w-4 rounded border-gray-300 text-sci-cyan focus:ring-sci-cyan transition-all cursor-pointer disabled:cursor-not-allowed"
               />
-              <label htmlFor="toggle-vincular" className="text-sm font-semibold text-sci-navy cursor-pointer flex items-center gap-2 select-none">
+              <label
+                htmlFor="toggle-vincular"
+                className={`text-sm font-semibold text-sci-navy flex items-center gap-2 select-none ${
+                  isVincularDisabled ? 'cursor-not-allowed' : 'cursor-pointer'
+                }`}
+              >
                 <Link2 className="h-4 w-4 text-muted-foreground" />
-                Vincular a un examen específico (opcional)
+                Vincular a un examen específico
               </label>
             </div>
 
             {isVincularExamen && (
-              <div className="px-4 pb-5 pt-2 flex flex-col gap-4 border-t border-sci-cyan/10">
+              <div className="px-4 pb-4 pt-2 flex flex-col gap-3.5 border-t border-sci-cyan/10">
                 {!isDocente && (
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -401,34 +482,36 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
             )}
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 bg-slate-50 p-4 rounded-xl border border-border">
-            <div className="space-y-1.5 w-full sm:w-3/5">
-              <label className="text-[11px] font-semibold uppercase tracking-wider text-sci-navy">Público Objetivo</label>
-              <select
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-sci-cyan focus:outline-none transition-all duration-200 disabled:opacity-50"
-                value={formData.publico_objetivo}
-                onChange={(e) => setFormData({ ...formData, publico_objetivo: e.target.value as StoreNoticiaPayload['publico_objetivo'] })}
-                disabled={isVincularExamen} 
-              >
-                {!isDocente && <option value="Todos">Todos</option>}
-                <option value="Estudiantes">Solo Estudiantes</option>
-                <option value="Docentes">Solo Docentes</option>
-              </select>
-            </div>
+          {/* PÚBLICO OBJETIVO Y VISIBILIDAD (SE MANTIENE SOLO PARA DOCENTES POR AHORA) */}
+          {isDocente && (
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 bg-slate-50 p-4 rounded-xl border border-border">
+              <div className="space-y-1.5 w-full sm:w-3/5">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-sci-navy">Público Objetivo</label>
+                <select
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-sci-cyan focus:outline-none transition-all duration-200 disabled:opacity-50"
+                  value={formData.publico_objetivo}
+                  onChange={(e) => setFormData({ ...formData, publico_objetivo: e.target.value as StoreNoticiaPayload['publico_objetivo'] })}
+                  disabled={isVincularExamen}
+                >
+                  <option value="Estudiantes">Solo Estudiantes</option>
+                  <option value="Docentes">Solo Docentes</option>
+                </select>
+              </div>
 
-            <div className="flex items-center gap-2 pb-2 w-full sm:w-auto">
-              <input
-                type="checkbox"
-                id="es_publica"
-                checked={formData.es_publica}
-                onChange={(e) => setFormData({ ...formData, es_publica: e.target.checked })}
-                className="h-4 w-4 rounded border-gray-300 text-sci-cyan focus:ring-sci-cyan cursor-pointer transition-all"
-              />
-              <label htmlFor="es_publica" className="text-sm font-semibold text-sci-navy cursor-pointer select-none">
-                Hacer Pública
-              </label>
+              <div className="flex items-center gap-2 pb-2 w-full sm:w-auto">
+                <input
+                  type="checkbox"
+                  id="es_publica"
+                  checked={formData.es_publica}
+                  onChange={(e) => setFormData({ ...formData, es_publica: e.target.checked })}
+                  className="h-4 w-4 rounded border-gray-300 text-sci-cyan focus:ring-sci-cyan cursor-pointer transition-all"
+                />
+                <label htmlFor="es_publica" className="text-sm font-semibold text-sci-navy cursor-pointer select-none">
+                  Hacer Pública
+                </label>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={loading} className="rounded-lg transition-all duration-200 hover:bg-slate-100">
