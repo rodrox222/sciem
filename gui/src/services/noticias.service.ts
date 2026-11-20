@@ -10,7 +10,11 @@ export interface Noticia {
   id_materia?: string | null;
   examen?: {
     id: string;
+    id_materia?: string;
     materia_id?: string;
+    nombre?: string;
+    fecha?: string;
+    hora_ini?: string;
   } | null;
   materia?: {
     id: string;
@@ -57,5 +61,5 @@ export const noticiasService = {
 
   delete: async (id: string) => {
     return api.delete<{ message: string }>(`/noticias/${id}`);
-  }
+  },
 };

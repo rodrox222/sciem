@@ -26,25 +26,25 @@ class NoticiaController extends Controller
 
         $data = $request->validated();
         $idMateria = $data['id_materia'] ?? $data['materia_id'] ?? null;
-
-        if ($user instanceof Docente) {
-            if (isset($data['publico_objetivo']) && $data['publico_objetivo'] === 'Todos') {
-                return response()->json(['message' => 'La opción "Todos" está restringida al administrador.'], 422);
-            }
-            if (empty($idMateria)) {
-                return response()->json(['message' => 'Debe especificar una materia para la noticia.'], 422);
-            }
-            if (!$user->materias()->where('materias.id', $idMateria)->exists()) {
-                return response()->json(['message' => 'No tiene asignada la materia seleccionada.'], 422);
-            }
-            $data['id_materia'] = $idMateria;
-        } elseif (!empty($idMateria)) {
-            $data['id_materia'] = $idMateria;
-        }
         unset($data['materia_id']);
 
         if (!empty($data['id_examen'])) {
             $examen = Examen::find($data['id_examen']);
+
+            if ($user instanceof Docente) {
+                $esMateriaAsignada = $user->materias()->where('materias.id', $examen->id_materia)->exists();
+                if ($examen->id_docente !== $user->id || !$esMateriaAsignada) {
+                    return response()->json([
+                        'message' => 'Solo puedes publicar noticias para materias y exámenes que tengas asignados.',
+                    ], 422);
+                }
+            }
+
+            if (!empty($idMateria) && $examen->id_materia !== $idMateria) {
+                return response()->json([
+                    'message' => 'El examen seleccionado no corresponde a la materia indicada.',
+                ], 422);
+            }
 
             $fechaLimpia = \Carbon\Carbon::parse($examen->fecha)->toDateString();
             $fechaHoraFin = \Carbon\Carbon::parse("{$fechaLimpia} {$examen->hora_fin}", 'America/La_Paz');
@@ -52,12 +52,19 @@ class NoticiaController extends Controller
             if (now('America/La_Paz')->greaterThan($fechaHoraFin)) {
                 return response()->json(['message' => 'No puedes publicar una noticia para un examen que ya finalizó.'], 422);
             }
+
+            $data['id_materia'] = $examen->id_materia;
+            $data['publico_objetivo'] = 'Estudiantes';
+            $esPublicaBool = false;
+        } else {
+            $data['id_examen'] = null;
+            $data['id_materia'] = null;
+            $data['publico_objetivo'] = $data['publico_objetivo'] ?? 'Todos';
+            $esPublicaBool = isset($data['es_publica'])
+                ? filter_var($data['es_publica'], FILTER_VALIDATE_BOOLEAN)
+                : false;
         }
 
-        // Blindaje contra la emulación de PDO en PostgreSQL
-        $esPublicaBool = isset($data['es_publica'])
-            ? filter_var($data['es_publica'], FILTER_VALIDATE_BOOLEAN)
-            : true;
         $data['es_publica'] = $esPublicaBool ? DB::raw('true') : DB::raw('false');
 
         $noticia = Noticia::create(array_merge(
@@ -93,16 +100,24 @@ class NoticiaController extends Controller
                       });
             })
             ->when(!$esAutenticado, function ($query) {
-                $query->whereRaw('es_publica is true');
+                $query->whereRaw('es_publica is true')
+                      ->whereNull('id_examen');
             })
             ->when($esAutenticado, function ($query) use ($user) {
                 if ($user instanceof Admin) {
-                    // Admin ve todo
-                } elseif ($user instanceof Docente) {
+                    return;
+                }
+
+                if ($user instanceof Docente) {
                     $query->where(function ($q) use ($user) {
-                        $q->where('publico_objetivo', 'Todos')
-                          ->orWhere('publico_objetivo', 'Docentes')
-                          ->orWhere('autor_id', $user->id);
+                        $q->where(function ($qGeneral) {
+                            $qGeneral->whereNull('id_examen')
+                                     ->whereIn('publico_objetivo', ['Todos', 'Docentes']);
+                        })
+                        ->orWhere('autor_id', $user->id)
+                        ->orWhereHas('examen', function ($qExamen) use ($user) {
+                            $qExamen->where('id_docente', $user->id);
+                        });
                     });
                 } elseif ($user instanceof Estudiante) {
                     $misExamenesIds = DB::table('estudiante_examen')
@@ -111,11 +126,10 @@ class NoticiaController extends Controller
                         ->toArray();
 
                     $query->where(function ($q) use ($misExamenesIds) {
-                        $q->where('publico_objetivo', 'Todos')
-                          ->orWhere(function ($q2) {
-                              $q2->where('publico_objetivo', 'Estudiantes')
-                                 ->whereNull('id_examen');
-                          });
+                        $q->where(function ($qGeneral) {
+                            $qGeneral->whereNull('id_examen')
+                                     ->whereIn('publico_objetivo', ['Todos', 'Estudiantes']);
+                        });
 
                         if (!empty($misExamenesIds)) {
                             $q->orWhereIn('id_examen', $misExamenesIds);
@@ -123,7 +137,7 @@ class NoticiaController extends Controller
                     });
                 }
             })
-            ->with(['autor:id,nombre,apellido_paterno', 'examen:id,id_materia', 'materia:id,nombre'])
+            ->with(['autor:id,nombre,apellido_paterno', 'examen:id,nombre,fecha,hora_ini,id_materia', 'materia:id,nombre'])
             ->orderBy('created_at', 'desc')
             ->paginate(10);
 
@@ -145,25 +159,25 @@ class NoticiaController extends Controller
 
         $data = $request->validated();
         $idMateria = $data['id_materia'] ?? $data['materia_id'] ?? null;
-
-        if ($user instanceof Docente) {
-            if (isset($data['publico_objetivo']) && $data['publico_objetivo'] === 'Todos') {
-                return response()->json(['message' => 'La opción "Todos" está restringida al administrador.'], 422);
-            }
-            if (empty($idMateria)) {
-                return response()->json(['message' => 'Debe especificar una materia para la noticia.'], 422);
-            }
-            if (!$user->materias()->where('materias.id', $idMateria)->exists()) {
-                return response()->json(['message' => 'No tiene asignada la materia seleccionada.'], 422);
-            }
-            $data['id_materia'] = $idMateria;
-        } elseif (!empty($idMateria)) {
-            $data['id_materia'] = $idMateria;
-        }
         unset($data['materia_id']);
 
         if (!empty($data['id_examen'])) {
             $examen = Examen::find($data['id_examen']);
+
+            if ($user instanceof Docente) {
+                $esMateriaAsignada = $user->materias()->where('materias.id', $examen->id_materia)->exists();
+                if ($examen->id_docente !== $user->id || !$esMateriaAsignada) {
+                    return response()->json([
+                        'message' => 'Solo puedes publicar noticias para materias y exámenes que tengas asignados.',
+                    ], 422);
+                }
+            }
+
+            if (!empty($idMateria) && $examen->id_materia !== $idMateria) {
+                return response()->json([
+                    'message' => 'El examen seleccionado no corresponde a la materia indicada.',
+                ], 422);
+            }
 
             $fechaLimpia = \Carbon\Carbon::parse($examen->fecha)->toDateString();
             $fechaHoraFin = \Carbon\Carbon::parse("{$fechaLimpia} {$examen->hora_fin}", 'America/La_Paz');
@@ -171,15 +185,26 @@ class NoticiaController extends Controller
             if (now('America/La_Paz')->greaterThan($fechaHoraFin)) {
                 return response()->json(['message' => 'El examen seleccionado ya finalizó.'], 422);
             }
+
+            $data['id_materia'] = $examen->id_materia;
+            $data['publico_objetivo'] = 'Estudiantes';
+            $esPublicaBool = false;
+        } else {
+            $data['id_examen'] = null;
+            $data['id_materia'] = null;
+            $data['publico_objetivo'] = $data['publico_objetivo'] ?? 'Todos';
+            $esPublicaBool = isset($data['es_publica'])
+                ? filter_var($data['es_publica'], FILTER_VALIDATE_BOOLEAN)
+                : false;
         }
+
+        $data['es_publica'] = $esPublicaBool;
 
         $camposAfectados = array_keys($data);
         $valoresAnteriores = $noticia->only($camposAfectados);
+        $valoresNuevos = $data;
 
-        if (isset($data['es_publica'])) {
-            $esPublicaBool = filter_var($data['es_publica'], FILTER_VALIDATE_BOOLEAN);
-            $data['es_publica'] = $esPublicaBool ? DB::raw('true') : DB::raw('false');
-        }
+        $data['es_publica'] = $esPublicaBool ? DB::raw('true') : DB::raw('false');
 
         $noticia->update($data);
 
@@ -188,7 +213,7 @@ class NoticiaController extends Controller
             'target_id'           => $noticia->id,
             'campos_actualizados' => $camposAfectados,
             'valores_anteriores'  => $valoresAnteriores,
-            'valores_nuevos'      => $data,
+            'valores_nuevos'      => $valoresNuevos,
         ]);
 
         return response()->json([
