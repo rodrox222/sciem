@@ -339,8 +339,7 @@ class UserController extends Controller
             return response()->json(['message' => 'Docente no encontrado.'], 404);
         }
 
-        $todasMaterias = \App\Models\Materia::whereRaw('activo is true')
-            ->orderBy('nombre', 'asc')
+        $todasMaterias = \App\Models\Materia::orderBy('nombre', 'asc')
             ->get(['id', 'nombre']);
 
         $asignadasIds = $docente->materias->pluck('id')->toArray();

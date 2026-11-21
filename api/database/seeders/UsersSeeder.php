@@ -13,14 +13,14 @@ class UsersSeeder extends Seeder
     {
         // 1. Administrador
         DB::table('admin')->updateOrInsert(
-            ['ci' => '1234567'],
+            ['ci' => '15935712'],
             [
                 'id'               => (string) Str::uuid(),
                 'ci_extension'     => null,
-                'nombre'           => 'Admin',
-                'apellido_paterno' => 'General',
+                'nombre'           => 'Henry',
+                'apellido_paterno' => 'Choque Torrez',
                 'apellido_materno' => null,
-                'password'         => Hash::make('qwerasdf'),
+                'password'         => Hash::make('HCT15935712'),
                 'activo'           => DB::raw('true'),
                 'created_at'       => now(),
                 'updated_at'       => now(),

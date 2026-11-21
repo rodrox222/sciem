@@ -7,10 +7,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Materia extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory, HasUuids, SoftDeletes;
 
     protected $table = 'materias';
     protected $keyType = 'string';
@@ -18,14 +19,11 @@ class Materia extends Model
 
     protected $fillable = [
         'nombre',
-        'activo',
     ];
 
     protected function casts(): array
     {
-        return [
-            'activo' => 'boolean',
-        ];
+        return [];
     }
 
     public function examenes(): HasMany
