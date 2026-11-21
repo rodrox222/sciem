@@ -31,7 +31,6 @@ const NAV_ITEMS_BY_ROLE: Record<string, NavItem[]> = {
     { name: 'Inicio', href: '/dashboard' },
     { name: 'Mis exámenes', href: '/examenes' },
     { name: 'Reportes', href: '/reportes' },
-    { name: 'Estudiantes', href: '/estudiantes' },
     { name: 'Noticias', href: '/noticias' },
   ],
   auxiliar: [
