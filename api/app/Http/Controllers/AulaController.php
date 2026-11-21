@@ -41,14 +41,8 @@ class AulaController extends Controller
                   ->orWhere('ubicacion', 'ilike', "%{$search}%");
             });
         }
-        if ($estado === 'Inactiva' || $estado === 'Desactivado' || $estado === 'Desactivada') {
-            $query->where(function ($q) {
-                $q->where('estado', 'Inactiva')->orWhereRaw('activo is false');
-            });
-        } elseif ($estado) {
-            $query->where('estado', $estado)->whereRaw('activo is true');
-        } elseif (!$request->boolean('incluir_inactivas')) {
-            $query->where('estado', '!=', 'Inactiva')->whereRaw('activo is true');
+        if ($estado && in_array($estado, ['Disponible', 'Mantenimiento', 'Ocupada'])) {
+            $query->where('estado', $estado);
         }
 
         return response()->json($query->orderBy('nombre', 'asc')->paginate($perPage));
@@ -106,7 +100,6 @@ class AulaController extends Controller
 
         $data = $request->validated();
 
-        // Extraer únicamente los campos modificados para el snapshot anterior
         $camposAfectados = array_keys($data);
         $valoresAnteriores = $aula->only($camposAfectados);
 
@@ -129,7 +122,7 @@ class AulaController extends Controller
     }
 
     /**
-     * Desactivar un aula (borrado lógico).
+     * Eliminar un aula (Soft Delete con deleted_at).
      */
     public function destroy(Request $request, string $id): JsonResponse
     {
@@ -153,78 +146,7 @@ class AulaController extends Controller
 
         if ($tieneExamenesPendientes) {
             return response()->json([
-                'message' => 'No se puede desactivar el ambiente porque tiene exámenes programados pendientes o en curso.',
-            ], 422);
-        }
-
-        $detalles = [
-            'target_type'        => 'aula',
-            'target_id'          => $aula->id,
-            'nombre'             => $aula->nombre,
-            'ubicacion'          => $aula->ubicacion,
-            'capacidad'          => $aula->capacidad,
-            'valores_anteriores' => ['estado' => $aula->estado],
-            'valores_nuevos'     => ['estado' => 'Inactiva'],
-        ];
-
-        $aula->update([
-            'estado' => 'Inactiva',
-            'activo' => false,
-        ]);
-
-        Cache::forget('catalogo_aulas_disponibles');
-
-        $this->registrarAuditoria($request, 'AULA_DESACTIVADA', $detalles);
-
-        return response()->json(['message' => 'Ambiente desactivado exitosamente.']);
-    }
-
-    /**
-     * Reactivar un aula desactivada.
-     */
-    public function reactivar(Request $request, string $id): JsonResponse
-    {
-        $aula = Aula::find($id);
-
-        if (!$aula) {
-            return response()->json(['message' => 'Ambiente no encontrado.'], 404);
-        }
-
-        $aula->update([
-            'estado' => 'Disponible',
-            'activo' => true,
-        ]);
-
-        Cache::forget('catalogo_aulas_disponibles');
-
-        $this->registrarAuditoria($request, 'AULA_REACTIVADA', [
-            'target_type' => 'aula',
-            'target_id'   => $aula->id,
-            'nombre'      => $aula->nombre,
-        ]);
-
-        return response()->json([
-            'message' => 'Ambiente reactivado exitosamente.',
-            'aula'    => $aula,
-        ]);
-    }
-
-    /**
-     * Eliminación permanente física de un aula (únicamente si no tiene historial).
-     */
-    public function forceDelete(Request $request, string $id): JsonResponse
-    {
-        $aula = Aula::find($id);
-
-        if (!$aula) {
-            return response()->json(['message' => 'Ambiente no encontrado.'], 404);
-        }
-
-        // Verificar si tiene exámenes históricos o dependencias asociadas
-        $tieneExamenes = Examen::where('id_aula', $aula->id)->exists();
-        if ($tieneExamenes) {
-            return response()->json([
-                'message' => 'No se puede eliminar permanentemente el ambiente porque cuenta con historial de evaluaciones asociadas. Solo puede mantenerse desactivado.',
+                'message' => 'No se puede eliminar el ambiente porque tiene exámenes programados pendientes o en curso.',
             ], 422);
         }
 
@@ -240,9 +162,9 @@ class AulaController extends Controller
 
         Cache::forget('catalogo_aulas_disponibles');
 
-        $this->registrarAuditoria($request, 'AULA_ELIMINADA_DEFINITIVAMENTE', $detalles);
+        $this->registrarAuditoria($request, 'AULA_ELIMINADA', $detalles);
 
-        return response()->json(['message' => 'Ambiente eliminado permanentemente del sistema.']);
+        return response()->json(['message' => 'Ambiente eliminado exitosamente.']);
     }
 
     /**

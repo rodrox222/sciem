@@ -45,8 +45,6 @@ export default function MateriasPage() {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [exito, setExito] = useState('')
-  const [filtroEstado, setFiltroEstado] = useState<'activas' | 'desactivadas' | 'todas'>('activas')
-  const [reactivandoId, setReactivandoId] = useState<string | null>(null)
 
   // Modal Crear / Editar
   const [modalAbierto, setModalAbierto] = useState(false)
@@ -54,15 +52,10 @@ export default function MateriasPage() {
   const [guardando, setGuardando] = useState(false)
   const [resultadoForm, setResultadoForm] = useState('')
 
-  // Modal Desactivar (Borrado Lógico)
+  // Modal Eliminar (Borrado Lógico SoftDeletes)
   const [materiaEliminar, setMateriaEliminar] = useState<Materia | null>(null)
   const [eliminando, setEliminando] = useState(false)
   const [errorEliminar, setErrorEliminar] = useState('')
-
-  // Modal Eliminar Definitivo (Físico)
-  const [materiaForceEliminar, setMateriaForceEliminar] = useState<Materia | null>(null)
-  const [eliminandoForce, setEliminandoForce] = useState(false)
-  const [errorForceEliminar, setErrorForceEliminar] = useState('')
 
   const cargarMaterias = useCallback(async () => {
     setCargando(true)
@@ -73,13 +66,6 @@ export default function MateriasPage() {
         search: busqueda,
         page: paginaActual,
         perPage: PER_PAGE,
-      }
-      if (filtroEstado === 'activas') {
-        filters.activo = true
-      } else if (filtroEstado === 'desactivadas') {
-        filters.activo = false
-      } else {
-        filters.incluir_inactivas = true
       }
 
       const response = await materiasService.list(filters)
@@ -92,7 +78,7 @@ export default function MateriasPage() {
     } finally {
       setCargando(false)
     }
-  }, [busqueda, paginaActual, filtroEstado])
+  }, [busqueda, paginaActual])
 
   useEffect(() => {
     void cargarMaterias()
@@ -140,47 +126,14 @@ export default function MateriasPage() {
       setErrorEliminar('')
       await materiasService.delete(materiaEliminar.id)
       setMateriaEliminar(null)
-      setExito('Asignatura desactivada exitosamente.')
+      setExito('Asignatura eliminada exitosamente.')
       await cargarMaterias()
     } catch (err) {
       setErrorEliminar(
-        err instanceof Error ? err.message : 'No se pudo desactivar la asignatura.',
+        err instanceof Error ? err.message : 'No se pudo eliminar la asignatura.',
       )
     } finally {
       setEliminando(false)
-    }
-  }
-
-  const handleReactivarMateria = async (materia: Materia) => {
-    try {
-      setReactivandoId(materia.id)
-      setError('')
-      const res = await materiasService.reactivar(materia.id)
-      setExito(res.message || 'Asignatura reactivada exitosamente.')
-      await cargarMaterias()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo reactivar la asignatura.')
-    } finally {
-      setReactivandoId(null)
-    }
-  }
-
-  const confirmarForceEliminar = async () => {
-    if (!materiaForceEliminar) return
-
-    try {
-      setEliminandoForce(true)
-      setErrorForceEliminar('')
-      await materiasService.forceDelete(materiaForceEliminar.id)
-      setMateriaForceEliminar(null)
-      setExito('Asignatura eliminada permanentemente del sistema.')
-      await cargarMaterias()
-    } catch (err) {
-      setErrorForceEliminar(
-        err instanceof Error ? err.message : 'No se pudo eliminar la asignatura definitivamente.',
-      )
-    } finally {
-      setEliminandoForce(false)
     }
   }
 
@@ -236,7 +189,7 @@ export default function MateriasPage() {
         </div>
       </div>
 
-      {/* Buscador y filtro de estado */}
+      {/* Buscador */}
       <div className="rounded-2xl border border-border bg-card p-5 shadow-xs">
         <form onSubmit={manejarBusqueda} className="flex flex-col gap-3 sm:flex-row">
           <div className="relative flex-1">
@@ -249,18 +202,6 @@ export default function MateriasPage() {
               className="h-10 pl-9 bg-background"
             />
           </div>
-          <select
-            value={filtroEstado}
-            onChange={(e) => {
-              setFiltroEstado(e.target.value as 'activas' | 'desactivadas' | 'todas')
-              setPaginaActual(1)
-            }}
-            className="h-10 rounded-xl border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
-          >
-            <option value="activas">Solo activas</option>
-            <option value="desactivadas">Desactivadas</option>
-            <option value="todas">Todas las asignaturas</option>
-          </select>
           <Button type="submit" variant="outline" className="h-10 cursor-pointer gap-2">
             <Search className="h-4 w-4" /> Buscar
           </Button>
@@ -329,73 +270,30 @@ export default function MateriasPage() {
                     )}
                   </div>
                 </div>
-                {materia.activo === false ? (
-                  <span className="shrink-0 rounded-full border border-slate-300 bg-slate-100 text-slate-700 px-2.5 py-0.5 text-[11px] font-semibold dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                    Desactivada
-                  </span>
-                ) : (
-                  <span className="shrink-0 rounded-full border border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy px-2.5 py-0.5 text-[11px] font-semibold">
-                    Activa
-                  </span>
-                )}
               </div>
 
               <div className="mt-4 flex items-center justify-end gap-2 border-t border-border pt-3">
-                {materia.activo === false ? (
-                  <>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void handleReactivarMateria(materia)}
-                      disabled={reactivandoId === materia.id}
-                      className="cursor-pointer gap-1 text-xs border-sci-blue/30 text-sci-blue hover:bg-sci-blue/10"
-                    >
-                      {reactivandoId === materia.id ? (
-                        <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-3.5 w-3.5" />
-                      )}
-                      Reactivar
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setErrorForceEliminar('')
-                        setMateriaForceEliminar(materia)
-                      }}
-                      className="cursor-pointer gap-1 text-xs text-sci-red hover:bg-sci-red/10"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" /> Eliminar permanentemente
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => abrirEditar(materia)}
-                      className="cursor-pointer gap-1 text-xs"
-                    >
-                      <Pencil className="h-3.5 w-3.5" /> Editar
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setErrorEliminar('')
-                        setMateriaEliminar(materia)
-                      }}
-                      className="cursor-pointer gap-1 text-xs text-sci-red hover:bg-sci-red/10"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" /> Desactivar
-                    </Button>
-                  </>
-                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => abrirEditar(materia)}
+                  className="cursor-pointer gap-1 text-xs"
+                >
+                  <Pencil className="h-3.5 w-3.5" /> Editar
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setErrorEliminar('')
+                    setMateriaEliminar(materia)
+                  }}
+                  className="cursor-pointer gap-1 text-xs text-sci-red hover:bg-sci-red/10"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Eliminar
+                </Button>
               </div>
             </article>
           ))}
@@ -443,47 +341,25 @@ export default function MateriasPage() {
         onSubmit={guardarMateria}
       />
 
-      {/* Modal Confirmación de Desactivación (Borrado Lógico) */}
+      {/* Modal Confirmación de Eliminación (SoftDeletes) */}
       {materiaEliminar && (
         <ConfirmModal
           open
           onOpenChange={(abierto) => !abierto && !eliminando && setMateriaEliminar(null)}
-          title="Desactivar asignatura"
+          title="Eliminar asignatura"
           description={
             errorEliminar ? (
               <span className="font-semibold text-sci-red">{errorEliminar}</span>
             ) : (
-              `¿Está seguro de desactivar la asignatura "${materiaEliminar.nombre}"? Si tiene exámenes programados pendientes o en curso, la operación será denegada para proteger la integridad académica.`
+              `¿Está seguro de eliminar la asignatura "${materiaEliminar.nombre}"? Si tiene exámenes programados pendientes o en curso, la operación será denegada para proteger la integridad académica.`
             )
           }
-          confirmText={eliminando ? 'Desactivando...' : 'Desactivar'}
+          confirmText={eliminando ? 'Eliminando...' : 'Eliminar'}
           cancelText="Cancelar"
           onConfirm={confirmarEliminar}
           onCancel={() => setMateriaEliminar(null)}
           variant="destructive"
           showCancel={!eliminando}
-        />
-      )}
-
-      {/* Modal Confirmación de Eliminación Definitiva (Física) */}
-      {materiaForceEliminar && (
-        <ConfirmModal
-          open
-          onOpenChange={(abierto) => !abierto && !eliminandoForce && setMateriaForceEliminar(null)}
-          title="Eliminar permanentemente"
-          description={
-            errorForceEliminar ? (
-              <span className="font-semibold text-sci-red">{errorForceEliminar}</span>
-            ) : (
-              `¿Está seguro de eliminar PERMANENTEMENTE la asignatura "${materiaForceEliminar.nombre}"? Esta acción borrará el registro de la base de datos de forma definitiva. Solo es posible si no cuenta con historial de exámenes vinculados.`
-            )
-          }
-          confirmText={eliminandoForce ? 'Eliminando...' : 'Eliminar permanentemente'}
-          cancelText="Cancelar"
-          onConfirm={confirmarForceEliminar}
-          onCancel={() => setMateriaForceEliminar(null)}
-          variant="destructive"
-          showCancel={!eliminandoForce}
         />
       )}
     </div>

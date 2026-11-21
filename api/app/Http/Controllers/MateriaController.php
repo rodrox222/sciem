@@ -20,17 +20,12 @@ class MateriaController extends Controller
     public function index(Request $request): JsonResponse
     {
         $search = $request->query('search');
-        $incluirInactivas = $request->boolean('incluir_inactivas');
-        $activoParam = $request->query('activo');
         $user = $request->user();
 
         // Si se solicitan materias del docente autenticado
         if ($request->boolean('mis_materias') || ($request->boolean('para_examen') && $user instanceof Docente)) {
             if ($user instanceof Docente) {
                 $queryDocente = $user->materias()->orderBy('nombre', 'asc');
-                if (!$incluirInactivas) {
-                    $queryDocente->whereRaw('materias.activo is true');
-                }
                 if ($search) {
                     $queryDocente->where('materias.nombre', 'ilike', "%{$search}%");
                 }
@@ -39,25 +34,13 @@ class MateriaController extends Controller
         }
 
         if ($request->boolean('all') && empty($search)) {
-            $cacheKey = $incluirInactivas ? 'catalogo_materias_todas' : 'catalogo_materias_all';
-            $materias = Cache::remember($cacheKey, 600, function () use ($incluirInactivas) {
-                $q = Materia::orderBy('nombre', 'asc');
-                if (!$incluirInactivas) {
-                    $q->whereRaw('activo is true');
-                }
-                return $q->get();
+            $materias = Cache::remember('catalogo_materias_all', 600, function () {
+                return Materia::orderBy('nombre', 'asc')->get();
             });
             return response()->json($materias);
         }
 
         $query = Materia::query();
-
-        if ($activoParam !== null && $activoParam !== '') {
-            $activoVal = filter_var($activoParam, FILTER_VALIDATE_BOOLEAN);
-            $query->where('activo', $activoVal);
-        } elseif (!$incluirInactivas) {
-            $query->whereRaw('activo is true');
-        }
 
         if ($search) {
             $query->where('nombre', 'ilike', "%{$search}%");
@@ -154,72 +137,7 @@ class MateriaController extends Controller
 
         if ($tieneExamenesPendientes) {
             return response()->json([
-                'message' => 'No se puede desactivar la materia porque tiene exámenes programados pendientes o en curso.',
-            ], 422);
-        }
-
-        $detalles = [
-            'target_type' => 'materia',
-            'target_id'   => $materia->id,
-            'nombre'      => $materia->nombre,
-            'valores_anteriores' => ['activo' => filter_var($materia->activo, FILTER_VALIDATE_BOOLEAN)],
-            'valores_nuevos'     => ['activo' => false],
-        ];
-
-        // Borrado lógico: desactivar
-        $materia->update(['activo' => false]);
-
-        Cache::forget('catalogo_materias_all');
-        Cache::forget('catalogo_materias_todas');
-
-        $this->registrarAuditoria($request, 'MATERIA_DESACTIVADA', $detalles);
-
-        return response()->json(['message' => 'Materia desactivada exitosamente.']);
-    }
-
-    /**
-     * Reactivar una materia desactivada.
-     */
-    public function reactivar(Request $request, string $id): JsonResponse
-    {
-        $materia = Materia::find($id);
-
-        if (!$materia) {
-            return response()->json(['message' => 'Materia no encontrada.'], 404);
-        }
-
-        $materia->update(['activo' => true]);
-
-        Cache::forget('catalogo_materias_all');
-        Cache::forget('catalogo_materias_todas');
-
-        $this->registrarAuditoria($request, 'MATERIA_REACTIVADA', [
-            'target_type' => 'materia',
-            'target_id'   => $materia->id,
-            'nombre'      => $materia->nombre,
-        ]);
-
-        return response()->json([
-            'message' => 'Materia reactivada exitosamente.',
-            'materia' => $materia,
-        ]);
-    }
-
-    /**
-     * Eliminación permanente física de una materia (únicamente si no tiene exámenes asociados).
-     */
-    public function forceDelete(Request $request, string $id): JsonResponse
-    {
-        $materia = Materia::find($id);
-
-        if (!$materia) {
-            return response()->json(['message' => 'Materia no encontrada.'], 404);
-        }
-
-        $tieneExamenes = Examen::where('id_materia', $materia->id)->exists();
-        if ($tieneExamenes) {
-            return response()->json([
-                'message' => 'No se puede eliminar permanentemente la materia porque cuenta con historial de exámenes asociados. Solo puede mantenerse desactivada.',
+                'message' => 'No se puede eliminar la materia porque tiene exámenes programados pendientes o en curso.',
             ], 422);
         }
 
@@ -229,14 +147,14 @@ class MateriaController extends Controller
             'nombre'      => $materia->nombre,
         ];
 
+        // Soft Delete nativo con deleted_at
         $materia->delete();
 
         Cache::forget('catalogo_materias_all');
-        Cache::forget('catalogo_materias_todas');
 
-        $this->registrarAuditoria($request, 'MATERIA_ELIMINADA_DEFINITIVAMENTE', $detalles);
+        $this->registrarAuditoria($request, 'MATERIA_ELIMINADA', $detalles);
 
-        return response()->json(['message' => 'Materia eliminada permanentemente del sistema.']);
+        return response()->json(['message' => 'Materia eliminada exitosamente.']);
     }
 
     private function registrarAuditoria(Request $request, string $accion, array $detalles = []): void

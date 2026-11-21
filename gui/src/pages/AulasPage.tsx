@@ -1,11 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import {
   AlertCircle,
-  Building2,
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
+  DoorClosed,
   LoaderCircle,
   Pencil,
   Plus,
@@ -16,17 +12,17 @@ import {
   Wrench,
 } from 'lucide-react'
 
-import { AulaFormModal } from '../components/aulas/AulaFormModal'
-import { ConfirmModal } from '../components/ConfirmModal'
+import { AulaFormModal } from '@/components/aulas/AulaFormModal'
+import { ConfirmModal } from '@/components/ConfirmModal'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
   aulasService,
   type Aula,
   type AulaEstado,
   type AulaPayload,
-} from '../services/aulas.service'
-import { examenesService, type Examen } from '../services/examenes.service'
+} from '@/services/aulas.service'
+import { api } from '@/services/api'
+import type { Examen } from '@/services/examenes.service'
 
 const PER_PAGE = 8
 
@@ -34,14 +30,12 @@ const estadoStyles: Record<AulaEstado, string> = {
   Disponible: 'border-sci-cyan/30 bg-sci-cyan/10 text-sci-navy',
   Mantenimiento: 'border-sci-amber/30 bg-sci-amber/10 text-sci-amber',
   Ocupada: 'border-sci-red/30 bg-sci-red/10 text-sci-red',
-  Inactiva: 'border-border bg-muted/60 text-muted-foreground',
 }
 
 const topBorderStyles: Record<AulaEstado, string> = {
   Disponible: 'bg-sci-cyan',
   Mantenimiento: 'bg-sci-amber',
   Ocupada: 'bg-sci-red',
-  Inactiva: 'bg-muted-foreground',
 }
 
 const todayLocal = () => {
@@ -69,47 +63,12 @@ export default function AulasPage() {
   const [aulaPorConfirmar, setAulaPorConfirmar] = useState<Aula | null>(null)
   const [examenesFuturos, setExamenesFuturos] = useState<Examen[]>([])
 
-  // Estados para borrado lógico (desactivación)
+  // Estados para eliminación (Soft Delete nativo)
   const [aulaEliminar, setAulaEliminar] = useState<Aula | null>(null)
   const [eliminando, setEliminando] = useState(false)
   const [errorEliminar, setErrorEliminar] = useState('')
 
-  // Estados para eliminación física definitiva
-  const [aulaForceEliminar, setAulaForceEliminar] = useState<Aula | null>(null)
-  const [eliminandoForce, setEliminandoForce] = useState(false)
-  const [errorForceEliminar, setErrorForceEliminar] = useState('')
-
-  const handleReactivarAula = async (aula: Aula) => {
-    try {
-      setChangingId(aula.id)
-      setError('')
-      const res = await aulasService.reactivar(aula.id)
-      setSuccess(res.message || 'Ambiente reactivado exitosamente.')
-      await loadAulas()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo reactivar el ambiente.')
-    } finally {
-      setChangingId(null)
-    }
-  }
-
-  const confirmarForceEliminarAula = async () => {
-    if (!aulaForceEliminar) return
-    try {
-      setEliminandoForce(true)
-      setErrorForceEliminar('')
-      await aulasService.forceDelete(aulaForceEliminar.id)
-      setAulaForceEliminar(null)
-      setSuccess('Ambiente eliminado permanentemente.')
-      await loadAulas()
-    } catch (err) {
-      setErrorForceEliminar(err instanceof Error ? err.message : 'No se pudo eliminar el ambiente.')
-    } finally {
-      setEliminandoForce(false)
-    }
-  }
-
-  const confirmarDesactivarAula = async () => {
+  const confirmarEliminarAula = async () => {
     if (!aulaEliminar) return
 
     try {
@@ -117,11 +76,11 @@ export default function AulasPage() {
       setErrorEliminar('')
       await aulasService.delete(aulaEliminar.id)
       setAulaEliminar(null)
-      setSuccess('Ambiente desactivado exitosamente.')
+      setSuccess('Ambiente eliminado exitosamente.')
       await loadAulas()
     } catch (err) {
       setErrorEliminar(
-        err instanceof Error ? err.message : 'No se pudo desactivar el ambiente.',
+        err instanceof Error ? err.message : 'No se pudo eliminar el ambiente.',
       )
     } finally {
       setEliminando(false)
@@ -139,12 +98,13 @@ export default function AulasPage() {
         page,
         perPage: PER_PAGE,
       })
-      setAulas(response.data)
-      setTotal(response.total)
-      setLastPage(Math.max(response.last_page, 1))
-    } catch (loadError) {
+
+      setAulas(response.data || [])
+      setTotal(response.total ?? 0)
+      setLastPage(Math.max(response.last_page ?? 1, 1))
+    } catch (err) {
       setError(
-        loadError instanceof Error ? loadError.message : 'No se pudo cargar el catálogo de aulas.',
+        err instanceof Error ? err.message : 'No se pudieron cargar los ambientes.',
       )
     } finally {
       setLoading(false)
@@ -152,197 +112,172 @@ export default function AulasPage() {
   }, [estado, page, searchTerm])
 
   useEffect(() => {
-    const requestId = window.setTimeout(() => void loadAulas(), 0)
-    return () => window.clearTimeout(requestId)
+    void loadAulas()
   }, [loadAulas])
 
-  const visibleCapacity = useMemo(
-    () => aulas.reduce((sum, aula) => sum + aula.capacidad, 0),
-    [aulas],
-  )
-
-  const applySearch = (event: FormEvent<HTMLFormElement>) => {
+  const handleSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    setPage(1)
     setSearchTerm(searchInput.trim())
+    setPage(1)
   }
 
   const openCreate = () => {
     setAulaSeleccionada(null)
     setModalAbierto(true)
-    setSuccess('')
   }
 
   const openEdit = (aula: Aula) => {
     setAulaSeleccionada(aula)
     setModalAbierto(true)
-    setSuccess('')
   }
 
-  const saveAula = async (payload: AulaPayload) => {
+  const handleSaveAula = async (payload: AulaPayload) => {
     if (aulaSeleccionada) {
-      const response = await aulasService.update(aulaSeleccionada.id, payload)
-      setSuccess(response.message || 'Ambiente actualizado correctamente.')
+      await aulasService.update(aulaSeleccionada.id, payload)
+      setSuccess('Ambiente actualizado exitosamente.')
     } else {
-      const response = await aulasService.create(payload)
-      setSuccess(response.message || 'Ambiente registrado correctamente.')
+      await aulasService.create(payload)
+      setSuccess('Ambiente creado exitosamente.')
     }
 
     await loadAulas()
   }
 
+  // Interceptar la solicitud de Mantenimiento para validar si hay exámenes futuros
   const handleRequestMaintenance = async (aula: Aula) => {
-    if (aula.estado === 'Ocupada') return
+    // Si ya está en mantenimiento, se desea HABILITAR (pasar a Disponible): no requiere confirmación previa
+    if (aula.estado === 'Mantenimiento') {
+      await cambiarEstadoDirecto(aula, 'Disponible')
+      return
+    }
 
-    if (aula.estado === 'Disponible') {
+    // Si se desea pasar a Mantenimiento: Consultar exámenes programados a partir de hoy
+    try {
       setChangingId(aula.id)
-      setError('')
-      try {
-        // Consultar únicamente exámenes futuros programados
-        const response = await examenesService.list({
-          estado: 'Programado',
-          fecha_desde: todayLocal(),
-          perPage: 50,
-        })
-        const now = new Date()
+      const res = await api.get<{ data?: Examen[] } | Examen[]>(
+        `/examenes?id_aula=${aula.id}&estado=Programado&per_page=100`,
+      )
+      const rawExams = Array.isArray(res) ? res : res?.data ?? []
+      const hoy = todayLocal()
 
-        const examenesAsignados = (response.data || []).filter((exam) => {
-          const esMismaAula =
-            exam.aula?.id === aula.id ||
-            exam.id_aula === aula.id ||
-            exam.aula?.nombre === aula.nombre
+      // Filtrar exámenes que se lleven a cabo hoy o en el futuro
+      const futuros = rawExams.filter((ex) => (ex.fecha ? ex.fecha >= hoy : false))
 
-          if (!esMismaAula || !exam.fecha) return false
-
-          const cleanDate = exam.fecha.slice(0, 10)
-          const cleanTime = (exam.hora_ini || '00:00').slice(0, 5)
-          const examDate = new Date(`${cleanDate}T${cleanTime}:00`)
-
-          return !Number.isNaN(examDate.getTime()) && examDate >= now
-        })
-
-        setExamenesFuturos(examenesAsignados)
-      } catch {
-        setExamenesFuturos([])
-      } finally {
-        setChangingId(null)
-        setAulaPorConfirmar(aula)
-      }
-    } else {
+      setExamenesFuturos(futuros)
+      setAulaPorConfirmar(aula)
+    } catch {
+      // En caso de fallo de red al consultar exámenes, proceder a abrir el modal preventivo vacío
       setExamenesFuturos([])
       setAulaPorConfirmar(aula)
+    } finally {
+      setChangingId(null)
     }
   }
 
-  const toggleMaintenance = async (aula: Aula) => {
-    if (aula.estado === 'Ocupada') return
-
-    const nextState: AulaEstado =
-      aula.estado === 'Mantenimiento' ? 'Disponible' : 'Mantenimiento'
-    const action = nextState === 'Mantenimiento' ? 'en mantenimiento' : 'disponible'
-
-    setChangingId(aula.id)
-    setError('')
-    setSuccess('')
-
+  // Ejecución directa del cambio de estado una vez confirmado
+  const cambiarEstadoDirecto = async (aula: Aula, nuevoEstado: AulaEstado) => {
     try {
-      const response = await aulasService.update(aula.id, {
+      setChangingId(aula.id)
+      setError('')
+      const payload: AulaPayload = {
         nombre: aula.nombre,
         ubicacion: aula.ubicacion,
         capacidad: aula.capacidad,
-        estado: nextState,
-      })
-      setSuccess(response.message || `Ambiente marcado como ${action}.`)
+        estado: nuevoEstado,
+      }
+      await aulasService.update(aula.id, payload)
+      setSuccess(`Ambiente marcado como ${nuevoEstado.toLowerCase()}.`)
       await loadAulas()
-    } catch (updateError) {
+    } catch (err) {
       setError(
-        updateError instanceof Error ? updateError.message : 'Error al actualizar el estado.',
+        err instanceof Error
+          ? err.message
+          : 'No se pudo cambiar el estado del ambiente.',
       )
     } finally {
       setChangingId(null)
       setAulaPorConfirmar(null)
-      setExamenesFuturos([])
     }
   }
 
+  const stats = [
+    { label: 'Total de ambientes', value: total, color: 'text-sci-navy' },
+    {
+      label: 'Disponibles',
+      value: aulas.filter((aula) => aula.estado === 'Disponible').length,
+      color: 'text-sci-cyan',
+    },
+    {
+      label: 'Mantenimiento',
+      value: aulas.filter((aula) => aula.estado === 'Mantenimiento').length,
+      color: 'text-sci-amber',
+    },
+    {
+      label: 'Ocupadas',
+      value: aulas.filter((aula) => aula.estado === 'Ocupada').length,
+      color: 'text-sci-red',
+    },
+  ]
+
   return (
     <div className="space-y-6">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      {/* Encabezado */}
+      <section className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-sci-cyan">
-            Administración · Infraestructura
+          <span className="text-xs font-bold tracking-wider text-sci-cyan uppercase">
+            Administración del campus
           </span>
-          <h1 className="mt-1 text-2xl sm:text-3xl font-extrabold text-sci-navy tracking-tight">
-            Aulas y ambientes
+          <h1 className="mt-1 text-2xl font-black text-sci-navy sm:text-3xl">
+            Gestión de Ambientes
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Consulta, registra y actualiza los espacios habilitados para exámenes institucionales.
+          <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+            Control de aulas, laboratorios y auditorios para evaluaciones oficiales.
           </p>
         </div>
 
         <Button
           type="button"
           onClick={openCreate}
-          className="bg-sci-blue hover:opacity-90 text-white font-semibold cursor-pointer shadow-xs gap-2"
+          className="cursor-pointer gap-2 bg-sci-blue text-white shadow-sm hover:opacity-95"
         >
-          <Plus className="h-4 w-4" />
-          Registrar ambiente
+          <Plus className="h-4 w-4" /> Nuevo ambiente
         </Button>
-      </header>
-
-      {/* Resumen de Métricas */}
-      <section aria-label="Resumen del catálogo" className="grid gap-4 sm:grid-cols-3">
-        <article className="rounded-2xl border border-border bg-card p-5 shadow-xs">
-          <div className="flex items-center gap-3">
-            <span className="grid h-11 w-11 place-items-center rounded-xl bg-sci-navy/10 text-sci-navy">
-              <Building2 className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="text-xs text-muted-foreground">Ambientes registrados</p>
-              <p className="text-2xl font-extrabold text-sci-navy">{total}</p>
-            </div>
-          </div>
-        </article>
-
-        <article className="rounded-2xl border border-border bg-card p-5 shadow-xs">
-          <div className="flex items-center gap-3">
-            <span className="grid h-11 w-11 place-items-center rounded-xl bg-sci-cyan/15 text-sci-cyan">
-              <Users className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="text-xs text-muted-foreground">Capacidad en esta página</p>
-              <p className="text-2xl font-extrabold text-sci-navy">{visibleCapacity}</p>
-            </div>
-          </div>
-        </article>
-
-        <article className="rounded-2xl border border-border bg-card p-5 shadow-xs">
-          <div className="flex items-center gap-3">
-            <span className="grid h-11 w-11 place-items-center rounded-xl bg-sci-amber/15 text-sci-amber">
-              <Wrench className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="text-xs text-muted-foreground">En mantenimiento aquí</p>
-              <p className="text-2xl font-extrabold text-sci-navy">
-                {aulas.filter((aula) => aula.estado === 'Mantenimiento').length}
-              </p>
-            </div>
-          </div>
-        </article>
       </section>
 
-      {/* Filtros de Búsqueda */}
+      {/* Métricas rápidas */}
+      <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {stats.map((stat) => (
+          <article
+            key={stat.label}
+            className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 shadow-xs"
+          >
+            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-sci-navy/10 text-sci-navy">
+              <DoorClosed className="h-6 w-6" />
+            </span>
+            <div className="min-w-0">
+              <span className="block text-xs font-medium text-muted-foreground">
+                {stat.label}
+              </span>
+              <strong className={`text-xl font-black ${stat.color}`}>
+                {stat.value}
+              </strong>
+            </div>
+          </article>
+        ))}
+      </section>
+
+      {/* Filtros y listado */}
       <section className="rounded-2xl border border-border bg-card shadow-xs">
         <div className="border-b border-border p-4 sm:p-5">
-          <form onSubmit={applySearch} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]">
-            <div className="relative">
+          <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:flex-row">
+            <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
+              <input
                 type="search"
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="Buscar por nombre o ubicación..."
-                className="h-10 pl-9 bg-background border-border"
+                placeholder="Buscar ambiente por nombre o ubicación..."
+                className="h-10 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
               />
             </div>
 
@@ -352,13 +287,12 @@ export default function AulasPage() {
                 setEstado(event.target.value as AulaEstado | '')
                 setPage(1)
               }}
-              className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-sci-blue/20"
+              className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-sci-blue/20 sm:w-52"
             >
               <option value="">Todos los estados</option>
               <option value="Disponible">Disponible</option>
               <option value="Mantenimiento">Mantenimiento</option>
               <option value="Ocupada">Ocupada</option>
-              <option value="Inactiva">Desactivados</option>
             </select>
 
             <Button type="submit" variant="outline" className="h-10 cursor-pointer gap-2 border-border">
@@ -425,17 +359,11 @@ export default function AulasPage() {
                             {aula.ubicacion}
                           </p>
                         </div>
-                        {aula.estado === 'Inactiva' ? (
-                          <span className="rounded-full border border-slate-300 bg-slate-100 text-slate-700 px-2.5 py-0.5 text-[11px] font-semibold dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                            Desactivado
-                          </span>
-                        ) : (
-                          <span
-                            className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${estadoStyles[aula.estado]}`}
-                          >
-                            {aula.estado}
-                          </span>
-                        )}
+                        <span
+                          className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${estadoStyles[aula.estado]}`}
+                        >
+                          {aula.estado}
+                        </span>
                       </div>
 
                       <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -445,87 +373,52 @@ export default function AulasPage() {
                         </span>
 
                         <div className="flex flex-wrap gap-2">
-                          {aula.estado === 'Inactiva' ? (
-                            <>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => void handleReactivarAula(aula)}
-                                disabled={changingId === aula.id}
-                                className="cursor-pointer gap-1 text-xs border-sci-blue/30 text-sci-blue hover:bg-sci-blue/10"
-                              >
-                                {changingId === aula.id ? (
-                                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <RefreshCw className="h-3.5 w-3.5" />
-                                )}
-                                Reactivar
-                              </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openEdit(aula)}
+                            className="cursor-pointer gap-1 text-xs border-border"
+                          >
+                            <Pencil className="h-3.5 w-3.5" /> Editar
+                          </Button>
 
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setErrorForceEliminar('')
-                                  setAulaForceEliminar(aula)
-                                }}
-                                className="cursor-pointer gap-1 text-xs text-sci-red hover:bg-sci-red/10"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" /> Eliminar permanentemente
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => openEdit(aula)}
-                                className="cursor-pointer gap-1 text-xs border-border"
-                              >
-                                <Pencil className="h-3.5 w-3.5" /> Editar
-                              </Button>
-
-                              {aula.estado !== 'Ocupada' && (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => void handleRequestMaintenance(aula)}
-                                  disabled={changingId === aula.id}
-                                  className={`cursor-pointer text-xs ${
-                                    aula.estado === 'Mantenimiento'
-                                      ? 'text-sci-blue hover:bg-sci-blue/10'
-                                      : 'text-sci-amber hover:bg-sci-amber/10'
-                                  }`}
-                                >
-                                  {changingId === aula.id ? (
-                                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                                  ) : (
-                                    <Wrench className="h-3.5 w-3.5" />
-                                  )}
-                                  {aula.estado === 'Mantenimiento'
-                                    ? 'Habilitar'
-                                    : 'Mantenimiento'}
-                                </Button>
+                          {aula.estado !== 'Ocupada' && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => void handleRequestMaintenance(aula)}
+                              disabled={changingId === aula.id}
+                              className={`cursor-pointer text-xs ${
+                                aula.estado === 'Mantenimiento'
+                                  ? 'text-sci-blue hover:bg-sci-blue/10'
+                                  : 'text-sci-amber hover:bg-sci-amber/10'
+                              }`}
+                            >
+                              {changingId === aula.id ? (
+                                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Wrench className="h-3.5 w-3.5" />
                               )}
-
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setErrorEliminar('')
-                                  setAulaEliminar(aula)
-                                }}
-                                className="cursor-pointer gap-1 text-xs text-sci-red hover:bg-sci-red/10"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" /> Desactivar
-                              </Button>
-                            </>
+                              {aula.estado === 'Mantenimiento'
+                                ? 'Habilitar'
+                                : 'Mantenimiento'}
+                            </Button>
                           )}
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setErrorEliminar('')
+                              setAulaEliminar(aula)
+                            }}
+                            className="cursor-pointer gap-1 text-xs text-sci-red hover:bg-sci-red/10"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" /> Eliminar
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -534,189 +427,110 @@ export default function AulasPage() {
               ))}
             </div>
           ) : (
-            <div className="grid min-h-64 place-items-center rounded-2xl border border-dashed border-border p-8 text-center">
-              <div>
-                <Building2 className="mx-auto h-10 w-10 text-muted-foreground" />
-                <h2 className="mt-3 text-base font-bold text-foreground">
-                  No se encontraron ambientes
-                </h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Ajusta los filtros de búsqueda o registra un nuevo espacio.
+            <div className="grid min-h-64 place-items-center text-muted-foreground">
+              <div className="text-center">
+                <DoorClosed className="mx-auto h-8 w-8 text-sci-navy/40" />
+                <p className="mt-3 text-xs font-medium">
+                  No se encontraron ambientes registrados.
                 </p>
               </div>
             </div>
           )}
 
-          {!loading && total > 0 && (
-            <div className="flex flex-col gap-3 border-t border-border pt-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-              <span>
-                Página {page} de {lastPage} · {total} ambientes
+          {lastPage > 1 && (
+            <div className="flex items-center justify-between border-t border-border pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                disabled={page <= 1}
+                className="cursor-pointer text-xs border-border"
+              >
+                Anterior
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Página {page} de {lastPage}
               </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
-                  disabled={page <= 1}
-                  className="cursor-pointer gap-1 border-border"
-                >
-                  <ChevronLeft className="h-4 w-4" /> Anterior
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((current) => Math.min(lastPage, current + 1))}
-                  disabled={page >= lastPage}
-                  className="cursor-pointer gap-1 border-border"
-                >
-                  Siguiente <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((prev) => Math.min(prev + 1, lastPage))}
+                disabled={page >= lastPage}
+                className="cursor-pointer text-xs border-border"
+              >
+                Siguiente
+              </Button>
             </div>
           )}
         </div>
       </section>
 
+      {/* Modal Crear / Editar */}
       {modalAbierto && (
         <AulaFormModal
           key={aulaSeleccionada?.id ?? 'new'}
           aula={aulaSeleccionada}
           onOpenChange={setModalAbierto}
-          onSubmit={saveAula}
+          onSubmit={handleSaveAula}
         />
       )}
 
+      {/* Modal de Advertencia al pasar a Mantenimiento con Exámenes Futuros */}
       {aulaPorConfirmar && (
         <ConfirmModal
           open
-          onOpenChange={(open) => {
-            if (!open && changingId !== aulaPorConfirmar.id) {
-              setAulaPorConfirmar(null)
-              setExamenesFuturos([])
-            }
-          }}
-          title={
-            examenesFuturos.length > 0
-              ? 'Conflicto de Horarios: Exámenes Programados'
-              : 'Confirmar cambio de estado'
-          }
+          onOpenChange={(abierto) => !abierto && setAulaPorConfirmar(null)}
+          title="Confirmar pase a Mantenimiento"
           description={
             examenesFuturos.length > 0 ? (
-              <div className="space-y-3 text-left">
-                <p className="text-xs font-semibold text-sci-red">
-                  El ambiente <strong className="underline text-sci-navy">{aulaPorConfirmar.nombre}</strong> tiene{' '}
-                  {examenesFuturos.length} evaluación(es) agendada(s) a futuro:
+              <div className="space-y-2 text-left">
+                <p className="font-semibold text-sci-amber">
+                  Atención: Este ambiente tiene {examenesFuturos.length} evaluación(es) programada(s) próximamente:
                 </p>
-
-                <div className="max-h-40 overflow-y-auto rounded-xl border border-sci-red/30 bg-sci-red/10 p-2.5 space-y-2">
+                <ul className="max-h-36 overflow-y-auto list-disc pl-5 text-xs text-muted-foreground space-y-1">
                   {examenesFuturos.map((ex) => (
-                    <div
-                      key={ex.id}
-                      className="rounded-lg bg-card p-2 border border-border text-xs shadow-xs"
-                    >
-                      <p className="font-bold text-sci-navy truncate">{ex.nombre}</p>
-                      <p className="text-muted-foreground text-[11px] truncate">
-                        {ex.materia?.nombre ?? 'Materia asignada'}
-                      </p>
-                      <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
-                        <span className="flex items-center gap-1 font-medium">
-                          <Calendar className="h-3 w-3 text-sci-cyan" />
-                          {ex.fecha.slice(0, 10)}
-                        </span>
-                        <span className="flex items-center gap-1 font-medium">
-                          <Clock className="h-3 w-3 text-sci-amber" />
-                          {ex.hora_ini.slice(0, 5)} - {ex.hora_fin.slice(0, 5)}
-                        </span>
-                      </div>
-                    </div>
+                    <li key={ex.id}>
+                      <span className="font-medium text-foreground">{ex.nombre}</span> — Fecha: {ex.fecha?.slice(0, 10)} ({ex.hora_ini?.slice(0, 5)})
+                    </li>
                   ))}
-                </div>
-
-                <p className="text-xs text-muted-foreground leading-snug">
-                  Si pasas este ambiente a mantenimiento, el control de acceso para estos exámenes se verá comprometido. ¿Deseas proceder de todos modos?
+                </ul>
+                <p className="text-xs pt-1">
+                  ¿Desea cambiar el estado a <strong>Mantenimiento</strong> de todas formas?
                 </p>
               </div>
             ) : (
-              <>
-                ¿Deseas marcar el ambiente{' '}
-                <strong className="text-foreground">{aulaPorConfirmar.nombre}</strong> como{' '}
-                <strong className="text-foreground">
-                  {aulaPorConfirmar.estado === 'Mantenimiento'
-                    ? 'disponible'
-                    : 'en mantenimiento'}
-                </strong>
-                ?
-              </>
+              `¿Está seguro de cambiar el estado del ambiente "${aulaPorConfirmar.nombre}" a Mantenimiento?`
             )
           }
-          confirmText={
-            changingId === aulaPorConfirmar.id
-              ? 'Actualizando...'
-              : examenesFuturos.length > 0
-              ? 'Confirmar mantenimiento'
-              : aulaPorConfirmar.estado === 'Mantenimiento'
-              ? 'Habilitar'
-              : 'Poner en mantenimiento'
-          }
+          confirmText="Sí, pasar a Mantenimiento"
           cancelText="Cancelar"
-          onConfirm={() => void toggleMaintenance(aulaPorConfirmar)}
-          onCancel={() => {
-            setAulaPorConfirmar(null)
-            setExamenesFuturos([])
-          }}
-          variant={
-            aulaPorConfirmar.estado === 'Mantenimiento'
-              ? 'default'
-              : examenesFuturos.length > 0
-              ? 'destructive'
-              : 'default'
-          }
+          onConfirm={() => void cambiarEstadoDirecto(aulaPorConfirmar, 'Mantenimiento')}
+          onCancel={() => setAulaPorConfirmar(null)}
+          variant={examenesFuturos.length > 0 ? 'destructive' : 'default'}
         />
       )}
 
-      {/* Modal de confirmación para borrado lógico (desactivación) */}
+      {/* Modal de confirmación para eliminación (Soft Delete nativo) */}
       {aulaEliminar && (
         <ConfirmModal
           open
           onOpenChange={(abierto) => !abierto && !eliminando && setAulaEliminar(null)}
-          title="Desactivar ambiente"
+          title="Eliminar ambiente"
           description={
             errorEliminar ? (
               <span className="font-semibold text-sci-red">{errorEliminar}</span>
             ) : (
-              `¿Está seguro de desactivar el ambiente "${aulaEliminar.nombre}"? Si tiene exámenes programados pendientes o en curso, la operación será denegada para proteger la integridad académica.`
+              `¿Está seguro de eliminar el ambiente "${aulaEliminar.nombre}"? Si tiene exámenes programados pendientes o en curso, la operación será denegada para proteger la integridad académica.`
             )
           }
-          confirmText={eliminando ? 'Desactivando...' : 'Desactivar'}
+          confirmText={eliminando ? 'Eliminando...' : 'Eliminar'}
           cancelText="Cancelar"
-          onConfirm={() => void confirmarDesactivarAula()}
+          onConfirm={() => void confirmarEliminarAula()}
           onCancel={() => setAulaEliminar(null)}
           variant="destructive"
           showCancel={!eliminando}
-        />
-      )}
-
-      {/* Modal de confirmación para eliminación física permanente */}
-      {aulaForceEliminar && (
-        <ConfirmModal
-          open
-          onOpenChange={(abierto) => !abierto && !eliminandoForce && setAulaForceEliminar(null)}
-          title="Eliminar permanentemente"
-          description={
-            errorForceEliminar ? (
-              <span className="font-semibold text-sci-red">{errorForceEliminar}</span>
-            ) : (
-              `¿Está seguro de eliminar PERMANENTEMENTE el ambiente "${aulaForceEliminar.nombre}"? Esta acción borrará el registro de la base de datos de forma definitiva. Solo es posible si no cuenta con exámenes históricos vinculados.`
-            )
-          }
-          confirmText={eliminandoForce ? 'Eliminando...' : 'Eliminar permanentemente'}
-          cancelText="Cancelar"
-          onConfirm={() => void confirmarForceEliminarAula()}
-          onCancel={() => setAulaForceEliminar(null)}
-          variant="destructive"
-          showCancel={!eliminandoForce}
         />
       )}
     </div>

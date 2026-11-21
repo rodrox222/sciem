@@ -138,13 +138,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('aulas', [AulaController::class, 'store']);
         Route::put('aulas/{id}', [AulaController::class, 'update']);
         Route::delete('aulas/{id}', [AulaController::class, 'destroy']);
-        Route::patch('aulas/{id}/reactivar', [AulaController::class, 'reactivar']);
-        Route::delete('aulas/{id}/force', [AulaController::class, 'forceDelete']);
         Route::post('ambientes', [AulaController::class, 'store']);
         Route::put('ambientes/{id}', [AulaController::class, 'update']);
         Route::delete('ambientes/{id}', [AulaController::class, 'destroy']);
-        Route::patch('ambientes/{id}/reactivar', [AulaController::class, 'reactivar']);
-        Route::delete('ambientes/{id}/force', [AulaController::class, 'forceDelete']);
     });
 
     // --- EXÁMENES ---
@@ -169,8 +165,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('materias', [MateriaController::class, 'store']);
         Route::put('materias/{id}', [MateriaController::class, 'update']);
         Route::delete('materias/{id}', [MateriaController::class, 'destroy']);
-        Route::patch('materias/{id}/reactivar', [MateriaController::class, 'reactivar']);
-        Route::delete('materias/{id}/force', [MateriaController::class, 'forceDelete']);
     });
 
     // --- NORMAS ---
