@@ -19,7 +19,7 @@ class StoreMateriaRequest extends FormRequest
                 'required',
                 'string',
                 'max:150',
-                Rule::unique('materias', 'nombre')->where(fn ($q) => $q->whereRaw('activo is true')),
+                Rule::unique('materias', 'nombre')->whereNull('deleted_at'),
             ],
         ];
     }

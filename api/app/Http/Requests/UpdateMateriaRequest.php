@@ -21,7 +21,7 @@ class UpdateMateriaRequest extends FormRequest
                 'string',
                 'max:150',
                 Rule::unique('materias', 'nombre')
-                    ->where(fn ($q) => $q->whereRaw('activo is true'))
+                    ->whereNull('deleted_at')
                     ->ignore($this->route('id') ?? $this->route('materia')),
             ],
         ];
