@@ -2,10 +2,19 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { CalendarDays, Clock3, MapPin, CalendarX2 } from 'lucide-react'
 import { examenesService, type Examen } from '../services/examenes.service'
+import { gestionesService, type Gestion } from '../services/gestiones.service'
 import type { PaginatedResponse } from '@/types/api'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 const dateLabel = (value: string) => {
   const date = new Date(value.slice(0, 10) + 'T12:00:00')
@@ -21,19 +30,25 @@ const dateLabel = (value: string) => {
 export default function CronogramaPublicPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const date = searchParams.get('fecha') ?? ''
+  const gestionId = searchParams.get('id_gestion') ?? ''
+  const [gestiones, setGestiones] = useState<Gestion[]>([])
   const [page, setPage] = useState(1)
   const [result, setResult] = useState<{ key: string; value: PaginatedResponse<Examen> } | null>(null)
   const [error, setError] = useState<string | null>(null)
   
-  const key = `${date}:${page}`
+  const key = `${date}:${gestionId}:${page}`
   const loading = result?.key !== key && error === null
+
+  useEffect(() => {
+    gestionesService.list().then(setGestiones).catch(() => setGestiones([]))
+  }, [])
 
   useEffect(() => {
     document.title = 'Cronograma de exámenes | SCI'
     let active = true
 
     examenesService
-      .list({ fecha: date, page, perPage: 10 })
+      .list({ fecha: date, id_gestion: gestionId, page, perPage: 10 })
       .then((value) => {
         if (active) {
           setResult({ key, value })
@@ -50,13 +65,16 @@ export default function CronogramaPublicPage() {
     return () => {
       active = false
     }
-  }, [date, page, key])
+  }, [date, gestionId, page, key])
 
-  const changeDate = (value: string) => {
+  const updateFilters = (nextDate: string, nextGestion: string) => {
     setPage(1)
     setResult(null)
     setError(null)
-    setSearchParams(value ? { fecha: value } : {})
+    const params: Record<string, string> = {}
+    if (nextDate) params.fecha = nextDate
+    if (nextGestion) params.id_gestion = nextGestion
+    setSearchParams(params)
   }
 
   return (
@@ -84,19 +102,41 @@ export default function CronogramaPublicPage() {
             id="fecha-cronograma"
             type="date"
             value={date}
-            onChange={(e) => changeDate(e.target.value)}
+            onChange={(e) => updateFilters(e.target.value, gestionId)}
             className="h-11 w-full sm:w-60 bg-background text-sm"
           />
         </div>
 
-        {date && (
+        <div className="space-y-1.5 text-left w-full sm:w-56">
+          <Label className="text-xs font-semibold text-foreground">
+            Filtrar por gestión
+          </Label>
+          <Select
+            value={gestionId || 'all'}
+            onValueChange={(val) => updateFilters(date, val === 'all' ? '' : val)}
+          >
+            <SelectTrigger className="h-11 bg-background text-sm">
+              <SelectValue placeholder="Todas las gestiones" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas las gestiones</SelectItem>
+              {gestiones.map((g) => (
+                <SelectItem key={g.id} value={g.id}>
+                  {g.codigo}{g.activo ? ' (Activa)' : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {(date || gestionId) && (
           <Button
             type="button"
             variant="outline"
-            onClick={() => changeDate('')}
+            onClick={() => updateFilters('', '')}
             className="h-11 text-xs font-semibold text-sci-blue border-sci-blue/30 hover:bg-sci-blue/10 cursor-pointer"
           >
-            Mostrar todas las fechas
+            Limpiar filtros
           </Button>
         )}
       </div>
@@ -131,9 +171,16 @@ export default function CronogramaPublicPage() {
                 <div>
                   <div className="flex items-start justify-between gap-3">
                     <h2 className="text-base font-bold text-foreground">{exam.nombre}</h2>
-                    <span className="shrink-0 rounded-full border border-sci-cyan/30 bg-sci-cyan/10 px-2.5 py-0.5 text-[11px] font-semibold text-sci-cyan">
-                      {exam.estado}
-                    </span>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {exam.gestion?.codigo && (
+                        <Badge variant="outline" className="rounded-full border-sci-blue/25 bg-sci-blue/5 px-2 py-0.5 text-[11px] font-semibold text-sci-blue">
+                          {exam.gestion.codigo}
+                        </Badge>
+                      )}
+                      <span className="shrink-0 rounded-full border border-sci-cyan/30 bg-sci-cyan/10 px-2.5 py-0.5 text-[11px] font-semibold text-sci-cyan">
+                        {exam.estado}
+                      </span>
+                    </div>
                   </div>
                   <p className="mt-1 text-xs font-medium text-sci-blue">
                     {exam.materia?.nombre ?? 'Materia no especificada'}

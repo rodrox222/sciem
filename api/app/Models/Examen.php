@@ -26,6 +26,7 @@ class Examen extends Model
         'hora_fin',
         'id_aula',
         'id_docente',
+        'id_gestion',
     ];
 
     protected function casts(): array
@@ -48,6 +49,11 @@ class Examen extends Model
     public function docente(): BelongsTo
     {
         return $this->belongsTo(Docente::class, 'id_docente');
+    }
+
+    public function gestion(): BelongsTo
+    {
+        return $this->belongsTo(Gestion::class, 'id_gestion');
     }
     public function auxiliares(): BelongsToMany
     {

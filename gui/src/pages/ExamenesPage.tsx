@@ -17,6 +17,7 @@ import {
   type Examen,
   type ExamenEstado,
 } from '../services/examenes.service'
+import { gestionesService, type Gestion } from '../services/gestiones.service'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardContent } from '@/components/ui/card'
@@ -38,6 +39,8 @@ export default function ExamenesPage() {
   const [searchInput, setSearchInput] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [status, setStatus] = useState<ExamenEstado | 'all'>('all')
+  const [gestionId, setGestionId] = useState('')
+  const [gestiones, setGestiones] = useState<Gestion[]>([])
   const [date, setDate] = useState('')
   const [page, setPage] = useState(1)
   const [lastPage, setLastPage] = useState(1)
@@ -56,6 +59,7 @@ export default function ExamenesPage() {
         search: searchTerm,
         estado: status === 'all' ? '' : status,
         fecha: date,
+        id_gestion: gestionId,
         page,
         perPage: PER_PAGE,
       })
@@ -71,7 +75,11 @@ export default function ExamenesPage() {
     } finally {
       setLoading(false)
     }
-  }, [date, page, searchTerm, status])
+  }, [date, gestionId, page, searchTerm, status])
+
+  useEffect(() => {
+    gestionesService.list().then(setGestiones).catch(() => setGestiones([]))
+  }, [])
 
   useEffect(() => {
     const requestId = window.setTimeout(() => void loadExams(), 0)
@@ -96,6 +104,7 @@ export default function ExamenesPage() {
     setSearchInput('')
     setSearchTerm('')
     setStatus('all')
+    setGestionId('')
     setDate('')
     setPage(1)
   }
@@ -168,6 +177,12 @@ export default function ExamenesPage() {
         onSearchChange={setSearchInput}
         status={status}
         onStatusChange={setStatus}
+        gestionId={gestionId}
+        onGestionChange={(val) => {
+          setGestionId(val)
+          setPage(1)
+        }}
+        gestiones={gestiones}
         date={date}
         onDateChange={setDate}
         onSubmit={handleApplyFilters}

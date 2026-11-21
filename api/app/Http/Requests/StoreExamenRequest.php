@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Examen;
+use App\Models\Gestion;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -39,6 +40,34 @@ class StoreExamenRequest extends FormRequest
             $fecha    = $this->input('fecha');
             $horaIni  = $this->input('hora_ini');
             $horaFin  = $this->input('hora_fin');
+
+            $gestionActiva = Gestion::activa();
+            if (!$gestionActiva) {
+                $validator->errors()->add(
+                    'id_gestion',
+                    'No existe una gestión/semestre activo. El administrador debe iniciar un semestre en Configuración antes de programar exámenes.'
+                );
+                return;
+            }
+
+            if ($gestionActiva->estaVencida()) {
+                $finFormatted = $gestionActiva->fecha_fin?->format('d/m/Y');
+                $validator->errors()->add(
+                    'fecha',
+                    "La gestión activa ({$gestionActiva->codigo}) finalizó el {$finFormatted}. No se pueden programar nuevos exámenes."
+                );
+                return;
+            }
+
+            if (!$gestionActiva->contieneFecha((string) $fecha)) {
+                $inicioFormatted = $gestionActiva->fecha_inicio?->format('d/m/Y');
+                $finFormatted = $gestionActiva->fecha_fin?->format('d/m/Y');
+                $validator->errors()->add(
+                    'fecha',
+                    "La fecha del examen debe estar dentro del rango de la gestión activa {$gestionActiva->codigo} ({$inicioFormatted} al {$finFormatted})."
+                );
+                return;
+            }
 
             $traslape = Examen::where('id_aula', $idAula)
                 ->where('fecha', $fecha)

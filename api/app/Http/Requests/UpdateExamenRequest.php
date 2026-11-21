@@ -58,6 +58,16 @@ class UpdateExamenRequest extends FormRequest
             $horaIni  = $this->input('hora_ini', substr((string) $examenActual->hora_ini, 0, 5));
             $horaFin  = $this->input('hora_fin', substr((string) $examenActual->hora_fin, 0, 5));
 
+            if ($this->has('fecha') && $examenActual->gestion && !$examenActual->gestion->contieneFecha((string) $fecha)) {
+                $inicioFormatted = $examenActual->gestion->fecha_inicio?->format('d/m/Y');
+                $finFormatted = $examenActual->gestion->fecha_fin?->format('d/m/Y');
+                $validator->errors()->add(
+                    'fecha',
+                    "La fecha del examen debe estar dentro del rango de la gestión {$examenActual->gestion->codigo} ({$inicioFormatted} al {$finFormatted})."
+                );
+                return;
+            }
+
             $traslape = Examen::where('id_aula', $idAula)
                 ->where('fecha', $fecha)
                 ->where('id', '!=', $examenActual->id) 
