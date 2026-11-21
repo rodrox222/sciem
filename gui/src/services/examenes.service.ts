@@ -1,6 +1,7 @@
 import { api } from './api'
 import type { PaginatedResponse } from '@/types/api'
 import type { Norma } from './normas.service'
+import type { Gestion } from './gestiones.service'
 import { db, actualizarExamenOffline, type ExamenOfflineInfo } from '../db/offlineStorage'
 
 export type ExamenEstado = 'Programado' | 'En proceso' | 'Terminado'
@@ -28,9 +29,11 @@ export interface Examen {
   hora_fin: string
   id_aula: string
   id_docente: string
+  id_gestion?: string | null
   materia?: CatalogItem | null
   aula?: CatalogItem | null
   docente?: DocenteItem | null
+  gestion?: Gestion | null
   normas?: Norma[]
   created_at?: string
   updated_at?: string
@@ -79,6 +82,7 @@ export interface ExamenFilters {
   fecha?: string
   fecha_desde?: string
   fecha_hasta?: string
+  id_gestion?: string
   page?: number
   perPage?: number
 }
@@ -90,6 +94,7 @@ const buildExamQuery = (filters: ExamenFilters) => {
   if (filters.fecha) params.set('fecha', filters.fecha)
   if (filters.fecha_desde) params.set('fecha_desde', filters.fecha_desde)
   if (filters.fecha_hasta) params.set('fecha_hasta', filters.fecha_hasta)
+  if (filters.id_gestion) params.set('id_gestion', filters.id_gestion)
   if (filters.page) params.set('page', String(filters.page))
   if (filters.perPage) params.set('per_page', String(filters.perPage))
   const query = params.toString()

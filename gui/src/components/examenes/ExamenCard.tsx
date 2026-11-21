@@ -58,9 +58,16 @@ export function ExamenCard({ exam, canManage = false, onSelect }: ExamenCardProp
       <div>
         <CardHeader className="p-5 pb-0">
           <div className="flex flex-wrap items-start justify-between gap-2">
-            <Badge variant="outline" className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${estadoBadges[exam.estado]}`}>
-              {exam.estado}
-            </Badge>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge variant="outline" className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${estadoBadges[exam.estado]}`}>
+                {exam.estado}
+              </Badge>
+              {exam.gestion?.codigo && (
+                <Badge variant="outline" className="rounded-full border-sci-blue/25 bg-sci-blue/5 px-2 py-0.5 text-[11px] font-semibold text-sci-blue">
+                  {exam.gestion.codigo}
+                </Badge>
+              )}
+            </div>
             <span className="flex items-center gap-1 max-w-[150px] truncate text-xs font-semibold text-muted-foreground">
               <BookOpen className="h-3 w-3 shrink-0 text-sci-cyan" />
               <span className="truncate">{exam.materia?.nombre ?? 'Asignatura'}</span>

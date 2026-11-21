@@ -8,6 +8,7 @@ use App\Models\Admin;
 use App\Models\Auxiliar;
 use App\Models\Docente;
 use App\Models\Examen;
+use App\Models\Gestion;
 use App\Models\LogAuditoria;
 use App\Models\Norma;
 use Illuminate\Http\JsonResponse;
@@ -22,6 +23,7 @@ class ExamenController extends Controller
             'materia:id,nombre',
             'aula:id,nombre',
             'docente:id,nombre,apellido_paterno',
+            'gestion:id,codigo,anio,periodo,fecha_inicio,fecha_fin,activo',
             'normas:id,titulo,tipo',
         ]);
 
@@ -53,6 +55,12 @@ class ExamenController extends Controller
             $query->where('fecha', '<=', $fechaHasta);
         }
 
+        if ($idGestion = $request->query('id_gestion')) {
+            $query->where('id_gestion', $idGestion);
+        } elseif ($codigoGestion = $request->query('gestion')) {
+            $query->whereHas('gestion', fn ($q) => $q->where('codigo', $codigoGestion));
+        }
+
         $perPage = max(1, min(100, (int) $request->query('per_page', 10)));
         $examenes = $query->orderBy('fecha', 'desc')->orderBy('hora_ini', 'asc')->paginate($perPage);
 
@@ -67,6 +75,7 @@ class ExamenController extends Controller
             'materia:id,nombre',
             'aula:id,nombre',
             'docente:id,nombre,apellido_paterno',
+            'gestion:id,codigo,anio,periodo,fecha_inicio,fecha_fin,activo',
             'normas:id,titulo,tipo',
         ]);
 
@@ -110,6 +119,12 @@ class ExamenController extends Controller
             $query->where('fecha', '<=', $fechaHasta);
         }
 
+        if ($idGestion = $request->query('id_gestion')) {
+            $query->where('id_gestion', $idGestion);
+        } elseif ($codigoGestion = $request->query('gestion')) {
+            $query->whereHas('gestion', fn ($q) => $q->where('codigo', $codigoGestion));
+        }
+
         $perPage = max(1, min(100, (int) $request->query('per_page', 10)));
         $examenes = $query->orderBy('fecha', 'desc')->orderBy('hora_ini', 'asc')->paginate($perPage);
 
@@ -140,6 +155,9 @@ class ExamenController extends Controller
                 }
             }
         }
+
+        $gestionActiva = Gestion::activa();
+        $data['id_gestion'] = $gestionActiva?->id;
 
         $examen = DB::transaction(function () use ($data, $request) {
             $examen = Examen::create($data);
@@ -176,14 +194,14 @@ class ExamenController extends Controller
 
         return response()->json([
             'message' => 'Examen programado exitosamente.',
-            'examen'  => $examen->load(['materia', 'aula', 'docente', 'normas']),
+            'examen'  => $examen->load(['materia', 'aula', 'docente', 'gestion', 'normas']),
         ], 201);
     }
 
     public function show(Request $request, string $id): JsonResponse
     {
         \App\Services\AccesoExamen::buscar($id);
-        $examen = Examen::with(['materia', 'aula', 'docente', 'normas'])->find($id);
+        $examen = Examen::with(['materia', 'aula', 'docente', 'gestion', 'normas'])->find($id);
 
         if (!$examen) {
             return response()->json(['message' => 'Examen no encontrado.'], 404);
@@ -265,7 +283,7 @@ class ExamenController extends Controller
 
         return response()->json([
             'message' => 'Examen actualizado exitosamente.',
-            'examen'  => $examen->load(['materia', 'aula', 'docente', 'normas']),
+            'examen'  => $examen->load(['materia', 'aula', 'docente', 'gestion', 'normas']),
         ]);
     }
 

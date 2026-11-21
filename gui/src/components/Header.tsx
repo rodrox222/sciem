@@ -31,7 +31,6 @@ const NAV_ITEMS_BY_ROLE: Record<string, NavItem[]> = {
     { name: 'Inicio', href: '/dashboard' },
     { name: 'Mis exámenes', href: '/examenes' },
     { name: 'Reportes', href: '/reportes' },
-    { name: 'Estudiantes', href: '/estudiantes' },
     { name: 'Noticias', href: '/noticias' },
   ],
   auxiliar: [
@@ -207,14 +206,9 @@ export const Header: React.FC = () => {
                 </Button>
               </>
             ) : (
-              <>
-                <span className="hidden md:inline-flex items-center rounded-full border border-border bg-muted/40 px-3.5 py-1 text-xs font-medium text-muted-foreground">
-                  Información académica oficial
-                </span>
-                <Button onClick={() => navigate('/login')} size="sm" className="font-semibold shadow-xs cursor-pointer">
-                  Ingresar
-                </Button>
-              </>
+              <Button onClick={() => navigate('/login')} size="sm" className="font-semibold shadow-xs cursor-pointer">
+                Ingresar
+              </Button>
             )}
 
             {/* Hamburguesa visible en móviles */}

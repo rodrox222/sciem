@@ -49,7 +49,7 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
   const [misMaterias, setMisMaterias] = useState<Materia[]>([]);
   const [loadingMaterias, setLoadingMaterias] = useState(false);
 
-  const [isVincularExamen, setIsVincularExamen] = useState(false);
+  const [isVincularExamen, setIsVincularExamen] = useState(isDocente);
   const [selectedMateriaName, setSelectedMateriaName] = useState<string>('');
 
   const [formData, setFormData] = useState<StoreNoticiaPayload>({
@@ -107,7 +107,7 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
     if (isOpen) {
       setTimeout(() => {
         if (noticiaEditando) {
-          const tieneExamen = Boolean(noticiaEditando.id_examen);
+          const tieneExamen = isDocente ? true : Boolean(noticiaEditando.id_examen);
 
           setFormData({
             titulo: noticiaEditando.titulo,
@@ -126,12 +126,12 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
           setFormData({
             titulo: '',
             contenido: '',
-            publico_objetivo: 'Todos',
-            es_publica: false,
+            publico_objetivo: isDocente ? 'Estudiantes' : 'Todos',
+            es_publica: !isDocente,
             id_examen: null,
             id_materia: null,
           });
-          setIsVincularExamen(false);
+          setIsVincularExamen(isDocente);
           setSelectedMateriaName('');
         }
         setError('');
@@ -211,7 +211,7 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
       return;
     }
 
-    if (isVincularExamen) {
+    if (isDocente || isVincularExamen) {
       if (isDocente && !formData.id_materia) {
         setError('Debe seleccionar una de sus materias asignadas.');
         return;
@@ -220,18 +220,23 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
         setError('Debe seleccionar un examen específico.');
         return;
       }
+    } else if (!formData.es_publica) {
+      setError('Debe publicarla como anuncio público o vincularla a un examen específico.');
+      return;
     }
 
     setLoading(true);
     setError('');
 
+    const vincularFinal = isDocente || isVincularExamen;
+
     const payload: StoreNoticiaPayload = {
       titulo: formData.titulo.trim(),
       contenido: formData.contenido.trim(),
-      publico_objetivo: isVincularExamen ? 'Estudiantes' : 'Todos',
-      es_publica: isVincularExamen ? false : formData.es_publica,
-      id_examen: isVincularExamen ? formData.id_examen : null,
-      id_materia: isVincularExamen ? formData.id_materia : null,
+      publico_objetivo: vincularFinal ? 'Estudiantes' : 'Todos',
+      es_publica: vincularFinal ? false : formData.es_publica,
+      id_examen: vincularFinal ? formData.id_examen : null,
+      id_materia: vincularFinal ? formData.id_materia : null,
     };
 
     try {
@@ -293,39 +298,41 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
             </div>
           )}
 
-          <div
-            className={`rounded-xl border p-3 transition-all duration-200 ${
-              isAnuncioGeneralDisabled
-                ? 'border-border bg-slate-100/70 opacity-50'
-                : formData.es_publica
-                  ? 'border-sci-cyan/50 bg-sci-cyan/5'
-                  : 'border-border bg-slate-50/70'
-            }`}
-          >
-            <label
-              htmlFor="es_publica_general"
-              className={`flex items-start gap-3 select-none ${
-                isAnuncioGeneralDisabled ? 'cursor-not-allowed' : 'cursor-pointer'
+          {!isDocente && (
+            <div
+              className={`rounded-xl border p-3 transition-all duration-200 ${
+                isAnuncioGeneralDisabled
+                  ? 'border-border bg-slate-100/70 opacity-50'
+                  : formData.es_publica
+                    ? 'border-sci-cyan/50 bg-sci-cyan/5'
+                    : 'border-border bg-slate-50/70'
               }`}
             >
-              <input
-                type="checkbox"
-                id="es_publica_general"
-                checked={formData.es_publica}
-                disabled={isAnuncioGeneralDisabled}
-                onChange={(e) => handleToggleAnuncioGeneral(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-sci-cyan focus:ring-sci-cyan cursor-pointer disabled:cursor-not-allowed transition-all"
-              />
-              <div className="leading-tight">
-                <span className="block text-sm font-semibold text-sci-navy">
-                  Publicar como anuncio general
-                </span>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Visible para todos los usuarios.
-                </p>
-              </div>
-            </label>
-          </div>
+              <label
+                htmlFor="es_publica_general"
+                className={`flex items-start gap-3 select-none ${
+                  isAnuncioGeneralDisabled ? 'cursor-not-allowed' : 'cursor-pointer'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  id="es_publica_general"
+                  checked={formData.es_publica}
+                  disabled={isAnuncioGeneralDisabled}
+                  onChange={(e) => handleToggleAnuncioGeneral(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-sci-cyan focus:ring-sci-cyan cursor-pointer disabled:cursor-not-allowed transition-all"
+                />
+                <div className="leading-tight">
+                  <span className="block text-sm font-semibold text-sci-navy">
+                    Publicar como anuncio general (público)
+                  </span>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Visible para todos los usuarios.
+                  </p>
+                </div>
+              </label>
+            </div>
+          )}
 
           <div className="space-y-3.5">
             <div className="space-y-1.5">
@@ -363,34 +370,41 @@ export const NuevaNoticiaModal: React.FC<NuevaNoticiaModalProps> = ({
 
           <div
             className={`rounded-xl border transition-all duration-300 ${
-              isVincularDisabled
+              !isDocente && isVincularDisabled
                 ? 'border-border bg-slate-100/70 opacity-50'
-                : isVincularExamen
+                : isDocente || isVincularExamen
                   ? 'border-sci-cyan/40 bg-sci-cyan/5'
                   : 'border-border bg-slate-50/50'
             }`}
           >
-            <div className="p-3.5 flex items-center gap-3">
-              <input
-                type="checkbox"
-                id="toggle-vincular"
-                checked={isVincularExamen}
-                disabled={isVincularDisabled}
-                onChange={(e) => handleToggleVincular(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-sci-cyan focus:ring-sci-cyan transition-all cursor-pointer disabled:cursor-not-allowed"
-              />
-              <label
-                htmlFor="toggle-vincular"
-                className={`text-sm font-semibold text-sci-navy flex items-center gap-2 select-none ${
-                  isVincularDisabled ? 'cursor-not-allowed' : 'cursor-pointer'
-                }`}
-              >
-                <Link2 className="h-4 w-4 text-muted-foreground" />
-                Vincular a un examen específico
-              </label>
-            </div>
+            {isDocente ? (
+              <div className="p-3.5 flex items-center gap-2 text-sm font-semibold text-sci-navy">
+                <Link2 className="h-4 w-4 text-sci-cyan" />
+                <span>Vincular a un examen (obligatorio)</span>
+              </div>
+            ) : (
+              <div className="p-3.5 flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="toggle-vincular"
+                  checked={isVincularExamen}
+                  disabled={isVincularDisabled}
+                  onChange={(e) => handleToggleVincular(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-sci-cyan focus:ring-sci-cyan transition-all cursor-pointer disabled:cursor-not-allowed"
+                />
+                <label
+                  htmlFor="toggle-vincular"
+                  className={`text-sm font-semibold text-sci-navy flex items-center gap-2 select-none ${
+                    isVincularDisabled ? 'cursor-not-allowed' : 'cursor-pointer'
+                  }`}
+                >
+                  <Link2 className="h-4 w-4 text-muted-foreground" />
+                  Vincular a un examen específico
+                </label>
+              </div>
+            )}
 
-            {isVincularExamen && (
+            {(isDocente || isVincularExamen) && (
               <div className="px-4 pb-4 pt-2 flex flex-col gap-3.5 border-t border-sci-cyan/10">
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">

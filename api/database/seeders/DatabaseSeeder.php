@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
             UsersSeeder::class,
             NormaSeeder::class,
             ExamenSeeder2::class,
+            GestionSeeder::class,
             PrerrequisitoSeeder::class,
         ]);
     }

@@ -18,7 +18,7 @@ return new class extends Migration
 
         if (Schema::hasColumn('aulas', 'activo')) {
             DB::table('aulas')
-                ->where('activo', false)
+                ->where('activo', DB::raw('false'))
                 ->orWhere('estado', 'Inactiva')
                 ->update(['deleted_at' => now('America/La_Paz')]);
 
@@ -41,7 +41,7 @@ return new class extends Migration
 
         if (Schema::hasColumn('materias', 'activo')) {
             DB::table('materias')
-                ->where('activo', false)
+                ->where('activo', DB::raw('false'))
                 ->update(['deleted_at' => now('America/La_Paz')]);
 
             Schema::table('materias', function (Blueprint $table) {
@@ -59,7 +59,7 @@ return new class extends Migration
         }
 
         if (Schema::hasColumn('aulas', 'deleted_at')) {
-            DB::table('aulas')->whereNotNull('deleted_at')->update(['activo' => false]);
+            DB::table('aulas')->whereNotNull('deleted_at')->update(['activo' => DB::raw('false')]);
             Schema::table('aulas', function (Blueprint $table) {
                 $table->dropSoftDeletes();
             });
@@ -72,7 +72,7 @@ return new class extends Migration
         }
 
         if (Schema::hasColumn('materias', 'deleted_at')) {
-            DB::table('materias')->whereNotNull('deleted_at')->update(['activo' => false]);
+            DB::table('materias')->whereNotNull('deleted_at')->update(['activo' => DB::raw('false')]);
             Schema::table('materias', function (Blueprint $table) {
                 $table->dropSoftDeletes();
             });

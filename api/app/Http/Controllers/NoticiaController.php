@@ -57,12 +57,25 @@ class NoticiaController extends Controller
             $data['publico_objetivo'] = 'Estudiantes';
             $esPublicaBool = false;
         } else {
-            $data['id_examen'] = null;
-            $data['id_materia'] = null;
-            $data['publico_objetivo'] = $data['publico_objetivo'] ?? 'Todos';
+            if ($user instanceof Docente) {
+                return response()->json([
+                    'message' => 'Como docente, es obligatorio vincular la noticia a un examen.',
+                ], 422);
+            }
+
             $esPublicaBool = isset($data['es_publica'])
                 ? filter_var($data['es_publica'], FILTER_VALIDATE_BOOLEAN)
                 : false;
+
+            if (!$esPublicaBool) {
+                return response()->json([
+                    'message' => 'Debe vincular la noticia a un examen o publicarla como anuncio público.',
+                ], 422);
+            }
+
+            $data['id_examen'] = null;
+            $data['id_materia'] = null;
+            $data['publico_objetivo'] = $data['publico_objetivo'] ?? 'Todos';
         }
 
         $data['es_publica'] = $esPublicaBool ? DB::raw('true') : DB::raw('false');
@@ -190,12 +203,25 @@ class NoticiaController extends Controller
             $data['publico_objetivo'] = 'Estudiantes';
             $esPublicaBool = false;
         } else {
-            $data['id_examen'] = null;
-            $data['id_materia'] = null;
-            $data['publico_objetivo'] = $data['publico_objetivo'] ?? 'Todos';
+            if ($user instanceof Docente) {
+                return response()->json([
+                    'message' => 'Como docente, es obligatorio vincular la noticia a un examen.',
+                ], 422);
+            }
+
             $esPublicaBool = isset($data['es_publica'])
                 ? filter_var($data['es_publica'], FILTER_VALIDATE_BOOLEAN)
                 : false;
+
+            if (!$esPublicaBool) {
+                return response()->json([
+                    'message' => 'Debe vincular la noticia a un examen o publicarla como anuncio público.',
+                ], 422);
+            }
+
+            $data['id_examen'] = null;
+            $data['id_materia'] = null;
+            $data['publico_objetivo'] = $data['publico_objetivo'] ?? 'Todos';
         }
 
         $data['es_publica'] = $esPublicaBool;

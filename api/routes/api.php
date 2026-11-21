@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Cache;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ForgotPasswordController;
+use App\Http\Controllers\GestionController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AuditoriaController;
 use App\Http\Controllers\AulaController;
@@ -34,6 +35,8 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,
 Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLink']);
 Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword']);
 Route::get('noticias', [NoticiaController::class, 'index']);
+Route::get('gestiones', [GestionController::class, 'index']);
+Route::get('gestiones/activa', [GestionController::class, 'activa']);
 
 // Comprobación ligera de conectividad para el temporizador de sesión.
 Route::get('health', fn () => response()->noContent());
@@ -124,6 +127,11 @@ Route::middleware('auth:sanctum')->group(function () {
         // Parámetro de inactividad de sesión
         Route::get('configuracion/inactividad', [ConfiguracionSistemaController::class, 'getTiempoInactividad']);
         Route::put('configuracion/inactividad', [ConfiguracionSistemaController::class, 'updateTiempoInactividad']);
+
+        // Gestión / Semestres académicos
+        Route::post('gestiones', [GestionController::class, 'store']);
+        Route::put('gestiones/{id}', [GestionController::class, 'update']);
+        Route::post('gestiones/{id}/cerrar', [GestionController::class, 'cerrar']);
     });
 
     // --- AULAS / AMBIENTES ---

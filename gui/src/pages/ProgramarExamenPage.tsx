@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { AlertCircle, ArrowLeft, LoaderCircle, Save } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CalendarRange, LoaderCircle, Save } from 'lucide-react'
 
 import { FormDatosEvaluacion } from '@/components/examenes/FormDatosEvaluacion'
 import { FormHorarioAmbiente } from '@/components/examenes/FormHorarioAmbiente'
 import { FormNormasExamen } from '@/components/examenes/FormNormasExamen'
 
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { aulasService, type Aula } from '../services/aulas.service'
 import { api } from '../services/api'
 import {
@@ -13,6 +15,7 @@ import {
   type DocenteItem,
   type ExamenPayload,
 } from '../services/examenes.service'
+import { formatGestionLabel, gestionesService, type Gestion } from '../services/gestiones.service'
 import { materiasService, type Materia } from '../services/materias.service'
 import { normasService, type Norma } from '../services/normas.service'
 import { Button } from '@/components/ui/button'
@@ -68,6 +71,8 @@ export default function ProgramarExamenPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [gestionActiva, setGestionActiva] = useState<Gestion | null>(null)
+  const [gestionVencida, setGestionVencida] = useState(false)
 
   const selectedTeacher = docentes.find((t) => t.id === form.id_docente)
   const endTime = useMemo(
@@ -82,7 +87,7 @@ export default function ProgramarExamenPage() {
     try {
       const currentUser = isAdmin ? null : await api.get<DocenteItem>('/me').catch(() => null)
 
-      const [subjectsRes, roomsRes, rulesRes, teachersRes, examRes] = await Promise.allSettled([
+      const [subjectsRes, roomsRes, rulesRes, teachersRes, examRes, gestionRes] = await Promise.allSettled([
         isAdmin ? materiasService.listAll() : materiasService.listMisMaterias(),
         aulasService.list({ estado: 'Disponible', perPage: 100 }),
         normasService.listAll({ tipo: 'General' }),
@@ -90,6 +95,7 @@ export default function ProgramarExamenPage() {
           ? examenesService.listDocentes().then((res) => res.data).catch(() => [])
           : Promise.resolve(currentUser?.id ? [currentUser] : []),
         editId ? examenesService.get(editId) : Promise.resolve(null),
+        gestionesService.getActiva(),
       ])
 
       const subjects = subjectsRes.status === 'fulfilled' ? subjectsRes.value : []
@@ -97,11 +103,14 @@ export default function ProgramarExamenPage() {
       const rules = rulesRes.status === 'fulfilled' ? rulesRes.value : []
       const teachers = teachersRes.status === 'fulfilled' ? teachersRes.value : []
       const exam = examRes.status === 'fulfilled' ? examRes.value : null
+      const gActiva = gestionRes.status === 'fulfilled' ? gestionRes.value : { gestion: null, vencida: false }
 
       setMaterias(subjects)
       setAulas(rooms.data)
       setNormasGenerales(rules)
       setDocentes(teachers)
+      setGestionActiva(gActiva.gestion)
+      setGestionVencida(gActiva.vencida)
 
       if (exam) {
         setForm({
@@ -163,6 +172,13 @@ export default function ProgramarExamenPage() {
     if (!form.id_materia) errors.id_materia = 'Selecciona una asignatura.'
     if (!form.fecha) errors.fecha = 'Selecciona la fecha.'
     else if (form.fecha < todayLocal()) errors.fecha = 'La fecha no puede ser anterior a hoy.'
+    else if (!editId && gestionActiva) {
+      const inicio = gestionActiva.fecha_inicio.slice(0, 10)
+      const fin = gestionActiva.fecha_fin.slice(0, 10)
+      if (form.fecha < inicio || form.fecha > fin) {
+        errors.fecha = `La fecha debe estar dentro de la gestión ${gestionActiva.codigo} (${inicio} al ${fin}).`
+      }
+    }
     if (!form.hora_ini) errors.hora_ini = 'Selecciona la hora de inicio.'
     if (!Number.isInteger(duration) || duration <= 0) {
       errors.duracion = 'La duración debe ser un número entero mayor a 0.'
@@ -253,6 +269,35 @@ export default function ProgramarExamenPage() {
         )}
       </header>
 
+      {!loading && !editId && (!gestionActiva || gestionVencida) && (
+        <Alert variant="destructive" className="border-sci-red/30 bg-sci-red/10 text-sci-red">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle className="text-xs font-bold">
+            {!gestionActiva ? 'No hay una gestión activa' : `Gestión ${gestionActiva.codigo} vencida`}
+          </AlertTitle>
+          <AlertDescription className="text-xs">
+            {!gestionActiva
+              ? 'El administrador debe iniciar una gestión/semestre en Configuración antes de programar nuevos exámenes.'
+              : `La gestión ${gestionActiva.codigo} finalizó el ${gestionActiva.fecha_fin.slice(0, 10)}. El administrador debe ampliar su fecha de fin o iniciar una nueva gestión en Configuración.`}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {!loading && !editId && gestionActiva && !gestionVencida && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-sci-blue/20 bg-sci-blue/5 px-4 py-3 text-xs">
+          <div className="flex items-center gap-2 text-sci-navy font-semibold">
+            <CalendarRange className="h-4 w-4 text-sci-blue" />
+            <span>
+              Este examen se asignará a la gestión vigente:{' '}
+              <strong>{formatGestionLabel(gestionActiva)}</strong>
+            </span>
+          </div>
+          <Badge variant="outline" className="border-sci-blue/30 bg-background text-sci-blue font-semibold">
+            {gestionActiva.fecha_inicio.slice(0, 10)} al {gestionActiva.fecha_fin.slice(0, 10)}
+          </Badge>
+        </div>
+      )}
+
       {error && (
         <div className="flex items-start gap-3 rounded-2xl border border-sci-red/30 bg-sci-red/10 p-4 text-xs font-semibold text-sci-red" role="alert">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -319,7 +364,7 @@ export default function ProgramarExamenPage() {
             </Button>
             <Button
               type="submit"
-              disabled={saving}
+              disabled={saving || (!editId && (!gestionActiva || gestionVencida))}
               className="bg-sci-blue hover:opacity-90 text-white font-semibold cursor-pointer min-w-40 gap-2"
             >
               {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
