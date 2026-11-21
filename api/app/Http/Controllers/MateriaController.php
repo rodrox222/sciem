@@ -27,7 +27,14 @@ class MateriaController extends Controller
             if ($user instanceof Docente) {
                 $queryDocente = $user->materias()->orderBy('nombre', 'asc');
                 if ($search) {
-                    $queryDocente->where('materias.nombre', 'ilike', "%{$search}%");
+                    $words = array_filter(explode(' ', trim($search)));
+                    if (!empty($words)) {
+                        $queryDocente->where(function ($q) use ($words) {
+                            foreach ($words as $word) {
+                                $q->whereRaw("unaccent(materias.nombre) ILIKE unaccent(?)", ["%{$word}%"]);
+                            }
+                        });
+                    }
                 }
                 return response()->json($queryDocente->get());
             }
@@ -43,7 +50,14 @@ class MateriaController extends Controller
         $query = Materia::query();
 
         if ($search) {
-            $query->where('nombre', 'ilike', "%{$search}%");
+            $words = array_filter(explode(' ', trim($search)));
+            if (!empty($words)) {
+                $query->where(function ($q) use ($words) {
+                    foreach ($words as $word) {
+                        $q->whereRaw("unaccent(nombre) ILIKE unaccent(?)", ["%{$word}%"]);
+                    }
+                });
+            }
         }
 
         if ($request->boolean('all')) {

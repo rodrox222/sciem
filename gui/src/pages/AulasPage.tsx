@@ -115,6 +115,19 @@ export default function AulasPage() {
     void loadAulas()
   }, [loadAulas])
 
+  // Búsqueda en tiempo real con debounce y limpieza automática
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      const limpio = searchInput.trim()
+      if (limpio !== searchTerm) {
+        setPage(1)
+        setSearchTerm(limpio)
+      }
+    }, 300)
+
+    return () => clearTimeout(handler)
+  }, [searchInput, searchTerm])
+
   const handleSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setSearchTerm(searchInput.trim())

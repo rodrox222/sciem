@@ -36,10 +36,17 @@ class AulaController extends Controller
 
         $query = Aula::query();
         if ($search) {
-            $query->where(function ($q) use ($search) {
-                $q->where('nombre', 'ilike', "%{$search}%")
-                  ->orWhere('ubicacion', 'ilike', "%{$search}%");
-            });
+            $words = array_filter(explode(' ', trim($search)));
+            if (!empty($words)) {
+                $query->where(function ($q) use ($words) {
+                    foreach ($words as $word) {
+                        $q->where(function ($sub) use ($word) {
+                            $sub->whereRaw("unaccent(nombre) ILIKE unaccent(?)", ["%{$word}%"])
+                                ->orWhereRaw("unaccent(ubicacion) ILIKE unaccent(?)", ["%{$word}%"]);
+                        });
+                    }
+                });
+            }
         }
         if ($estado && in_array($estado, ['Disponible', 'Mantenimiento', 'Ocupada'])) {
             $query->where('estado', $estado);

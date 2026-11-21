@@ -84,6 +84,19 @@ export default function MateriasPage() {
     void cargarMaterias()
   }, [cargarMaterias])
 
+  // Búsqueda en tiempo real con debounce y limpieza automática
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      const limpio = busquedaInput.trim()
+      if (limpio !== busqueda) {
+        setPaginaActual(1)
+        setBusqueda(limpio)
+      }
+    }, 300)
+
+    return () => clearTimeout(handler)
+  }, [busquedaInput, busqueda])
+
   const manejarBusqueda = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setPaginaActual(1)
