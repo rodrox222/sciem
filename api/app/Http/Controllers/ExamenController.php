@@ -25,6 +25,15 @@ class ExamenController extends Controller
             'normas:id,titulo,tipo',
         ]);
 
+        if ($request->boolean('solo_mios')) {
+            $authUser = $request->user() ?? auth('sanctum')->user();
+            if ($authUser instanceof Docente) {
+                $materiasIds = $authUser->materias()->pluck('materias.id');
+                $query->where('id_docente', $authUser->id)
+                      ->whereIn('id_materia', $materiasIds);
+            }
+        }
+
         if ($search = $request->query('search')) {
             $query->where('nombre', 'ilike', "%{$search}%");
         }
@@ -52,7 +61,6 @@ class ExamenController extends Controller
 
     public function misExamenes(Request $request): JsonResponse
     {
-        /** @var \App\Models\Docente|\App\Models\Auxiliar|\App\Models\Admin|\App\Models\Estudiante $user */
         $user = $request->user();
 
         $query = Examen::with([
@@ -116,7 +124,6 @@ class ExamenController extends Controller
         if ($user instanceof Docente || ($user->rol ?? '') === 'docente') {
             $data['id_docente'] = $user->id;
 
-            // Validar que el docente sea titular de la materia asignada en docente_materia
             if ($user instanceof Docente) {
                 $esTitular = $user->materias()->where('materias.id', $data['id_materia'])->exists();
                 if (!$esTitular) {
@@ -126,7 +133,6 @@ class ExamenController extends Controller
                 }
             }
         } else {
-            // Si el Admin crea el examen, vincula la materia al docente responsable en docente_materia
             if (!empty($data['id_docente']) && !empty($data['id_materia'])) {
                 $docenteObj = Docente::find($data['id_docente']);
                 if ($docenteObj) {
@@ -278,7 +284,6 @@ class ExamenController extends Controller
             ], 403);
         }
 
-        // 1. Validar que el examen aún no haya iniciado
         $ahora = \Carbon\Carbon::now('America/La_Paz');
         $fechaExamen = $examen->fecha ? $examen->fecha->format('Y-m-d') : null;
         $horaIni = $examen->hora_ini ?? '00:00:00';
@@ -292,7 +297,6 @@ class ExamenController extends Controller
             }
         }
 
-        // 2. Validar que no tenga registros en logs_asistencias
         $tieneAsistencias = DB::table('logs_asistencias')->where('id_examen', $examen->id)->exists();
         if ($tieneAsistencias) {
             return response()->json([
@@ -301,7 +305,6 @@ class ExamenController extends Controller
             ], 422);
         }
 
-        // 3. Validar que no tenga estudiante_examen con ingreso registrado
         $tieneIngresos = DB::table('estudiante_examen')
             ->where('id_examen', $examen->id)
             ->whereNotNull('fecha_ingreso')
@@ -313,7 +316,6 @@ class ExamenController extends Controller
             ], 422);
         }
 
-        // 4. Validar que no tenga intentos_no_autorizados
         $tieneIntentos = DB::table('intentos_no_autorizados')->where('id_examen', $examen->id)->exists();
         if ($tieneIntentos) {
             return response()->json([
@@ -329,7 +331,6 @@ class ExamenController extends Controller
             'nombre'      => $examen->nombre,
         ];
 
-        // Limpiar asignaciones en auxiliar_examen si existen (FK RESTRICT)
         DB::table('auxiliar_examen')->where('id_examen', $examen->id)->delete();
 
         $examen->delete();
