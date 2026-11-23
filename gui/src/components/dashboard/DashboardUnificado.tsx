@@ -18,6 +18,7 @@ import {
 } from '@/services/dashboard.service'
 import { examenesService } from '@/services/examenes.service'
 import { estudiantesService } from '@/services/estudiantes.service'
+import { Capacitor } from '@capacitor/core'
 
 const TITULOS: Record<RolDashboard, string> = {
   admin: 'Administración',
@@ -308,9 +309,9 @@ export function DashboardUnificado() {
           </p>
         </div>
 
-        {/* Acciones superiores: Solo Auxiliar puede ver la descarga del APK institucional */}
+        {/* Acciones superiores: Solo Auxiliar en web puede ver la descarga del APK */}
         <div className="flex flex-wrap items-center gap-2.5">
-          {rolActivo === 'auxiliar' && (
+          {!Capacitor.isNativePlatform() && rolActivo === 'auxiliar' && (
             <Button
               asChild
               variant="outline"

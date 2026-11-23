@@ -26,6 +26,7 @@ import { ExamenMetrics } from '@/components/examenes/ExamenMetrics'
 import { ExamenFilters } from '@/components/examenes/ExamenFilters'
 import { ExamenCard } from '@/components/examenes/ExamenCard'
 import { ExamenDetailModal } from '@/components/examenes/ExamenDetailModal'
+import { Capacitor } from '@capacitor/core'
 
 const PER_PAGE = 9
 
@@ -50,6 +51,8 @@ export default function ExamenesPage() {
   const [selected, setSelected] = useState<Examen | null>(null)
 
   const success = (location.state as { success?: string } | null)?.success
+
+  const isNativeApp = Capacitor.isNativePlatform()
 
   const loadExams = useCallback(async () => {
     setLoading(true)
@@ -128,23 +131,25 @@ export default function ExamenesPage() {
         {/* Acciones superiores: Descarga de APK y Programación de Examen */}
         <div className="flex flex-wrap items-center gap-2.5">
          
-          <Button
-            asChild
-            variant="outline"
-            className="cursor-pointer gap-2 border-sci-cyan/40 bg-sci-cyan/5 font-semibold text-sci-navy shadow-xs hover:bg-sci-cyan/15 hover:text-sci-blue"
-          >
-            <a
-              href="/apk/sci-control-ingreso.apk" /* <-- RUTA LOCAL DENTRO DE public/apk */
-              download="SCI_Control_Ingreso.apk" 
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Descargar instalador APK para control de ingreso"
+          {!isNativeApp && (
+            <Button
+              asChild
+              variant="outline"
+              className="cursor-pointer gap-2 border-sci-cyan/40 bg-sci-cyan/5 font-semibold text-sci-navy shadow-xs hover:bg-sci-cyan/15 hover:text-sci-blue"
             >
-              <Smartphone className="h-4 w-4 text-sci-cyan" aria-hidden="true" />
-              <span>Descargar APK</span>
-              <Download className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-            </a>
-          </Button>
+              <a
+                href="/apk/sci-control-ingreso.apk"
+                download="SCI_Control_Ingreso.apk"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Descargar instalador APK para control de ingreso"
+              >
+                <Smartphone className="h-4 w-4 text-sci-cyan" aria-hidden="true" />
+                <span>Descargar APK</span>
+                <Download className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+              </a>
+            </Button>
+          )}
 
           {canManage && (
             <Button
