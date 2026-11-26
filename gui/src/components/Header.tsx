@@ -229,7 +229,11 @@ export const Header: React.FC = () => {
           {isAuthenticated ? (
             navItems.map((item) => {
               // El tab toggle nunca está "activo" como ruta fija, funciona como disparador de cambio
-              const active = !item.isRoleToggle && location.pathname.startsWith(item.href);
+              const active =
+                !item.isRoleToggle &&
+                (item.href === '/dashboard'
+                  ? location.pathname === '/dashboard'
+                  : location.pathname === item.href || location.pathname.startsWith(`${item.href}/`));
 
               return (
                 <button
