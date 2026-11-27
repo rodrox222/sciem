@@ -50,7 +50,7 @@ export const HomeNavbar: React.FC<HomeNavbarProps> = ({
           {/* Logo SCI */}
           <div 
             className="flex items-center gap-2 sm:gap-3 cursor-pointer select-none" 
-            onClick={() => goTo(authenticated ? '/dashboard' : '/')}
+            onClick={() => goTo('/')}
           >
             <img src={logoSci} alt="Logo SCI" className="h-10 sm:h-12 w-auto object-contain" />
             <div className="leading-tight">

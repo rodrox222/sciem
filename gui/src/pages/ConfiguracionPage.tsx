@@ -7,8 +7,11 @@ import {
   Lock,
   Play,
   Save,
+  UserCog,
 } from 'lucide-react'
 import { toast } from 'sonner'
+
+import { api } from '@/services/api'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -50,6 +53,16 @@ export const ConfiguracionPage: React.FC = () => {
   const [minutes, setMinutes] = useState<number>(configService.getTimeoutMinutes())
   const [savingTimeout, setSavingTimeout] = useState(false)
   const [saved, setSaved] = useState(false)
+
+  // Perfil del Administrador
+  const [adminNombre, setAdminNombre] = useState('')
+  const [adminPaterno, setAdminPaterno] = useState('')
+  const [adminMaterno, setAdminMaterno] = useState('')
+  const [adminCi, setAdminCi] = useState('')
+  const [adminCiExt, setAdminCiExt] = useState('')
+  const [adminPass, setAdminPass] = useState('')
+  const [adminPassConf, setAdminPassConf] = useState('')
+  const [savingAdmin, setSavingAdmin] = useState(false)
 
   const [gestiones, setGestiones] = useState<Gestion[]>([])
   const [activa, setActiva] = useState<Gestion | null>(null)
@@ -94,7 +107,62 @@ export const ConfiguracionPage: React.FC = () => {
   useEffect(() => {
     void loadGestiones()
     void configService.syncTimeoutFromServer().then(setMinutes)
+    void api
+      .get<{
+        nombre: string
+        apellido_paterno: string
+        apellido_materno: string | null
+        ci: string
+        ci_extension: string | null
+      }>('/me')
+      .then((me) => {
+        setAdminNombre(me.nombre || '')
+        setAdminPaterno(me.apellido_paterno || '')
+        setAdminMaterno(me.apellido_materno || '')
+        setAdminCi(me.ci || '')
+        setAdminCiExt(me.ci_extension || '')
+      })
+      .catch(() => {})
   }, [loadGestiones])
+
+  const handleSaveAdminPerfil = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (adminPass && adminPass !== adminPassConf) {
+      toast.error('La confirmación de la contraseña no coincide.')
+      return
+    }
+    setSavingAdmin(true)
+    try {
+      const payload: Record<string, string | null> = {
+        nombre: adminNombre.trim(),
+        apellido_paterno: adminPaterno.trim(),
+        apellido_materno: adminMaterno.trim() || null,
+        ci: adminCi.trim(),
+        ci_extension: adminCiExt.trim() || null,
+      }
+      if (adminPass) {
+        payload.password = adminPass
+        payload.password_confirmation = adminPassConf
+      }
+
+      const res = await api.put<{ message: string; user: Record<string, unknown> }>(
+        '/admin/perfil',
+        payload,
+      )
+      try {
+        const raw = localStorage.getItem('user_data')
+        const prev = raw ? JSON.parse(raw) : {}
+        localStorage.setItem('user_data', JSON.stringify({ ...prev, ...res.user }))
+      } catch {}
+      setAdminPass('')
+      setAdminPassConf('')
+      toast.success(res.message || 'Datos del administrador actualizados.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo actualizar el perfil.')
+    } finally {
+      setSavingAdmin(false)
+    }
+  }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -421,6 +489,134 @@ export const ConfiguracionPage: React.FC = () => {
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Perfil del Administrador */}
+      <Card className="rounded-2xl border-border shadow-xs">
+        <CardHeader className="border-b border-border pb-4">
+          <div className="flex items-start gap-3.5">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-sci-cyan/15 text-sci-navy">
+              <UserCog className="h-5 w-5" />
+            </span>
+            <div>
+              <CardTitle className="text-base font-bold text-sci-navy">
+                Perfil del Administrador
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Consulta y modifica los datos de la cuenta administradora (el ingreso del administrador es con su CI).
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="pt-5">
+          <form onSubmit={handleSaveAdminPerfil} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="admin-nombre" className="text-xs font-semibold text-sci-navy">
+                  Nombre(s) *
+                </Label>
+                <Input
+                  id="admin-nombre"
+                  value={adminNombre}
+                  onChange={(e) => setAdminNombre(e.target.value)}
+                  required
+                  className="bg-background"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="admin-paterno" className="text-xs font-semibold text-sci-navy">
+                  Apellido paterno *
+                </Label>
+                <Input
+                  id="admin-paterno"
+                  value={adminPaterno}
+                  onChange={(e) => setAdminPaterno(e.target.value)}
+                  required
+                  className="bg-background"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="admin-materno" className="text-xs font-semibold text-sci-navy">
+                  Apellido materno
+                </Label>
+                <Input
+                  id="admin-materno"
+                  value={adminMaterno}
+                  onChange={(e) => setAdminMaterno(e.target.value)}
+                  className="bg-background"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="admin-ci" className="text-xs font-semibold text-sci-navy">
+                  Carnet de Identidad (CI) *
+                </Label>
+                <Input
+                  id="admin-ci"
+                  value={adminCi}
+                  onChange={(e) => setAdminCi(e.target.value)}
+                  required
+                  className="bg-background"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="admin-ci-ext" className="text-xs font-semibold text-sci-navy">
+                  Extensión (opcional)
+                </Label>
+                <Input
+                  id="admin-ci-ext"
+                  value={adminCiExt}
+                  onChange={(e) => setAdminCiExt(e.target.value)}
+                  placeholder="Ej. 1A"
+                  maxLength={10}
+                  className="bg-background"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="admin-pass" className="text-xs font-semibold text-sci-navy">
+                  Nueva contraseña (opcional)
+                </Label>
+                <Input
+                  id="admin-pass"
+                  type="password"
+                  minLength={8}
+                  value={adminPass}
+                  onChange={(e) => setAdminPass(e.target.value)}
+                  placeholder="Dejar vacío para no cambiar"
+                  className="bg-background"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="admin-pass-conf" className="text-xs font-semibold text-sci-navy">
+                  Confirmar contraseña
+                </Label>
+                <Input
+                  id="admin-pass-conf"
+                  type="password"
+                  minLength={8}
+                  value={adminPassConf}
+                  onChange={(e) => setAdminPassConf(e.target.value)}
+                  placeholder="Repetir nueva contraseña"
+                  className="bg-background"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <Button
+                type="submit"
+                disabled={savingAdmin}
+                className="gap-2 bg-sci-blue text-white hover:opacity-90 font-semibold cursor-pointer"
+              >
+                <Save className="h-4 w-4" />
+                {savingAdmin ? 'Guardando...' : 'Actualizar datos del administrador'}
+              </Button>
+            </div>
+          </form>
         </CardContent>
       </Card>
 

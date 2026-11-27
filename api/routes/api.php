@@ -60,24 +60,26 @@ Route::middleware('auth:sanctum')->group(function () {
         abort_unless($rol, 403, 'Sesión inactiva o ambigua; vuelva a iniciar sesión.');
 
         return response()->json([
-            'id'               => $user->id,
-            'ci'               => $user->ci,
-            'ci_extension'     => $user->ci_extension,
-            'nombre'           => $user->nombre,
-            'apellido_paterno' => $user->apellido_paterno,
-            'apellido_materno' => $user->apellido_materno,
-            'email'            => $user->email ?? $user->email_institucional ?? null,
-            'rol'              => $rol,
-            'activo'           => $user->activo,
-            'ultimo_acceso'    => $user->ultimo_acceso,
+            'id'                       => $user->id,
+            'ci'                       => $user->ci,
+            'ci_extension'             => $user->ci_extension,
+            'nombre'                   => $user->nombre,
+            'apellido_paterno'         => $user->apellido_paterno,
+            'apellido_materno'         => $user->apellido_materno,
+            'email'                    => $user->email ?? $user->email_institucional ?? null,
+            'codigo_sis'               => $user->codigo_sis ?? null,
+            'foto_perfil_url'          => $user->foto_perfil_url ?? null,
+            'primer_acceso_completado' => $user->primer_acceso_completado ?? null,
+            'es_auxiliar'              => $user->es_auxiliar ?? null,
+            'rol'                      => $rol,
+            'activo'                   => $user->activo,
+            'ultimo_acceso'            => $user->ultimo_acceso,
         ]);
     });
 
-    // Endpoint de roles para selectores con disponibilidad según regla de admin único
+    // Endpoint de roles para selectores de Usuarios (excluye Admin, gestionado en Configuración)
     Route::get('roles', function () {
-        $adminExiste = \App\Models\Admin::count() > 0;
         return response()->json([
-            ['id' => 'admin', 'nombre' => 'Administrador', 'disponible' => !$adminExiste],
             ['id' => 'docente', 'nombre' => 'Docente', 'disponible' => true],
             ['id' => 'auxiliar', 'nombre' => 'Auxiliar', 'disponible' => true],
         ]);
@@ -127,11 +129,18 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Parámetro de inactividad de sesión (solo admin modifica)
         Route::put('configuracion/inactividad', [ConfiguracionSistemaController::class, 'updateTiempoInactividad']);
+        Route::put('admin/perfil', [ConfiguracionSistemaController::class, 'updatePerfilAdmin']);
 
         // Gestión / Semestres académicos
         Route::post('gestiones', [GestionController::class, 'store']);
         Route::put('gestiones/{id}', [GestionController::class, 'update']);
         Route::post('gestiones/{id}/cerrar', [GestionController::class, 'cerrar']);
+    });
+
+    // --- PERFIL DOCENTE (autoasignación de materias) ---
+    Route::middleware('role:docente')->group(function () {
+        Route::get('docente/materias', [UserController::class, 'getMisMateriasDocente']);
+        Route::post('docente/materias', [UserController::class, 'syncMisMateriasDocente']);
     });
 
     // --- AULAS / AMBIENTES ---

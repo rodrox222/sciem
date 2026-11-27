@@ -20,6 +20,7 @@ export interface ResultadoEscaneo {
     codigo_sis?: string;
     ci?: string;
     foto_url?: string | null;
+    foto_verificacion_url?: string | null;
   };
   detalles?: any;
 }

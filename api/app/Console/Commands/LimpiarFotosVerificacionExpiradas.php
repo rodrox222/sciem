@@ -10,13 +10,13 @@ use Illuminate\Support\Facades\Storage;
 class LimpiarFotosVerificacionExpiradas extends Command
 {
     protected $signature = 'fotos:limpiar-verificaciones';
-    protected $description = 'Elimina las fotos temporales de verificación facial de exámenes concluidos.';
+    protected $description = 'Elimina las fotos temporales de verificación facial 24 horas después de concluir el examen.';
 
     public function handle(): int
     {
         $ahora = Carbon::now('America/La_Paz');
 
-        // Buscar exámenes que ya hayan terminado (hora_fin superada)
+        // Buscar exámenes que hayan terminado hace más de 24 horas
         $examenesConcluidos = Examen::whereNotNull('fecha')
             ->whereNotNull('hora_fin')
             ->get()
@@ -28,16 +28,12 @@ class LimpiarFotosVerificacionExpiradas extends Command
                 $soloHoraFin = explode(' ', (string) $examen->hora_fin);
                 $horaFinStr = end($soloHoraFin);
 
-                $finExamen = Carbon::createFromFormat(
-                    'Y-m-d H:i:s',
-                    "{$soloFecha} {$horaFinStr}",
-                    'America/La_Paz'
-                );
+                $finExamen = Carbon::parse("{$soloFecha} {$horaFinStr}", 'America/La_Paz');
 
-                return $ahora->gt($finExamen);
+                return $ahora->gt($finExamen->copy()->addHours(24));
             });
 
-        $disco = Storage::disk('local');
+        $disco = Storage::disk('public');
         $archivos = $disco->files('fotos_verificacion_qr');
         $eliminados = 0;
 
@@ -53,7 +49,7 @@ class LimpiarFotosVerificacionExpiradas extends Command
             }
         }
 
-        $this->info("Limpieza completada: se eliminaron {$eliminados} fotos de verificación de exámenes concluidos.");
+        $this->info("Limpieza completada: se eliminaron {$eliminados} fotos de verificación de exámenes concluidos hace más de 24 horas.");
 
         return Command::SUCCESS;
     }
