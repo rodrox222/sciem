@@ -16,8 +16,6 @@ import {
   type ResumenAdmin, type ResumenConExamenes, type ResumenDocente,
   type RolDashboard,
 } from '@/services/dashboard.service'
-import { examenesService } from '@/services/examenes.service'
-import { estudiantesService } from '@/services/estudiantes.service'
 import { Capacitor } from '@capacitor/core'
 
 const TITULOS: Record<RolDashboard, string> = {
@@ -94,7 +92,7 @@ function ListaExamenes({ examenes, rol }: { examenes: ExamenDashboard[]; rol: Ro
               {rol === 'auxiliar' && examen.docente && <p className="break-words">Docente: {examen.docente}</p>}
               {rol === 'estudiante' && examen.estado_habilitacion === 'Inhabilitado' && examen.motivo_estado &&
                 <p className="break-words text-destructive">Motivo: {examen.motivo_estado}</p>}
-              
+
               <Link
                 to={rol === 'estudiante' ? `/estudiante/examenes/${encodeURIComponent(String(examen.id))}` : `/examenes/${encodeURIComponent(String(examen.id))}`}
                 className="inline-flex items-center gap-1 font-semibold text-sci-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary cursor-pointer pt-2"
@@ -226,8 +224,8 @@ export function DashboardUnificado() {
           e instanceof ApiError && e.status === 403
             ? 'No tienes autorización para consultar este dashboard.'
             : e instanceof ApiError && e.status === 401
-            ? 'La sesión ha expirado. Inicia sesión nuevamente.'
-            : 'No se pudo obtener el dashboard. Revisa la conexión e inténtalo de nuevo.'
+              ? 'La sesión ha expirado. Inicia sesión nuevamente.'
+              : 'No se pudo obtener el dashboard. Revisa la conexión e inténtalo de nuevo.'
         )
       } finally {
         if (activo) setLoading(false)
