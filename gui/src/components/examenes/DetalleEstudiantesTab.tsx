@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   LoaderCircle,
   RefreshCw,
@@ -10,6 +11,7 @@ import {
   Users,
   WifiOff,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
@@ -165,7 +167,8 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
   }
 
   const saveStudent = async (payload: InscripcionPayload) => {
-    const response = await estudiantesService.enroll(exam.id, payload)
+    if (!editingStudent?.id) return
+    const response = await estudiantesService.updateInExam(exam.id, editingStudent.id, payload)
     setSuccess(response.message || 'Estudiante actualizado correctamente.')
     await loadData()
   }
@@ -293,6 +296,16 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
         onSuccess={setSuccess}
       />
 
+      {exam.aula?.capacidad && exam.aula.capacidad > 0 && students.length > exam.aula.capacidad && (
+        <Alert className="border-sci-amber/40 bg-sci-amber/10 text-sci-navy">
+          <AlertTriangle className="h-4 w-4 text-sci-amber" />
+          <AlertDescription className="text-xs font-medium">
+            <strong>Aviso de capacidad superada:</strong> Hay {students.length} estudiantes inscritos y el aula{' '}
+            {exam.aula.nombre ?? ''} tiene una capacidad de {exam.aula.capacidad}.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Buscador y Filtros */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <form onSubmit={handleSearch} className="flex flex-1 gap-2">
@@ -380,6 +393,8 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
       <InscribirEstudianteModal
         examId={exam.id}
         examName={exam.nombre}
+        aulaCapacidad={exam.aula?.capacidad}
+        currentEnrolledCount={students.length}
         isOpen={inscribirModalOpen}
         onClose={() => setInscribirModalOpen(false)}
         onSuccess={() => {
@@ -410,6 +425,15 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
               response.message ||
                 `Carga masiva completada. Se registraron ${response.total_insertados} estudiantes.`
             )
+            if (
+              exam.aula?.capacidad &&
+              exam.aula.capacidad > 0 &&
+              students.length + (response.total_insertados ?? 0) > exam.aula.capacidad
+            ) {
+              toast.warning(
+                `Aviso: Se superó la capacidad del aula (${exam.aula.capacidad} estudiantes).`
+              )
+            }
             setBulkModalOpen(false)
             await loadData()
           }}

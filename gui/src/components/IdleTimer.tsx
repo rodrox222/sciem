@@ -3,12 +3,12 @@ import { Button } from '@/components/ui/button'
 import { useIdleTimer } from '../hooks/useIdleTimer'
 
 export const IdleTimer: React.FC = () => {
-  const { showModal, secondsRemaining, handleLogout, handleStayActive } = useIdleTimer()
+  const { showModal, secondsRemaining, countdownTotalSeconds, handleLogout, handleStayActive } = useIdleTimer()
 
   if (!showModal) return null
 
   const formattedSeconds = String(secondsRemaining).padStart(2, '0')
-  const progressPercent = (secondsRemaining / 60) * 100
+  const progressPercent = Math.min(100, (secondsRemaining / Math.max(1, countdownTotalSeconds)) * 100)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 font-sans">

@@ -50,6 +50,7 @@ Route::pattern('expulsionId', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])->middleware(\App\Http\Middleware\InstantaneaLectura::class);
     Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('configuracion/inactividad', [ConfiguracionSistemaController::class, 'getTiempoInactividad']);
 
     // Perfil del usuario autenticado
     Route::get('/me', function (Request $request) {
@@ -124,8 +125,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('auditoria', [AuditoriaController::class, 'index']);
         Route::post('auditoria/{id}/revertir', [AuditoriaController::class, 'revertir']);
 
-        // Parámetro de inactividad de sesión
-        Route::get('configuracion/inactividad', [ConfiguracionSistemaController::class, 'getTiempoInactividad']);
+        // Parámetro de inactividad de sesión (solo admin modifica)
         Route::put('configuracion/inactividad', [ConfiguracionSistemaController::class, 'updateTiempoInactividad']);
 
         // Gestión / Semestres académicos
@@ -204,6 +204,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- INSCRIPCIÓN Y GESTIÓN EN EXAMEN ---
     Route::middleware('role:admin,administrador,docente')->group(function () {
         Route::post('examenes/{id}/estudiantes', [EstudianteController::class, 'inscribirAExamen']);
+        Route::put('examenes/{id}/estudiantes/{idEstudiante}', [EstudianteController::class, 'actualizarEnExamen']);
         Route::delete('examenes/{id}/estudiantes/{idEstudiante}', [EstudianteController::class, 'desvincularDeExamen']);
         Route::post('examenes/{idExamen}/estudiantes/carga-masiva', [CargaMasivaEstudianteController::class, 'storePorExamen']);
     });

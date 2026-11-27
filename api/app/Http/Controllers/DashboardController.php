@@ -77,7 +77,7 @@ class DashboardController extends Controller
 
                     $q->whereIn('id', DB::table($tablaAuxiliar)
                         ->where('id_auxiliar', $user->id)
-                        ->where('estado', 'Activo')
+                        ->whereIn('estado', ['Activo', 'Aceptada'])
                         ->select('id_examen'));
                 } else {
                     $q->whereIn('id', DB::table('estudiante_examen')->where('id_estudiante', $user->id)->select('id_examen'));

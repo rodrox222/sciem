@@ -48,6 +48,7 @@ const formatFecha = (fecha?: string) => {
 
 export const ConfiguracionPage: React.FC = () => {
   const [minutes, setMinutes] = useState<number>(configService.getTimeoutMinutes())
+  const [savingTimeout, setSavingTimeout] = useState(false)
   const [saved, setSaved] = useState(false)
 
   const [gestiones, setGestiones] = useState<Gestion[]>([])
@@ -92,13 +93,24 @@ export const ConfiguracionPage: React.FC = () => {
 
   useEffect(() => {
     void loadGestiones()
+    void configService.syncTimeoutFromServer().then(setMinutes)
   }, [loadGestiones])
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
-    configService.setTimeoutMinutes(minutes)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+    setSavingTimeout(true)
+    setSaved(false)
+    try {
+      const updated = await configService.saveTimeoutMinutes(minutes)
+      setMinutes(updated)
+      setSaved(true)
+      toast.success(`Tiempo de inactividad actualizado a ${updated} minuto(s).`)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo guardar el tiempo de inactividad.')
+    } finally {
+      setSavingTimeout(false)
+    }
   }
 
   const handlePeriodoOrAnioChange = (anio: number, periodo: PeriodoGestion) => {
@@ -451,8 +463,8 @@ export const ConfiguracionPage: React.FC = () => {
               <span />
             )}
 
-            <Button type="submit" className="gap-2 font-semibold cursor-pointer">
-              <Save className="h-4 w-4" /> Guardar cambios
+            <Button type="submit" disabled={savingTimeout} className="gap-2 font-semibold cursor-pointer">
+              <Save className="h-4 w-4" /> {savingTimeout ? 'Guardando...' : 'Guardar cambios'}
             </Button>
           </div>
         </form>

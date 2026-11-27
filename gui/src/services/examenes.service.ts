@@ -31,7 +31,7 @@ export interface Examen {
   id_docente: string
   id_gestion?: string | null
   materia?: CatalogItem | null
-  aula?: CatalogItem | null
+  aula?: (CatalogItem & { capacidad?: number }) | null
   docente?: DocenteItem | null
   gestion?: Gestion | null
   normas?: Norma[]

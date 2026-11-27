@@ -10,12 +10,14 @@ const getLimits = () => {
   const totalMinutes = configService.getTimeoutMinutes()
   const totalMs = totalMinutes * 60 * 1000
   const warningMs = totalMinutes === 1 ? 30 * 1000 : (totalMinutes - 1) * 60 * 1000
-  return { totalMs, warningMs }
+  const countdownSeconds = Math.max(1, Math.round((totalMs - warningMs) / 1000))
+  return { totalMs, warningMs, countdownSeconds }
 }
 
 export const useIdleTimer = () => {
   const [showModal, setShowModal] = useState(false)
   const [secondsRemaining, setSecondsRemaining] = useState(COUNTDOWN_SECONDS)
+  const [countdownTotalSeconds, setCountdownTotalSeconds] = useState(COUNTDOWN_SECONDS)
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isOfflineRef = useRef<boolean>(!navigator.onLine)
@@ -99,7 +101,9 @@ export const useIdleTimer = () => {
         setShowModal(false)
         return true
       }
+      const { countdownSeconds } = getLimits()
       const remaining = Math.max(1, Math.ceil((totalMs - elapsed) / 1000))
+      setCountdownTotalSeconds(countdownSeconds)
       setSecondsRemaining(remaining)
       setShowModal(true)
     }
@@ -128,7 +132,9 @@ export const useIdleTimer = () => {
         setShowModal(false)
         return
       }
-      setSecondsRemaining(COUNTDOWN_SECONDS)
+      const { countdownSeconds } = getLimits()
+      setCountdownTotalSeconds(countdownSeconds)
+      setSecondsRemaining(countdownSeconds)
       setShowModal(true)
     }, warningMs)
   }, [showModal, limpiarTemporizador, verificarConexionReal])
@@ -158,9 +164,11 @@ export const useIdleTimer = () => {
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
 
-    // 2. Comprobación inicial de sesión
-    void checkSession().then((ok) => {
-      if (ok) resetTimer()
+    // 2. Sincronizar tiempo desde backend y comprobación inicial de sesión
+    void configService.syncTimeoutFromServer().finally(() => {
+      void checkSession().then((ok) => {
+        if (ok) resetTimer()
+      })
     })
 
     // 3. Actividad de usuario
@@ -221,6 +229,7 @@ export const useIdleTimer = () => {
   return {
     showModal: showModal && !isOfflineRef.current,
     secondsRemaining,
+    countdownTotalSeconds,
     handleLogout: () => void handleLogout(),
     handleStayActive,
   }

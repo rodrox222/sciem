@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
+  AlertTriangle,
   Check,
   Info,
   LoaderCircle,
@@ -8,6 +9,7 @@ import {
   Users,
   ArrowLeft,
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -39,6 +41,8 @@ import {
 interface InscribirEstudianteModalProps {
   examId: string
   examName: string
+  aulaCapacidad?: number | null
+  currentEnrolledCount?: number
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
@@ -55,6 +59,8 @@ interface FormState {
 export function InscribirEstudianteModal({
   examId,
   examName,
+  aulaCapacidad,
+  currentEnrolledCount = 0,
   isOpen,
   onClose,
   onSuccess,
@@ -194,6 +200,11 @@ export function InscribirEstudianteModal({
         })
       }
       onSuccess()
+      if (aulaCapacidad && aulaCapacidad > 0 && currentEnrolledCount + toEnroll.length > aulaCapacidad) {
+        toast.warning(
+          `Se superó la capacidad del aula (${aulaCapacidad} estudiantes). Total inscritos: ${currentEnrolledCount + toEnroll.length}.`
+        )
+      }
       onClose()
     } catch (err) {
       setError(
@@ -258,6 +269,11 @@ export function InscribirEstudianteModal({
 
       await estudiantesService.enroll(examId, payload)
       onSuccess()
+      if (aulaCapacidad && aulaCapacidad > 0 && currentEnrolledCount + 1 > aulaCapacidad) {
+        toast.warning(
+          `Se superó la capacidad del aula (${aulaCapacidad} estudiantes). Total inscritos: ${currentEnrolledCount + 1}.`
+        )
+      }
       onClose()
     } catch (err) {
       setError(
@@ -310,6 +326,24 @@ export function InscribirEstudianteModal({
             </Alert>
           </div>
         )}
+
+        {aulaCapacidad &&
+          aulaCapacidad > 0 &&
+          currentEnrolledCount + (mode === 'buscar' ? selectedIds.size : 1) > aulaCapacidad && (
+            <div className="px-6 pt-3">
+              <Alert className="border-sci-amber/40 bg-sci-amber/10 text-sci-navy">
+                <AlertTriangle className="h-4 w-4 text-sci-amber" />
+                <AlertDescription className="text-xs font-medium">
+                  <strong>Aviso de capacidad:</strong> Se superará el límite del aula ({aulaCapacidad} estudiantes).
+                  Inscritos actuales: {currentEnrolledCount}
+                  {mode === 'buscar' && selectedIds.size > 0
+                    ? ` · Con selección: ${currentEnrolledCount + selectedIds.size}`
+                    : ` · Con este registro: ${currentEnrolledCount + 1}`}
+                  . Puedes continuar si así lo requieres.
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
 
         {/* MODO 1: BÚSQUEDA Y ASOCIACIÓN RÁPIDA */}
         {mode === 'buscar' && (
