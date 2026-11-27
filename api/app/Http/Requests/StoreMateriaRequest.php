@@ -23,4 +23,13 @@ class StoreMateriaRequest extends FormRequest
             ],
         ];
     }
+
+    public function messages(): array
+    {
+        return [
+            'nombre.required' => 'El nombre de la materia es obligatorio.',
+            'nombre.max'      => 'El nombre de la materia no puede superar los 150 caracteres.',
+            'nombre.unique'   => 'Ya existe una materia registrada con ese nombre.',
+        ];
+    }
 }

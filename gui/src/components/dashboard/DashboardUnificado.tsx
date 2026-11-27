@@ -16,8 +16,6 @@ import {
   type ResumenAdmin, type ResumenConExamenes, type ResumenDocente,
   type RolDashboard,
 } from '@/services/dashboard.service'
-import { examenesService } from '@/services/examenes.service'
-import { estudiantesService } from '@/services/estudiantes.service'
 
 const TITULOS: Record<RolDashboard, string> = {
   admin: 'Administración',
@@ -208,60 +206,12 @@ export function DashboardUnificado() {
 
     const cargarDatos = async () => {
       try {
-        const data = await dashboardService.obtener()
+        const data = await dashboardService.obtener(rolActivo)
         if (!activo) return
 
-        let dataAdaptada: DashboardResponse = {
+        const dataAdaptada: DashboardResponse = {
           ...data,
           rol: esUsuarioDual ? rolActivo : data.rol,
-        }
-
-        // Si es AUXILIAR, traemos los exámenes y excluimos los que cursa como estudiante
-        if (rolActivo === 'auxiliar') {
-          try {
-            let idsComoEstudiante: string[] = []
-            try {
-              const resMisEx = await estudiantesService.misExamenes()
-              const examenesEstudiante = Array.isArray(resMisEx.examenes) ? resMisEx.examenes : []
-              idsComoEstudiante = examenesEstudiante.map((e) => String(e.id_examen))
-            } catch (errMisEx) {
-              console.warn('No se pudieron obtener exámenes de estudiante para exclusión:', errMisEx)
-            }
-
-            const res = await examenesService.list({ perPage: 50 })
-            const lista = Array.isArray(res.data) ? res.data : []
-
-            const examenesParaGestionar = lista.filter(
-              (ex: any) => !idsComoEstudiante.includes(String(ex.id))
-            )
-
-            const examenesMapeados: ExamenDashboard[] = examenesParaGestionar.map((ex: any) => ({
-              id: ex.id,
-              nombre: ex.nombre,
-              materia: ex.materia?.nombre || ex.materia || 'Sin asignatura',
-              fecha: ex.fecha,
-              hora_ini: ex.hora_ini,
-              hora_fin: ex.hora_fin,
-              aula: ex.aula?.nombre || ex.aula || 'Aula asignada',
-              docente: ex.docente?.nombre 
-                ? `${ex.docente.nombre} ${ex.docente.apellido_paterno || ''}`.trim()
-                : (typeof ex.docente === 'string' ? ex.docente : 'Docente titular'),
-              estado: ex.estado || 'Programado',
-            }))
-
-            dataAdaptada = {
-              ...dataAdaptada,
-              secciones: {
-                ...dataAdaptada.secciones,
-                resumen: {
-                  total_examenes: examenesMapeados.length,
-                  examenes: examenesMapeados,
-                } as any,
-              },
-            }
-          } catch (errEx) {
-            console.error('Error al cargar exámenes para auxiliar:', errEx)
-          }
         }
 
         setRespuesta(dataAdaptada)

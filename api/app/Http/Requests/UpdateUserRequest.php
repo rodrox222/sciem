@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Models\Admin;
 use App\Models\Auxiliar;
 use App\Models\Docente;
+use App\Models\Estudiante;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateUserRequest extends FormRequest
@@ -43,9 +44,10 @@ class UpdateUserRequest extends FormRequest
                 'max:20',
                 function ($attribute, $value, $fail) use ($userId, $ciLimpio, $extensionLimpia) {
                     $tablas = [
-                        'admin'    => Admin::class,
-                        'docente'  => Docente::class,
-                        'auxiliar' => Auxiliar::class,
+                        'admin'      => Admin::class,
+                        'docente'    => Docente::class,
+                        'auxiliar'   => Auxiliar::class,
+                        'estudiante' => Estudiante::class,
                     ];
 
                     foreach ($tablas as $modelo) {
@@ -53,7 +55,7 @@ class UpdateUserRequest extends FormRequest
 
                         // Comprobar la combinación exacta con ci_extension
                         if ($extensionLimpia !== null && $extensionLimpia !== '') {
-                            $query->where('ci_extension', $extensionLimpia);
+                            $query->whereRaw('UPPER(ci_extension) = ?', [strtoupper($extensionLimpia)]);
                         } else {
                             $query->where(function ($q) {
                                 $q->whereNull('ci_extension')->orWhere('ci_extension', '');

@@ -191,6 +191,13 @@ export const estudiantesService = {
     return api.delete<{ message: string }>(`/examenes/${examId}/estudiantes/${estudianteId}`)
   },
 
+  updateInExam(examId: string, estudianteId: string, payload: InscripcionPayload) {
+    return api.put<{ message: string; estudiante: Estudiante }>(
+      `/examenes/${examId}/estudiantes/${estudianteId}`,
+      payload,
+    )
+  },
+
   completarDatos(payload: CompletarDatosEstudiantePayload) {
     return api.patch<PerfilEstudianteResponse>(
       '/estudiante/completar-datos',

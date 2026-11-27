@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Models\Admin;
 use App\Models\Auxiliar;
 use App\Models\Docente;
+use App\Models\Estudiante;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreUserRequest extends FormRequest
@@ -37,9 +38,10 @@ class StoreUserRequest extends FormRequest
                 'max:20',
                 function ($attribute, $value, $fail) use ($ciLimpio, $extensionLimpia) {
                     $tablas = [
-                        'admin'    => Admin::class,
-                        'docente'  => Docente::class,
-                        'auxiliar' => Auxiliar::class,
+                        'admin'      => Admin::class,
+                        'docente'    => Docente::class,
+                        'auxiliar'   => Auxiliar::class,
+                        'estudiante' => Estudiante::class,
                     ];
 
                     foreach ($tablas as $modelo) {
@@ -47,7 +49,7 @@ class StoreUserRequest extends FormRequest
 
                         // La unicidad depende de la tupla (ci, ci_extension)
                         if ($extensionLimpia !== '') {
-                            $query->where('ci_extension', $extensionLimpia);
+                            $query->whereRaw('UPPER(ci_extension) = ?', [strtoupper($extensionLimpia)]);
                         } else {
                             $query->where(function ($q) {
                                 $q->whereNull('ci_extension')->orWhere('ci_extension', '');

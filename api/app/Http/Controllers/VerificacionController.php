@@ -172,11 +172,6 @@ class VerificacionController extends Controller
             $estudiante = Estudiante::where('codigo_sis', trim($codigoSis))->first();
         }
 
-        if ($estudiante && \App\Models\Expulsion::where('id_examen', $examen->id)->where('id_estudiante', $estudiante->id)->exists()) {
-            $this->registrarIntentoYAuditoria($request, $examen->id, $estudiante->id, 'EXPULSADO', $rol, $usuario?->id, $estudiante->codigo_sis);
-            return response()->json(['success' => false, 'resultado' => 'EXPULSADO', 'message' => 'El estudiante tiene una expulsión vigente.', 'error_type' => 'EXPULSADO'], 403);
-        }
-
         $ahora = Carbon::now('America/La_Paz');
         $estadoExamen = strtolower(trim($examen->estado ?? ''));
         $esEstadoConcluido = in_array($estadoExamen, ['terminado', 'finalizado', 'concluido']);
@@ -395,6 +390,16 @@ class VerificacionController extends Controller
                 'resultado'  => 'RECHAZADO_EXAMEN_DISTINTO',
                 'message'    => 'El código QR presentado corresponde a otra evaluación o materia.',
                 'error_type' => 'EXAMEN_DISTINTO',
+            ], 403);
+        }
+
+        if (\App\Models\Expulsion::where('id_examen', $examen->id)->where('id_estudiante', $estudiante->id)->exists()) {
+            $this->registrarIntentoYAuditoria($request, $examen->id, $estudiante->id, 'EXPULSADO', $rol, $userId, $estudiante->codigo_sis);
+            return response()->json([
+                'success'    => false,
+                'resultado'  => 'EXPULSADO',
+                'message'    => 'El estudiante tiene una expulsión vigente en este examen.',
+                'error_type' => 'EXPULSADO',
             ], 403);
         }
 

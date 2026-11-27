@@ -289,6 +289,106 @@ class EstudianteController extends Controller
         ], 200);
     }
 
+    public function actualizarEnExamen(InscribirEstudianteExamenRequest $request, string $idExamen, string $idEstudiante): JsonResponse
+    {
+        $examen = Examen::find($idExamen);
+        if (!$examen) {
+            return response()->json(['message' => 'Examen no encontrado.'], 404);
+        }
+
+        if ($request->user() instanceof Docente && $examen->id_docente !== $request->user()->id) {
+            return response()->json(['message' => 'Este examen pertenece a otro docente.'], 403);
+        }
+
+        $estudiante = Estudiante::find($idEstudiante);
+        if (!$estudiante) {
+            return response()->json(['message' => 'Estudiante no encontrado.'], 404);
+        }
+
+        $inscripcionPrevia = DB::table('estudiante_examen')
+            ->where('id_examen', $examen->id)
+            ->where('id_estudiante', $estudiante->id)
+            ->first();
+
+        if (!$inscripcionPrevia) {
+            return response()->json(['message' => 'El estudiante no se encuentra inscrito en este examen.'], 404);
+        }
+
+        $data = $request->validated();
+
+        $sisDuplicado = Estudiante::where('codigo_sis', $data['codigo_sis'])
+            ->where('id', '!=', $estudiante->id)
+            ->exists();
+        if ($sisDuplicado) {
+            return response()->json([
+                'message' => 'Ya existe otro estudiante registrado con ese código SIS.',
+                'errors'  => ['codigo_sis' => ['Ya existe otro estudiante registrado con ese código SIS.']],
+            ], 422);
+        }
+
+        $emailDuplicado = Estudiante::where('email_institucional', $data['email_institucional'])
+            ->where('id', '!=', $estudiante->id)
+            ->exists();
+        if ($emailDuplicado) {
+            return response()->json([
+                'message' => 'Ya existe otro estudiante registrado con ese correo institucional.',
+                'errors'  => ['email_institucional' => ['Ya existe otro estudiante registrado con ese correo institucional.']],
+            ], 422);
+        }
+
+        $estadoNuevo = $data['estado'] ?? $inscripcionPrevia->estado;
+
+        $valoresAnteriores = [
+            'codigo_sis'          => $estudiante->codigo_sis,
+            'nombre'              => $estudiante->nombre,
+            'apellido_paterno'    => $estudiante->apellido_paterno,
+            'apellido_materno'    => $estudiante->apellido_materno,
+            'email_institucional' => $estudiante->email_institucional,
+            'estado'              => $inscripcionPrevia->estado,
+        ];
+
+        DB::transaction(function () use ($examen, $estudiante, $data, $estadoNuevo) {
+            $estudiante->update([
+                'codigo_sis'          => $data['codigo_sis'],
+                'ci'                  => $data['ci'] ?? $estudiante->ci,
+                'ci_extension'        => $data['ci_extension'] ?? $estudiante->ci_extension,
+                'nombre'              => $data['nombre'],
+                'apellido_paterno'    => $data['apellido_paterno'],
+                'apellido_materno'    => $data['apellido_materno'] ?? null,
+                'email_institucional' => $data['email_institucional'],
+            ]);
+
+            $examen->estudiantes()->updateExistingPivot($estudiante->id, [
+                'estado'     => $estadoNuevo,
+                'updated_at' => now(),
+            ]);
+        });
+
+        $this->registrarAuditoria($request, 'ESTUDIANTE_ACTUALIZADO_EXAMEN', [
+            'target_type'        => 'estudiante_examen',
+            'target_id'          => $estudiante->id,
+            'id_examen'          => $examen->id,
+            'id_estudiante'      => $estudiante->id,
+            'codigo_sis'         => $estudiante->codigo_sis,
+            'valores_anteriores' => $valoresAnteriores,
+            'valores_nuevos'     => [
+                'codigo_sis'          => $data['codigo_sis'],
+                'nombre'              => $data['nombre'],
+                'apellido_paterno'    => $data['apellido_paterno'],
+                'apellido_materno'    => $data['apellido_materno'] ?? null,
+                'email_institucional' => $data['email_institucional'],
+                'estado'              => $estadoNuevo,
+            ],
+        ]);
+
+        return response()->json([
+            'message'    => 'Estudiante actualizado correctamente.',
+            'estudiante' => $estudiante->fresh()->load(['examenes' => function ($q) use ($idExamen) {
+                $q->where('examenes.id', $idExamen);
+            }]),
+        ], 200);
+    }
+
     public function desvincularDeExamen(Request $request, string $idExamen, string $idEstudiante): JsonResponse
     {
         $examen = Examen::find($idExamen);

@@ -2,6 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Admin;
+use App\Models\Auxiliar;
+use App\Models\Docente;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -32,6 +35,24 @@ class CompletarDatosEstudianteRequest extends FormRequest
                         return $query->where('ci_extension', $extension);
                     })
                     ->ignore($idEstudiante),
+                function ($attribute, $value, $fail) use ($extension) {
+                    $ciLimpio = trim((string) $value);
+                    foreach ([Admin::class, Docente::class, Auxiliar::class] as $modelo) {
+                        $query = $modelo::where('ci', $ciLimpio);
+                        if ($extension !== null && $extension !== '') {
+                            $query->whereRaw('UPPER(ci_extension) = ?', [$extension]);
+                        } else {
+                            $query->where(function ($q) {
+                                $q->whereNull('ci_extension')->orWhere('ci_extension', '');
+                            });
+                        }
+
+                        if ($query->exists()) {
+                            $fail('El CI ingresado con esa extensión ya pertenece a otro usuario registrado en el sistema.');
+                            return;
+                        }
+                    }
+                },
             ],
             // Complemento alfanumérico SEGIP (ej: 1A, KLH)
             'ci_extension' => [

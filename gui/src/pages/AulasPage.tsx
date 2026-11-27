@@ -164,17 +164,28 @@ export default function AulasPage() {
       return
     }
 
-    // Si se desea pasar a Mantenimiento: Consultar exámenes programados a partir de hoy
+    // Si se desea pasar a Mantenimiento: Consultar exámenes programados o en proceso que no hayan concluido
     try {
       setChangingId(aula.id)
       const res = await api.get<{ data?: Examen[] } | Examen[]>(
-        `/examenes?id_aula=${aula.id}&estado=Programado&per_page=100`,
+        `/examenes?id_aula=${aula.id}&estado=${encodeURIComponent('Programado,En proceso')}&per_page=100`,
       )
       const rawExams = Array.isArray(res) ? res : res?.data ?? []
+      const now = new Date()
       const hoy = todayLocal()
+      const ahoraHora = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 
-      // Filtrar exámenes que se lleven a cabo hoy o en el futuro
-      const futuros = rawExams.filter((ex) => (ex.fecha ? ex.fecha >= hoy : false))
+      const futuros = rawExams.filter((ex) => {
+        if (ex.id_aula !== aula.id) return false
+        if (ex.estado !== 'Programado' && ex.estado !== 'En proceso') return false
+        const fecha = ex.fecha ? ex.fecha.slice(0, 10) : ''
+        if (!fecha || fecha < hoy) return false
+        if (fecha === hoy) {
+          const horaFin = (ex.hora_fin || '23:59').slice(0, 5)
+          return horaFin >= ahoraHora
+        }
+        return true
+      })
 
       setExamenesFuturos(futuros)
       setAulaPorConfirmar(aula)

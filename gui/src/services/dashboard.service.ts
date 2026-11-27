@@ -60,8 +60,8 @@ export function esErrorResumen(value: unknown): value is { error: string } {
 }
 
 export const dashboardService = {
-  obtener() {
-    // Consulta exclusivamente informativa. El backend determina el rol a partir del token.
-    return api.get<DashboardResponse>('/dashboard')
+  obtener(rol?: string) {
+    const query = rol === 'auxiliar' ? '?rol=auxiliar' : ''
+    return api.get<DashboardResponse>(`/dashboard${query}`)
   },
 }
