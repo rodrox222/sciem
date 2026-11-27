@@ -56,9 +56,24 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) 
     return <Navigate to="/login" replace state={{ from: location }} />
   }
 
+  const estaBloqueadoPrimerAcceso = (role: string): boolean => {
+    if (role !== 'estudiante') return false
+    try {
+      const userData = JSON.parse(localStorage.getItem('user_data') || '{}')
+      return Boolean(userData && userData.primer_acceso_completado === false)
+    } catch {
+      return false
+    }
+  }
+
   const userRole = (localStorage.getItem('user_role') ?? '').toLowerCase()
   if (allowedRoles && !allowedRoles.includes(userRole)) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to={estaBloqueadoPrimerAcceso(userRole) ? '/primer-acceso' : '/'} replace />
+  }
+
+  // Bloqueo estricto de primer acceso para estudiantes: solo pueden estar en /primer-acceso hasta completar CI y foto
+  if (location.pathname !== '/primer-acceso' && estaBloqueadoPrimerAcceso(userRole)) {
+    return <Navigate to="/primer-acceso" replace />
   }
 
   return <Outlet />
@@ -66,5 +81,17 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) 
 
 export const PublicRoute: React.FC = () => {
   const token = localStorage.getItem('auth_token')
-  return token ? <Navigate to="/dashboard" replace /> : <Outlet />
+  if (!token) return <Outlet />
+
+  const userRole = (localStorage.getItem('user_role') ?? '').toLowerCase()
+  try {
+    const userData = JSON.parse(localStorage.getItem('user_data') || '{}')
+    if (userRole === 'estudiante' && userData?.primer_acceso_completado === false) {
+      return <Navigate to="/primer-acceso" replace />
+    }
+  } catch {
+    // Si falla el parseo continúa al inicio
+  }
+
+  return <Navigate to="/" replace />
 }

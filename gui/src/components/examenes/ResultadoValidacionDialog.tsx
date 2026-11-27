@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   AlertTriangle,
   BookOpen,
@@ -41,6 +41,8 @@ export interface EstudianteValidado {
   ciExtension?: string
   fotoPerfilUrl?: string | null
   foto_url?: string | null // Compatible con la respuesta directa del backend
+  fotoVerificacionUrl?: string | null
+  foto_verificacion_url?: string | null
 }
 
 export type ResultadoValidacionAcceso =
@@ -205,6 +207,15 @@ export function ResultadoValidacionDialog({
   onClose,
 }: ResultadoValidacionDialogProps) {
   const [imgError, setImgError] = useState(false)
+  const [imgVerificacionError, setImgVerificacionError] = useState(false)
+
+  const studentForReset = resultado && resultado.estado !== 'pendiente' ? resultado.estudiante : undefined
+  const resetFotoKey = `${open}-${studentForReset?.fotoPerfilUrl ?? ''}-${studentForReset?.foto_url ?? ''}-${studentForReset?.fotoVerificacionUrl ?? ''}-${studentForReset?.foto_verificacion_url ?? ''}`
+
+  useEffect(() => {
+    setImgError(false)
+    setImgVerificacionError(false)
+  }, [resetFotoKey])
 
   if (!resultado) return null
 
@@ -216,9 +227,12 @@ export function ResultadoValidacionDialog({
   const visibleNorms = examen.normas?.slice(0, 3) ?? []
   const hiddenNormCount = Math.max((examen.normas?.length ?? 0) - visibleNorms.length, 0)
 
-  // Obtener la URL compatible de fotoPerfilUrl o foto_url
+  // Obtener la URL compatible de fotoPerfilUrl o foto_url y la última foto tomada para el QR
   const rawFoto = student?.fotoPerfilUrl || (student as any)?.foto_url
   const urlFotoEstudiante = formatearUrlFoto(rawFoto)
+  const rawFotoVerificacion =
+    student?.fotoVerificacionUrl || student?.foto_verificacion_url
+  const urlFotoVerificacion = formatearUrlFoto(rawFotoVerificacion)
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
@@ -338,18 +352,43 @@ export function ResultadoValidacionDialog({
                 isDuplicate ? 'p-3' : 'p-4'
               }`}
             >
-              {urlFotoEstudiante && !imgError ? (
-                <img
-                  src={urlFotoEstudiante}
-                  alt={student.nombreCompleto || 'Fotografía del estudiante'}
-                  onError={() => setImgError(true)}
-                  className="h-16 w-16 shrink-0 rounded-2xl border-2 border-border object-cover shadow-xs"
-                />
-              ) : (
-                <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl border border-border bg-sci-cyan/10">
-                  <UserRound className="h-8 w-8 text-sci-cyan" aria-hidden="true" />
+              <div className="flex shrink-0 items-center gap-2.5">
+                <div className="flex flex-col items-center gap-1">
+                  {urlFotoEstudiante && !imgError ? (
+                    <img
+                      key={urlFotoEstudiante}
+                      src={urlFotoEstudiante}
+                      alt={student.nombreCompleto || 'Fotografía de perfil'}
+                      onError={() => setImgError(true)}
+                      className="h-16 w-16 shrink-0 rounded-2xl border-2 border-border object-cover shadow-xs"
+                    />
+                  ) : (
+                    <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl border border-border bg-sci-cyan/10">
+                      <UserRound className="h-8 w-8 text-sci-cyan" aria-hidden="true" />
+                    </div>
+                  )}
+                  {urlFotoVerificacion && (
+                    <span className="text-[10px] font-semibold text-muted-foreground">
+                      Perfil
+                    </span>
+                  )}
                 </div>
-              )}
+
+                {urlFotoVerificacion && !imgVerificacionError && (
+                  <div className="flex flex-col items-center gap-1">
+                    <img
+                      key={urlFotoVerificacion}
+                      src={urlFotoVerificacion}
+                      alt="Última fotografía tomada para el QR"
+                      onError={() => setImgVerificacionError(true)}
+                      className="h-16 w-16 shrink-0 rounded-2xl border-2 border-sci-cyan object-cover shadow-xs"
+                    />
+                    <span className="text-[10px] font-semibold text-sci-cyan">
+                      Última QR
+                    </span>
+                  </div>
+                )}
+              </div>
 
               <div className="min-w-0 flex-1 space-y-0.5">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-sci-cyan">

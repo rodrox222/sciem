@@ -17,6 +17,7 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 
 // Páginas protegidas generales
 import { DashboardPage } from './pages/DashboardPage'
+import PrimerAccesoPage from './pages/PrimerAccesoPage'
 import ExamenesPage from './pages/ExamenesPage'
 import EstudiantesPage from './pages/EstudiantesPage'
 import DetalleExamenPage from './pages/DetalleExamenPage'
@@ -32,20 +33,23 @@ import ProgramarExamenPage from './pages/ProgramarExamenPage'
 import EstudianteDetalleExamenPage from './pages/EstudianteDetalleExamenPage'
 import ConfiguracionPage from './pages/ConfiguracionPage'
 import ReportesEstadisticosPage from './pages/ReportesEstadisticosPage'
+import PerfilPage from './pages/PerfilPage'
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* 1. Rutas públicas */}
+        {/* 1. Rutas públicas (accesibles con o sin sesión) */}
         <Route element={<PublicLayout />}>
           <Route path="/" element={<HomePage />} />
-          <Route path="/cronograma" element={<CronogramaPublicPage />} />
           <Route path="/noticias" element={<NoticiasPage />} />
         </Route>
 
-        {/* 2. Rutas de acceso (Login y recuperación) */}
+        {/* 2. Rutas exclusivas para visitantes sin sesión */}
         <Route element={<PublicRoute />}>
+          <Route element={<PublicLayout />}>
+            <Route path="/cronograma" element={<CronogramaPublicPage />} />
+          </Route>
           <Route element={<AuthLayout />}>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/recuperar-contrasena" element={<ForgotPasswordPage />} />
@@ -59,6 +63,7 @@ export default function App() {
 
             {/* Exclusivo Estudiante */}
             <Route element={<ProtectedRoute allowedRoles={['estudiante']} />}>
+              <Route path="/primer-acceso" element={<PrimerAccesoPage />} />
               <Route path="/estudiante" element={<Navigate to="/dashboard" replace />} />
               <Route path="/estudiante/examenes/:id" element={<EstudianteDetalleExamenPage />} />
             </Route>
@@ -92,6 +97,11 @@ export default function App() {
             <Route element={<ProtectedRoute allowedRoles={['admin', 'administrador', 'docente']} />}>
               <Route path="/programar-examen" element={<ProgramarExamenPage />} />
               <Route path="/reportes" element={<ReportesEstadisticosPage />} />
+            </Route>
+
+            {/* Perfil para Docente y Estudiante */}
+            <Route element={<ProtectedRoute allowedRoles={['docente', 'estudiante']} />}>
+              <Route path="/perfil" element={<PerfilPage />} />
             </Route>
           </Route>
         </Route>

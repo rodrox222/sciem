@@ -14,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class VerificacionController extends Controller
@@ -436,10 +437,11 @@ class VerificacionController extends Controller
                     'motivo_inhabilitacion' => $motivoInhabilitacion,
                 ],
                 'estudiante' => [
-                    'nombre'   => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
-                    'sis'      => $estudiante->codigo_sis,
-                    'ci'       => $estudiante->ci,
-                    'foto_url' => $estudiante->foto_perfil_url,
+                    'nombre'                => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
+                    'sis'                   => $estudiante->codigo_sis,
+                    'ci'                    => $estudiante->ci,
+                    'foto_url'              => $estudiante->foto_perfil_url,
+                    'foto_verificacion_url' => $this->obtenerUrlFotoVerificacionQr($estudiante->id, $examen->id),
                 ]
             ], 403);
         }
@@ -497,11 +499,12 @@ class VerificacionController extends Controller
             'resultado' => 'PERMITIDO',
             'message'   => 'Ingreso autorizado.',
             'estudiante' => [
-                'id'              => $estudiante->id,
-                'nombre_completo' => $nombreCompleto !== '' ? $nombreCompleto : $estudiante->nombre,
-                'codigo_sis'      => $estudiante->codigo_sis,
-                'ci'              => trim("{$estudiante->ci} " . ($estudiante->ci_extension ?? '')),
-                'foto_url'        => $estudiante->foto_perfil_url,
+                'id'                    => $estudiante->id,
+                'nombre_completo'       => $nombreCompleto !== '' ? $nombreCompleto : $estudiante->nombre,
+                'codigo_sis'            => $estudiante->codigo_sis,
+                'ci'                    => trim("{$estudiante->ci} " . ($estudiante->ci_extension ?? '')),
+                'foto_url'              => $estudiante->foto_perfil_url,
+                'foto_verificacion_url' => $this->obtenerUrlFotoVerificacionQr($estudiante->id, $examen->id),
             ],
             'detalles' => [
                 'materia'       => $examen->materia?->nombre ?? 'Sin asignar',
@@ -845,5 +848,22 @@ class VerificacionController extends Controller
         } catch (\Exception $e) {
             \Log::warning("No se pudo registrar log_auditoria: " . $e->getMessage());
         }
+    }
+
+    private function obtenerUrlFotoVerificacionQr(string $idEstudiante, string $idExamen): ?string
+    {
+        $prefijo = "fotos_verificacion_qr/qr_token_{$idEstudiante}_{$idExamen}_";
+        $coincidencias = array_values(array_filter(
+            Storage::disk('public')->files('fotos_verificacion_qr'),
+            fn (string $archivo) => str_starts_with($archivo, $prefijo)
+        ));
+
+        if (empty($coincidencias)) {
+            return null;
+        }
+
+        rsort($coincidencias);
+
+        return '/storage/' . $coincidencias[0];
     }
 }

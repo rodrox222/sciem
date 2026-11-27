@@ -765,11 +765,11 @@ class EstudianteController extends Controller
 
         $coincide = $this->compararFotografiasFaciales($rutaFotoPerfil, $rutaFotoCapturada);
 
-        if (Storage::disk('public')->exists($rutaCaptura)) {
-            Storage::disk('public')->delete($rutaCaptura);
-        }
-
         if (!$coincide) {
+            if (Storage::disk('public')->exists($rutaCaptura)) {
+                Storage::disk('public')->delete($rutaCaptura);
+            }
+
             $this->registrarAuditoria($request, 'INTENTO_QR_FALLO_FACIAL', [
                 'estudiante_id' => $estudiante->id,
                 'examen_id'     => $idExamen,
@@ -781,6 +781,14 @@ class EstudianteController extends Controller
                 'message'    => 'La fotografía capturada no coincide con la foto oficial de su perfil.',
                 'error_type' => 'BIOMETRIA_NO_COINCIDE',
             ], 403);
+        }
+
+        // Conservar la última fotografía de verificación para el escáner y eliminar capturas previas del mismo examen
+        $prefijoCaptura = "fotos_verificacion_qr/qr_token_{$estudiante->id}_{$idExamen}_";
+        foreach (Storage::disk('public')->files('fotos_verificacion_qr') as $archivoExistente) {
+            if ($archivoExistente !== $rutaCaptura && str_starts_with($archivoExistente, $prefijoCaptura)) {
+                Storage::disk('public')->delete($archivoExistente);
+            }
         }
 
         $payload = [

@@ -27,12 +27,6 @@ class UserController extends Controller
 
         $coleccion = collect();
 
-        if (!$tipo || $tipo === 'admin') {
-            $query = Admin::query();
-            $this->aplicarFiltros($query, $search, $activo, false);
-            $coleccion = $coleccion->concat($query->get()->map(fn ($u) => $this->formatearUsuario($u, 'admin')));
-        }
-
         if (!$tipo || $tipo === 'docente') {
             $query = Docente::query()->with('materias:id,nombre');
             $this->aplicarFiltros($query, $search, $activo, true);
@@ -116,7 +110,7 @@ class UserController extends Controller
     {
         $res = $this->buscarPorId($id);
 
-        if (!$res) {
+        if (!$res || $res['tipo'] === 'admin') {
             return response()->json(['message' => 'Usuario no encontrado.'], 404);
         }
 
@@ -127,7 +121,7 @@ class UserController extends Controller
     {
         $res = $this->buscarPorId($id);
 
-        if (!$res) {
+        if (!$res || $res['tipo'] === 'admin') {
             return response()->json(['message' => 'Usuario no encontrado.'], 404);
         }
 
@@ -192,7 +186,7 @@ class UserController extends Controller
     {
         $res = $this->buscarPorId($id);
 
-        if (!$res) {
+        if (!$res || $res['tipo'] === 'admin') {
             return response()->json(['message' => 'Usuario no encontrado.'], 404);
         }
 
@@ -330,6 +324,31 @@ class UserController extends Controller
         }
 
         return $res;
+    }
+
+    public function getMisMateriasDocente(Request $request): JsonResponse
+    {
+        $docente = $request->user();
+        if (!$docente instanceof Docente) {
+            return response()->json(['message' => 'Solo disponible para docentes.'], 403);
+        }
+
+        return $this->getMateriasDocente($docente->id);
+    }
+
+    public function syncMisMateriasDocente(Request $request): JsonResponse
+    {
+        $docente = $request->user();
+        if (!$docente instanceof Docente) {
+            return response()->json(['message' => 'Solo disponible para docentes.'], 403);
+        }
+
+        $request->validate([
+            'materias_ids'   => ['present', 'array'],
+            'materias_ids.*' => ['uuid', 'exists:materias,id'],
+        ]);
+
+        return $this->syncMateriasDocente($request, $docente->id);
     }
 
     public function getMateriasDocente(string $id): JsonResponse
