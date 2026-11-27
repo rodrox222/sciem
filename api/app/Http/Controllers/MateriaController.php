@@ -14,6 +14,7 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 class MateriaController extends Controller
 {
@@ -31,7 +32,8 @@ class MateriaController extends Controller
                     if (!empty($words)) {
                         $queryDocente->where(function ($q) use ($words) {
                             foreach ($words as $word) {
-                                $q->whereRaw("unaccent(materias.nombre) ILIKE unaccent(?)", ["%{$word}%"]);
+                                $term = '%' . Str::ascii($word) . '%';
+                                $q->whereRaw("translate(materias.nombre, 'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunAEIOUUN') ILIKE ?", [$term]);
                             }
                         });
                     }
@@ -54,7 +56,8 @@ class MateriaController extends Controller
             if (!empty($words)) {
                 $query->where(function ($q) use ($words) {
                     foreach ($words as $word) {
-                        $q->whereRaw("unaccent(nombre) ILIKE unaccent(?)", ["%{$word}%"]);
+                        $term = '%' . Str::ascii($word) . '%';
+                        $q->whereRaw("translate(nombre, 'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunAEIOUUN') ILIKE ?", [$term]);
                     }
                 });
             }

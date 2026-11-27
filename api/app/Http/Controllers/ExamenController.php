@@ -41,7 +41,16 @@ class ExamenController extends Controller
         }
 
         if ($estado = $request->query('estado')) {
-            $query->where('estado', $estado);
+            $estados = array_filter(array_map('trim', explode(',', (string) $estado)));
+            if (count($estados) > 1) {
+                $query->whereIn('estado', $estados);
+            } else {
+                $query->where('estado', $estado);
+            }
+        }
+
+        if ($idAula = $request->query('id_aula')) {
+            $query->where('id_aula', $idAula);
         }
 
         if ($fecha = $request->query('fecha')) {
@@ -105,7 +114,16 @@ class ExamenController extends Controller
         }
 
         if ($estado = $request->query('estado')) {
-            $query->where('estado', $estado);
+            $estados = array_filter(array_map('trim', explode(',', (string) $estado)));
+            if (count($estados) > 1) {
+                $query->whereIn('estado', $estados);
+            } else {
+                $query->where('estado', $estado);
+            }
+        }
+
+        if ($idAula = $request->query('id_aula')) {
+            $query->where('id_aula', $idAula);
         }
 
         if ($fecha = $request->query('fecha')) {

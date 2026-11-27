@@ -49,7 +49,7 @@ class ForgotPasswordController extends Controller
             ]
         );
 
-        $frontendUrl = env('FRONTEND_URL', 'http://localhost:4173');
+        $frontendUrl = $this->resolveFrontendUrl($request);
         $resetUrl = "{$frontendUrl}/recuperar-contrasena?token={$plainToken}&email=" . urlencode($user->email);
 
         Mail::send('emails.reset-password', ['user' => $user, 'resetUrl' => $resetUrl], function ($message) use ($user) {
@@ -161,5 +161,26 @@ class ForgotPasswordController extends Controller
         }
 
         return null;
+    }
+
+    private function resolveFrontendUrl(Request $request): string
+    {
+        $configured = rtrim((string) env('FRONTEND_URL', ''), '/');
+        $origin = rtrim((string) $request->headers->get('Origin', ''), '/');
+
+        $allowed = array_filter(array_map(
+            fn ($url) => rtrim((string) $url, '/'),
+            array_merge(config('cors.allowed_origins', []), [$configured, $request->getSchemeAndHttpHost()])
+        ));
+
+        if ($origin !== '' && in_array($origin, $allowed, true)) {
+            return $origin;
+        }
+
+        if ($configured !== '') {
+            return $configured;
+        }
+
+        return rtrim($request->getSchemeAndHttpHost() ?: 'http://localhost:4173', '/');
     }
 }

@@ -10,6 +10,7 @@ use App\Models\Estudiante;
 use App\Models\Examen;
 use App\Models\LogAuditoria;
 use App\Models\Materia;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -31,19 +32,27 @@ class AuditoriaController extends Controller
         }
 
         if ($request->filled('accion')) {
-            $query->where('accion', $request->accion);
+            $query->where('accion', 'ilike', '%' . trim((string) $request->accion) . '%');
         }
 
         if ($request->filled('modulo')) {
-            $query->where('modulo', $request->modulo);
+            $query->where('modulo', 'ilike', '%' . trim((string) $request->modulo) . '%');
         }
 
+        $appTz = config('app.timezone', 'UTC');
+
         if ($request->filled('fecha_desde')) {
-            $query->whereDate('created_at', '>=', $request->fecha_desde);
+            $desdeUtc = Carbon::parse($request->fecha_desde, 'America/La_Paz')
+                ->startOfDay()
+                ->setTimezone($appTz);
+            $query->where('created_at', '>=', $desdeUtc);
         }
 
         if ($request->filled('fecha_hasta')) {
-            $query->whereDate('created_at', '<=', $request->fecha_hasta);
+            $hastaUtc = Carbon::parse($request->fecha_hasta, 'America/La_Paz')
+                ->endOfDay()
+                ->setTimezone($appTz);
+            $query->where('created_at', '<=', $hastaUtc);
         }
 
         if ($request->filled('search')) {

@@ -12,6 +12,10 @@ return [
         'http://localhost',
         'https://localhost',
         'capacitor://localhost',
+        'http://127.0.0.1:8200',
+        'http://sso.tis.cs.umss.edu.bo',
+        'https://sso.tis.cs.umss.edu.bo',
+        
     ],
 
     'allowed_origins_patterns' => [],

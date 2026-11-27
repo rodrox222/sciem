@@ -14,6 +14,7 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 class AulaController extends Controller
 {
@@ -40,9 +41,10 @@ class AulaController extends Controller
             if (!empty($words)) {
                 $query->where(function ($q) use ($words) {
                     foreach ($words as $word) {
-                        $q->where(function ($sub) use ($word) {
-                            $sub->whereRaw("unaccent(nombre) ILIKE unaccent(?)", ["%{$word}%"])
-                                ->orWhereRaw("unaccent(ubicacion) ILIKE unaccent(?)", ["%{$word}%"]);
+                        $term = '%' . Str::ascii($word) . '%';
+                        $q->where(function ($sub) use ($term) {
+                            $sub->whereRaw("translate(nombre, 'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunAEIOUUN') ILIKE ?", [$term])
+                                ->orWhereRaw("translate(ubicacion, 'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunAEIOUUN') ILIKE ?", [$term]);
                         });
                     }
                 });

@@ -21,6 +21,20 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-	//	
+        $fontsDir = storage_path('fonts');
+        if (!is_dir($fontsDir)) {
+            @mkdir($fontsDir, 0775, true);
+        }
+
+        if (!is_dir($fontsDir) || !is_writable($fontsDir)) {
+            $tmpFontsDir = rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'sciem_dompdf_fonts';
+            if (!is_dir($tmpFontsDir)) {
+                @mkdir($tmpFontsDir, 0775, true);
+            }
+            config([
+                'dompdf.options.font_dir'   => $tmpFontsDir,
+                'dompdf.options.font_cache' => $tmpFontsDir,
+            ]);
+        }
     }
 }
