@@ -15,7 +15,8 @@ interface NavItem {
 
 const NAV_ITEMS_BY_ROLE: Record<string, NavItem[]> = {
   admin: [
-    { name: 'Inicio', href: '/dashboard' },
+    { name: 'Inicio', href: '/' },
+    { name: 'Mi Panel', href: '/dashboard' },
     { name: 'Usuarios', href: '/usuarios' },
     { name: 'Ambientes', href: '/aulas' },
     { name: 'Normativas', href: '/normas' },
@@ -28,18 +29,23 @@ const NAV_ITEMS_BY_ROLE: Record<string, NavItem[]> = {
     { name: 'Noticias', href: '/noticias' },
   ],
   docente: [
-    { name: 'Inicio', href: '/dashboard' },
+    { name: 'Inicio', href: '/' },
+    { name: 'Mi Panel', href: '/dashboard' },
     { name: 'Mis exámenes', href: '/examenes' },
     { name: 'Reportes', href: '/reportes' },
     { name: 'Noticias', href: '/noticias' },
+    { name: 'Perfil', href: '/perfil' },
   ],
   auxiliar: [
-    { name: 'Inicio', href: '/dashboard' },
+    { name: 'Inicio', href: '/' },
+    { name: 'Mi Panel', href: '/dashboard' },
     { name: 'Noticias', href: '/noticias' },
   ],
   estudiante: [
-    { name: 'Inicio', href: '/dashboard' },
+    { name: 'Inicio', href: '/' },
+    { name: 'Mi Panel', href: '/dashboard' },
     { name: 'Noticias', href: '/noticias' },
+    { name: 'Perfil', href: '/perfil' },
   ],
 };
 
@@ -64,6 +70,15 @@ export const Header: React.FC = () => {
     }
   });
 
+  const [primerAccesoCompletado, setPrimerAccesoCompletado] = useState<boolean>(() => {
+    try {
+      const u = JSON.parse(localStorage.getItem('user_data') || '{}');
+      return u.primer_acceso_completado !== false;
+    } catch {
+      return true;
+    }
+  });
+
   // Escuchar el cambio inmediato de rol entre componentes
   useEffect(() => {
     const handleRolCambiado = (e: Event) => {
@@ -74,24 +89,30 @@ export const Header: React.FC = () => {
       try {
         const u = JSON.parse(localStorage.getItem('user_data') || '{}');
         setEsUsuarioDual(Boolean(u.es_auxiliar || u.roles_disponibles?.includes('auxiliar')));
+        setPrimerAccesoCompletado(u.primer_acceso_completado !== false);
       } catch {}
     };
 
     window.addEventListener('rolCambiado', handleRolCambiado);
+    window.addEventListener('primerAccesoCompletado', handleRolCambiado);
     window.addEventListener('storage', handleRolCambiado);
 
     return () => {
       window.removeEventListener('rolCambiado', handleRolCambiado);
+      window.removeEventListener('primerAccesoCompletado', handleRolCambiado);
       window.removeEventListener('storage', handleRolCambiado);
     };
   }, []);
 
   const normalizedRole = activeRole === 'administrador' ? 'admin' : activeRole;
-  const baseNavItems = NAV_ITEMS_BY_ROLE[normalizedRole] || NAV_ITEMS_BY_ROLE.docente;
+  const bloqueadoPrimerAcceso = normalizedRole === 'estudiante' && !primerAccesoCompletado;
+  const baseNavItems = bloqueadoPrimerAcceso
+    ? [{ name: 'Primer acceso', href: '/primer-acceso' }]
+    : (NAV_ITEMS_BY_ROLE[normalizedRole] || NAV_ITEMS_BY_ROLE.docente);
 
   // Si el usuario es dual (estudiante/auxiliar), agregamos el tab de conmutación al lado de Noticias
   const navItems: NavItem[] = [...baseNavItems];
-  if (esUsuarioDual && (normalizedRole === 'estudiante' || normalizedRole === 'auxiliar')) {
+  if (!bloqueadoPrimerAcceso && esUsuarioDual && (normalizedRole === 'estudiante' || normalizedRole === 'auxiliar')) {
     const etiquetaTab = normalizedRole === 'estudiante' ? 'Auxiliar' : 'Estudiante';
     navItems.push({
       name: etiquetaTab,
@@ -148,7 +169,7 @@ export const Header: React.FC = () => {
           {/* Logo SCI */}
           <div
             className="flex cursor-pointer select-none items-center gap-2 sm:gap-3"
-            onClick={() => navigate(isAuthenticated ? '/dashboard' : '/')}
+            onClick={() => navigate(bloqueadoPrimerAcceso ? '/primer-acceso' : '/')}
           >
             <img src={logoSci} alt="Logo SCI" className="h-10 sm:h-12 w-auto object-contain" />
             <div className="leading-tight">
@@ -183,9 +204,6 @@ export const Header: React.FC = () => {
               <>
                 <span className="hidden xl:inline-flex items-center rounded-full border border-border bg-muted/40 px-3.5 py-1 text-xs font-medium text-muted-foreground">
                   Sesión activa
-                </span>
-                <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-primary-foreground font-bold text-sm">
-                  {userName.charAt(0).toUpperCase()}
                 </span>
                 <div className="hidden sm:flex flex-col text-left">
                   <span className="max-w-[180px] lg:max-w-[240px] truncate text-sm font-semibold text-foreground" title={userName}>
@@ -231,8 +249,8 @@ export const Header: React.FC = () => {
               // El tab toggle nunca está "activo" como ruta fija, funciona como disparador de cambio
               const active =
                 !item.isRoleToggle &&
-                (item.href === '/dashboard'
-                  ? location.pathname === '/dashboard'
+                (item.href === '/' || item.href === '/dashboard'
+                  ? location.pathname === item.href
                   : location.pathname === item.href || location.pathname.startsWith(`${item.href}/`));
 
               return (

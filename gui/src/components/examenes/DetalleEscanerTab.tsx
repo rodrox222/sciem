@@ -52,6 +52,7 @@ export interface EstudianteVerificadoPayload {
   ci_extension?: string | null
   foto_url?: string | null
   foto_perfil_url?: string | null
+  foto_verificacion_url?: string | null
 }
 
 interface VerificationResponse {
@@ -384,6 +385,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
               stOnline.foto_url ||
               stRoster?.foto_perfil_url ||
               null,
+            fotoVerificacionUrl: stOnline.foto_verificacion_url ?? null,
           },
           horaIngreso: res.detalles?.hora_ingreso || new Date().toLocaleTimeString(),
         })

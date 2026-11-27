@@ -102,6 +102,7 @@ export function usePerfilEstudiante(usuario: UsuarioPerfil | null) {
       }
 
       localStorage.setItem('user_data', JSON.stringify(usuarioActualizado))
+      window.dispatchEvent(new Event('primerAccesoCompletado'))
       setPerfilCompletado(true)
     } catch (error) {
       const { message, errors } = extraerErroresBackend(error)

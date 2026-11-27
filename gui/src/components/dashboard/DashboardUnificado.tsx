@@ -268,8 +268,8 @@ export function DashboardUnificado() {
               className="cursor-pointer gap-2 border-sci-cyan/40 bg-sci-cyan/5 font-semibold text-sci-navy shadow-xs hover:bg-sci-cyan/15 hover:text-sci-blue"
             >
               <a
-                href="/apk/sci-control-ingreso.apk"
-                download="SCI_Control_Ingreso.apk"
+                href="/apk/sci.apk"
+                download="sci.apk"
                 target="_blank"
                 rel="noopener noreferrer"
                 title="Descargar instalador APK para control de ingreso"

@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\Admin;
 use App\Models\Auxiliar;
 use App\Models\Docente;
+use App\Models\Estudiante;
 use App\Models\LogAuditoria;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 
 class ConfiguracionSistemaController extends Controller
@@ -80,6 +82,115 @@ class ConfiguracionSistemaController extends Controller
             'message' => 'Límite de inactividad actualizado correctamente.',
             'minutos' => (int) $nuevosMinutos,
         ], 200);
+    }
+
+    /**
+     * PUT /api/admin/perfil
+     * Permite al Administrador ver/modificar sus propios datos desde Configuración.
+     */
+    public function updatePerfilAdmin(Request $request): JsonResponse
+    {
+        $admin = $request->user();
+        if (!$admin instanceof Admin) {
+            return response()->json(['message' => 'Solo el administrador puede actualizar este perfil.'], 403);
+        }
+
+        $ciLimpio = trim((string) $request->input('ci', ''));
+        $extensionLimpia = trim((string) $request->input('ci_extension', ''));
+
+        $validator = Validator::make($request->all(), [
+            'ci'               => [
+                'required',
+                'string',
+                'max:20',
+                function ($attribute, $value, $fail) use ($admin, $ciLimpio, $extensionLimpia) {
+                    foreach ([Admin::class, Docente::class, Auxiliar::class, Estudiante::class] as $modelo) {
+                        $query = $modelo::where('ci', $ciLimpio);
+                        if ($extensionLimpia !== '') {
+                            $query->whereRaw('UPPER(ci_extension) = ?', [strtoupper($extensionLimpia)]);
+                        } else {
+                            $query->where(function ($q) {
+                                $q->whereNull('ci_extension')->orWhere('ci_extension', '');
+                            });
+                        }
+
+                        if ($modelo === Admin::class) {
+                            $query->where('id', '!=', $admin->id);
+                        }
+
+                        if ($query->exists()) {
+                            $fail('El CI con la extensión indicada ya se encuentra registrado en el sistema.');
+                            return;
+                        }
+                    }
+                },
+            ],
+            'ci_extension'     => ['nullable', 'string', 'max:10'],
+            'nombre'           => ['required', 'string', 'max:100'],
+            'apellido_paterno' => ['required', 'string', 'max:100'],
+            'apellido_materno' => ['nullable', 'string', 'max:100'],
+            'password'         => ['nullable', 'string', 'min:8', 'max:64', 'confirmed'],
+        ], [
+            'ci.required'               => 'El CI es obligatorio.',
+            'nombre.required'           => 'El nombre es obligatorio.',
+            'apellido_paterno.required' => 'El apellido paterno es obligatorio.',
+            'password.min'              => 'La contraseña debe tener al menos 8 caracteres.',
+            'password.confirmed'        => 'La confirmación de la contraseña no coincide.',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validación fallida.',
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        $valoresAnteriores = [
+            'ci'               => $admin->ci,
+            'ci_extension'     => $admin->ci_extension,
+            'nombre'           => $admin->nombre,
+            'apellido_paterno' => $admin->apellido_paterno,
+            'apellido_materno' => $admin->apellido_materno,
+        ];
+
+        $admin->ci               = $ciLimpio;
+        $admin->ci_extension     = $extensionLimpia !== '' ? strtoupper($extensionLimpia) : null;
+        $admin->nombre           = trim((string) $request->input('nombre'));
+        $admin->apellido_paterno = trim((string) $request->input('apellido_paterno'));
+        $admin->apellido_materno = $request->filled('apellido_materno') ? trim((string) $request->input('apellido_materno')) : null;
+
+        if ($request->filled('password')) {
+            $admin->password = Hash::make((string) $request->input('password'));
+        }
+
+        $admin->save();
+
+        $this->registrarAuditoria($request, 'ADMIN_PERFIL_ACTUALIZADO', [
+            'target_type'        => 'admin',
+            'target_id'          => $admin->id,
+            'valores_anteriores' => $valoresAnteriores,
+            'valores_nuevos'     => [
+                'ci'               => $admin->ci,
+                'ci_extension'     => $admin->ci_extension,
+                'nombre'           => $admin->nombre,
+                'apellido_paterno' => $admin->apellido_paterno,
+                'apellido_materno' => $admin->apellido_materno,
+                'password_changed' => $request->filled('password'),
+            ],
+        ]);
+
+        return response()->json([
+            'message' => 'Perfil de administrador actualizado correctamente.',
+            'user'    => [
+                'id'               => $admin->id,
+                'ci'               => $admin->ci,
+                'ci_extension'     => $admin->ci_extension,
+                'nombre'           => $admin->nombre,
+                'apellido_paterno' => $admin->apellido_paterno,
+                'apellido_materno' => $admin->apellido_materno,
+                'rol'              => 'admin',
+            ],
+        ]);
     }
 
     private function registrarAuditoria(Request $request, string $accion, array $detalles = []): void
