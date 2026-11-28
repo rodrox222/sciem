@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { configService } from '@/services/config.service'
+import { RespaldosCard } from '@/components/configuracion/RespaldosCard'
 import {
   formatGestionLabel,
   gestionesService,
@@ -557,8 +558,10 @@ export const ConfiguracionPage: React.FC = () => {
                 </Label>
                 <Input
                   id="admin-ci"
+                  inputMode="numeric"
+                  maxLength={12}
                   value={adminCi}
-                  onChange={(e) => setAdminCi(e.target.value)}
+                  onChange={(e) => setAdminCi(e.target.value.replace(/\D/g, ''))}
                   required
                   className="bg-background"
                 />
@@ -638,11 +641,24 @@ export const ConfiguracionPage: React.FC = () => {
               <div className="pt-3 flex items-center gap-3">
                 <input
                   id="timeout"
-                  type="number"
-                  min={1}
-                  max={120}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={3}
                   value={minutes}
-                  onChange={(e) => setMinutes(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                  onKeyDown={(e) => {
+                    if (['.', ',', 'e', 'E', '+', '-'].includes(e.key)) {
+                      e.preventDefault()
+                    }
+                  }}
+                  onChange={(e) => {
+                    const soloDigitos = e.target.value.replace(/\D/g, '')
+                    if (!soloDigitos) {
+                      setMinutes(1)
+                      return
+                    }
+                    const parsed = parseInt(soloDigitos, 10)
+                    setMinutes(Math.min(120, Math.max(1, parsed)))
+                  }}
                   className="w-24 rounded-lg border border-border bg-background px-3 py-2 text-sm font-bold text-center text-sci-navy focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 <span className="text-sm font-medium text-muted-foreground">minutos</span>
@@ -665,6 +681,8 @@ export const ConfiguracionPage: React.FC = () => {
           </div>
         </form>
       </div>
+
+      <RespaldosCard />
 
       <ConfirmDialog
         isOpen={confirmCloseOpen}

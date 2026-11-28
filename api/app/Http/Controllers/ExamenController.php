@@ -19,6 +19,8 @@ class ExamenController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        \App\Services\EstadoExamen::sincronizar();
+
         $query = Examen::with([
             'materia:id,nombre',
             'aula:id,nombre',
@@ -78,6 +80,8 @@ class ExamenController extends Controller
 
     public function misExamenes(Request $request): JsonResponse
     {
+        \App\Services\EstadoExamen::sincronizar();
+
         $user = $request->user();
 
         $query = Examen::with([
@@ -218,6 +222,7 @@ class ExamenController extends Controller
 
     public function show(Request $request, string $id): JsonResponse
     {
+        \App\Services\EstadoExamen::sincronizar();
         \App\Services\AccesoExamen::buscar($id);
         $examen = Examen::with(['materia', 'aula', 'docente', 'gestion', 'normas'])->find($id);
 

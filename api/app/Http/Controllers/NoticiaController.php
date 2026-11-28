@@ -116,7 +116,7 @@ class NoticiaController extends Controller
                 $query->whereRaw('es_publica is true')
                       ->whereNull('id_examen');
             })
-            ->when($esAutenticado, function ($query) use ($user) {
+            ->when($esAutenticado, function ($query) use ($user, $request) {
                 if ($user instanceof Admin) {
                     return;
                 }
@@ -132,20 +132,74 @@ class NoticiaController extends Controller
                             $qExamen->where('id_docente', $user->id);
                         });
                     });
+                } elseif ($user instanceof Auxiliar) {
+                    $examenesAuxIds = \App\Services\AccesoExamen::asignaciones($user)
+                        ->pluck('id_examen')
+                        ->toArray();
+
+                    $materiasAuxIds = !empty($examenesAuxIds)
+                        ? Examen::whereIn('id', $examenesAuxIds)
+                            ->whereNotNull('id_materia')
+                            ->pluck('id_materia')
+                            ->unique()
+                            ->toArray()
+                        : [];
+
+                    $query->where(function ($q) use ($examenesAuxIds, $materiasAuxIds) {
+                        $q->where(function ($qGeneral) {
+                            $qGeneral->whereNull('id_examen')
+                                     ->whereIn('publico_objetivo', ['Todos', 'Auxiliares']);
+                        });
+
+                        if (!empty($examenesAuxIds)) {
+                            $q->orWhereIn('id_examen', $examenesAuxIds);
+                        }
+
+                        if (!empty($materiasAuxIds)) {
+                            $q->orWhereIn('id_materia', $materiasAuxIds);
+                        }
+                    });
                 } elseif ($user instanceof Estudiante) {
                     $misExamenesIds = DB::table('estudiante_examen')
                         ->where('id_estudiante', $user->id)
                         ->pluck('id_examen')
                         ->toArray();
 
-                    $query->where(function ($q) use ($misExamenesIds) {
+                    $examenesAuxIds = [];
+                    $materiasAuxIds = [];
+                    if (!empty($user->es_auxiliar) || \App\Services\RolOperativo::actual($request) === 'auxiliar') {
+                        $tablaAuxiliar = DB::getSchemaBuilder()->hasTable('examen_auxiliares')
+                            ? 'examen_auxiliares'
+                            : 'examen_auxiliar';
+
+                        $examenesAuxIds = DB::table($tablaAuxiliar)
+                            ->where('id_auxiliar', $user->id)
+                            ->whereIn('estado', ['Activo', 'Aceptada'])
+                            ->pluck('id_examen')
+                            ->toArray();
+
+                        if (!empty($examenesAuxIds)) {
+                            $materiasAuxIds = Examen::whereIn('id', $examenesAuxIds)
+                                ->whereNotNull('id_materia')
+                                ->pluck('id_materia')
+                                ->unique()
+                                ->toArray();
+                        }
+                    }
+
+                    $query->where(function ($q) use ($misExamenesIds, $examenesAuxIds, $materiasAuxIds) {
                         $q->where(function ($qGeneral) {
                             $qGeneral->whereNull('id_examen')
-                                     ->whereIn('publico_objetivo', ['Todos', 'Estudiantes']);
+                                     ->whereIn('publico_objetivo', ['Todos', 'Estudiantes', 'Auxiliares']);
                         });
 
-                        if (!empty($misExamenesIds)) {
-                            $q->orWhereIn('id_examen', $misExamenesIds);
+                        $todosExamenesIds = array_values(array_unique(array_merge($misExamenesIds, $examenesAuxIds)));
+                        if (!empty($todosExamenesIds)) {
+                            $q->orWhereIn('id_examen', $todosExamenesIds);
+                        }
+
+                        if (!empty($materiasAuxIds)) {
+                            $q->orWhereIn('id_materia', $materiasAuxIds);
                         }
                     });
                 }

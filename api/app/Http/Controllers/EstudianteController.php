@@ -672,108 +672,49 @@ class EstudianteController extends Controller
         ], 200);
     }
 
-    public function generarTokenQr(Request $request, string $idExamen): JsonResponse
+    public function obtenerTokenQrExistente(Request $request, string $idExamen): JsonResponse
     {
-        /** @var Estudiante $estudiante */
-        $estudiante = $request->user();
+        $validacion = $this->validarElegibilidadQr($request, $idExamen);
+        if (isset($validacion['error'])) {
+            return $validacion['error'];
+        }
 
-        if (!$estudiante instanceof Estudiante) {
+        /** @var Estudiante $estudiante */
+        $estudiante = $validacion['estudiante'];
+        $timestampExpiracion = $validacion['expira_at'];
+
+        $prefijoCaptura = "fotos_verificacion_qr/qr_token_{$estudiante->id}_{$idExamen}_";
+        $coincidencias = array_values(array_filter(
+            Storage::disk('public')->files('fotos_verificacion_qr'),
+            fn (string $archivo) => str_starts_with($archivo, $prefijoCaptura)
+        ));
+
+        if (empty($coincidencias)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Esta acción solo está permitida para estudiantes.',
-            ], 403);
-        }
-
-        if (!Str::isUuid($idExamen)) {
-            return response()->json([
-                'success'    => false,
-                'message'    => 'El identificador del examen no es válido.',
-                'error_type' => 'EXAMEN_INVALIDO',
+                'existe'  => false,
+                'message' => 'Aún no se ha verificado la identidad facial para este examen.',
             ], 404);
         }
 
-        $examen = Examen::find($idExamen);
-        if (!$examen) {
-            return response()->json([
-                'success'    => false,
-                'message'    => 'El examen especificado no existe.',
-                'error_type' => 'EXAMEN_NO_ENCONTRADO',
-            ], 404);
+        return $this->construirRespuestaQr(
+            $estudiante,
+            $idExamen,
+            $timestampExpiracion,
+            'Código QR recuperado correctamente.'
+        );
+    }
+
+    public function generarTokenQr(Request $request, string $idExamen): JsonResponse
+    {
+        $validacion = $this->validarElegibilidadQr($request, $idExamen);
+        if (isset($validacion['error'])) {
+            return $validacion['error'];
         }
 
-        if (empty($estudiante->ci) || empty($estudiante->foto_perfil_url)) {
-            return response()->json([
-                'success'    => false,
-                'message'    => 'Debe completar su perfil obligatorio (Carnet de Identidad y Fotografía de perfil) antes de solicitar su código QR.',
-                'error_type' => 'REGISTRO_INCOMPLETO',
-            ], 403);
-        }
-
-        if (in_array(strtolower($examen->estado), ['terminado', 'finalizado', 'concluido'])) {
-            return response()->json([
-                'success'    => false,
-                'message'    => 'El examen ya ha finalizado. No se permite generar credenciales QR.',
-                'error_type' => 'EXAMEN_FINALIZADO',
-            ], 403);
-        }
-
-        if ($examen->fecha && $examen->hora_fin) {
-            $soloFecha = $examen->fecha instanceof \Carbon\Carbon 
-                ? $examen->fecha->format('Y-m-d') 
-                : explode(' ', (string) $examen->fecha)[0];
-
-            $soloHoraFin = explode(' ', (string) $examen->hora_fin);
-            $horaFinStr = end($soloHoraFin);
-
-            $finExamen = \Carbon\Carbon::createFromFormat(
-                'Y-m-d H:i:s', 
-                "{$soloFecha} {$horaFinStr}", 
-                'America/La_Paz'
-            );
-            $ahora = \Carbon\Carbon::now('America/La_Paz');
-
-            if ($ahora->gt($finExamen)) {
-                return response()->json([
-                    'success'    => false,
-                    'message'    => 'El horario del examen ha concluido. No se puede generar el código QR.',
-                    'error_type' => 'HORARIO_EXPIRADO',
-                ], 403);
-            }
-
-            $timestampExpiracion = $finExamen->timestamp;
-        } else {
-            $timestampExpiracion = now()->addHours(2)->timestamp;
-        }
-
-        $inscripcion = DB::table('estudiante_examen')
-            ->where('id_estudiante', $estudiante->id)
-            ->where('id_examen', $idExamen)
-            ->first();
-
-        if (!$inscripcion) {
-            return response()->json([
-                'success'    => false,
-                'message'    => 'No se encuentra registrado en este examen.',
-                'error_type' => 'NO_INSCRITO',
-            ], 404);
-        }
-
-        if (!empty($inscripcion->fecha_ingreso)) {
-            return response()->json([
-                'success'    => false,
-                'message'    => 'Ya se registró su ingreso al examen. Su código QR ha quedado sin efecto.',
-                'error_type' => 'INGRESO_PREVIO_REGISTRADO',
-            ], 403);
-        }
-
-        if (strtolower($inscripcion->estado ?? '') !== 'habilitado') {
-            return response()->json([
-                'success'       => false,
-                'message'       => 'No se puede generar el código QR: el estudiante no está habilitado.',
-                'error_type'    => 'ESTUDIANTE_INHABILITADO',
-                'motivo_estado' => $inscripcion->motivo_estado ?? null,
-            ], 403);
-        }
+        /** @var Estudiante $estudiante */
+        $estudiante = $validacion['estudiante'];
+        $timestampExpiracion = $validacion['expira_at'];
 
         $request->validate([
             'foto_verificacion' => [
@@ -846,6 +787,131 @@ class EstudianteController extends Controller
             }
         }
 
+        $this->registrarAuditoria($request, 'QR_GENERADO_EXITOSO', [
+            'estudiante_id' => $estudiante->id,
+            'examen_id'     => $idExamen,
+            'codigo_sis'    => $estudiante->codigo_sis,
+        ]);
+
+        return $this->construirRespuestaQr(
+            $estudiante,
+            $idExamen,
+            $timestampExpiracion,
+            'Identidad verificada exitosamente. Token QR generado.'
+        );
+    }
+
+    private function validarElegibilidadQr(Request $request, string $idExamen): array
+    {
+        $estudiante = $request->user();
+
+        if (!$estudiante instanceof Estudiante) {
+            return ['error' => response()->json([
+                'success' => false,
+                'message' => 'Esta acción solo está permitida para estudiantes.',
+            ], 403)];
+        }
+
+        if (!Str::isUuid($idExamen)) {
+            return ['error' => response()->json([
+                'success'    => false,
+                'message'    => 'El identificador del examen no es válido.',
+                'error_type' => 'EXAMEN_INVALIDO',
+            ], 404)];
+        }
+
+        $examen = Examen::find($idExamen);
+        if (!$examen) {
+            return ['error' => response()->json([
+                'success'    => false,
+                'message'    => 'El examen especificado no existe.',
+                'error_type' => 'EXAMEN_NO_ENCONTRADO',
+            ], 404)];
+        }
+
+        if (empty($estudiante->ci) || empty($estudiante->foto_perfil_url)) {
+            return ['error' => response()->json([
+                'success'    => false,
+                'message'    => 'Debe completar su perfil obligatorio (Carnet de Identidad y Fotografía de perfil) antes de solicitar su código QR.',
+                'error_type' => 'REGISTRO_INCOMPLETO',
+            ], 403)];
+        }
+
+        if (in_array(strtolower($examen->estado), ['terminado', 'finalizado', 'concluido'])) {
+            return ['error' => response()->json([
+                'success'    => false,
+                'message'    => 'El examen ya ha finalizado. No se permite generar credenciales QR.',
+                'error_type' => 'EXAMEN_FINALIZADO',
+            ], 403)];
+        }
+
+        if ($examen->fecha && $examen->hora_fin) {
+            $soloFecha = $examen->fecha instanceof \Carbon\Carbon
+                ? $examen->fecha->format('Y-m-d')
+                : explode(' ', (string) $examen->fecha)[0];
+
+            $soloHoraFin = explode(' ', (string) $examen->hora_fin);
+            $horaFinStr = end($soloHoraFin);
+
+            $finExamen = \Carbon\Carbon::parse("{$soloFecha} {$horaFinStr}", 'America/La_Paz');
+            $ahora = \Carbon\Carbon::now('America/La_Paz');
+
+            if ($ahora->gt($finExamen)) {
+                return ['error' => response()->json([
+                    'success'    => false,
+                    'message'    => 'El horario del examen ha concluido. No se puede generar el código QR.',
+                    'error_type' => 'HORARIO_EXPIRADO',
+                ], 403)];
+            }
+
+            $timestampExpiracion = $finExamen->timestamp;
+        } else {
+            $timestampExpiracion = now()->addHours(2)->timestamp;
+        }
+
+        $inscripcion = DB::table('estudiante_examen')
+            ->where('id_estudiante', $estudiante->id)
+            ->where('id_examen', $idExamen)
+            ->first();
+
+        if (!$inscripcion) {
+            return ['error' => response()->json([
+                'success'    => false,
+                'message'    => 'No se encuentra registrado en este examen.',
+                'error_type' => 'NO_INSCRITO',
+            ], 404)];
+        }
+
+        if (!empty($inscripcion->fecha_ingreso)) {
+            return ['error' => response()->json([
+                'success'    => false,
+                'message'    => 'Ya se registró su ingreso al examen. Su código QR ha quedado sin efecto.',
+                'error_type' => 'INGRESO_PREVIO_REGISTRADO',
+            ], 403)];
+        }
+
+        if (strtolower($inscripcion->estado ?? '') !== 'habilitado') {
+            return ['error' => response()->json([
+                'success'       => false,
+                'message'       => 'No se puede generar el código QR: el estudiante no está habilitado.',
+                'error_type'    => 'ESTUDIANTE_INHABILITADO',
+                'motivo_estado' => $inscripcion->motivo_estado ?? null,
+            ], 403)];
+        }
+
+        return [
+            'estudiante' => $estudiante,
+            'examen'     => $examen,
+            'expira_at'  => $timestampExpiracion,
+        ];
+    }
+
+    private function construirRespuestaQr(
+        Estudiante $estudiante,
+        string $idExamen,
+        int $timestampExpiracion,
+        string $mensaje
+    ): JsonResponse {
         $payload = [
             'id_estudiante' => $estudiante->id,
             'codigo_sis'    => $estudiante->codigo_sis,
@@ -859,15 +925,9 @@ class EstudianteController extends Controller
         $firma = hash_hmac('sha256', $payloadBase64, config('app.key'));
         $qrToken = "{$payloadBase64}.{$firma}";
 
-        $this->registrarAuditoria($request, 'QR_GENERADO_EXITOSO', [
-            'estudiante_id' => $estudiante->id,
-            'examen_id'     => $idExamen,
-            'codigo_sis'    => $estudiante->codigo_sis,
-        ]);
-
         return response()->json([
             'success' => true,
-            'message' => 'Identidad verificada exitosamente. Token QR generado.',
+            'message' => $mensaje,
             'data'    => [
                 'qr_token'   => $qrToken,
                 'expira_at'  => $timestampExpiracion,
