@@ -29,11 +29,7 @@ class AuxiliarOfflineController extends Controller
         }
 
         $esDocente = ($user->id === $examen->id_docente);
-        $esAuxiliarAsignado = DB::table('examen_auxiliar')
-            ->where('id_examen', $idExamen)
-            ->where('id_auxiliar', $user->id)
-            ->where('estado', 'Activo')
-            ->exists();
+        $esAuxiliarAsignado = $this->esAuxiliarAsignado($idExamen, $user->id);
 
         if (!$esDocente && !$esAuxiliarAsignado) {
             return response()->json(['message' => 'No tiene permisos para este examen.'], 403);
@@ -145,18 +141,19 @@ class AuxiliarOfflineController extends Controller
         }
 
         $esDocente = ($user->id === $examen->id_docente);
-        $esAuxiliarAsignado = DB::table('examen_auxiliar')
-            ->where('id_examen', $idExamen)
-            ->where('id_auxiliar', $user->id)
-            ->where('estado', 'Activo')
-            ->exists();
+        $esAuxiliarAsignado = $this->esAuxiliarAsignado($idExamen, $user->id);
 
         if (!$esDocente && !$esAuxiliarAsignado) {
             return response()->json(['message' => 'No autorizado para sincronizar este examen.'], 403);
         }
 
-        $rolAuditor = $esDocente ? 'docente' : 'auxiliar';
+        $rolAuditor = \App\Services\RolOperativo::actual($request)
+            ?? ($esDocente ? 'docente' : 'auxiliar');
         $procesados = 0;
+        $totalPermitidos = 0;
+        $totalDenegados = 0;
+        $totalConflictosR3 = 0;
+        $totalRechazosConciliacion = 0;
         $errores    = [];
 
         DB::beginTransaction();
@@ -175,10 +172,25 @@ class AuxiliarOfflineController extends Controller
 
                 if ($item['resultado'] === 'PERMITIDO') {
                     if (!$estudiante) {
+                        $motivoRechazo = 'Estudiante no registrado en la base de datos.';
                         $errores[] = [
                             'codigo_sis' => $codigoSis,
-                            'error'      => 'Estudiante no registrado en la base de datos.',
+                            'error'      => $motivoRechazo,
                         ];
+                        $totalRechazosConciliacion++;
+                        $this->registrarAuditoriaOffline(
+                            $user,
+                            $rolAuditor,
+                            'SINCRONIZACION_OFFLINE',
+                            'RECHAZO_CONCILIACION_OFFLINE',
+                            [
+                                'id_examen'             => $idExamen,
+                                'id_estudiante'         => null,
+                                'codigo_sis'            => $codigoSis,
+                                'fecha_ingreso_offline' => $fechaIngreso->toIso8601String(),
+                                'motivo'                => $motivoRechazo,
+                            ]
+                        );
                         continue;
                     }
 
@@ -188,10 +200,12 @@ class AuxiliarOfflineController extends Controller
                         ->first();
 
                     if (!$esDocente && isset($inscripcion->id_auxiliar) && $inscripcion->id_auxiliar !== $user->id) {
+                        $motivoRechazo = 'Estudiante no asignado al módulo de este auxiliar.';
                         $errores[] = [
                             'codigo_sis' => $codigoSis,
-                            'error'      => 'Estudiante no asignado al módulo de este auxiliar.',
+                            'error'      => $motivoRechazo,
                         ];
+                        $totalRechazosConciliacion++;
 
                         $this->registrarIntentoDirecto(
                             $idExamen,
@@ -202,6 +216,20 @@ class AuxiliarOfflineController extends Controller
                             $codigoSis,
                             $fechaIngreso
                         );
+
+                        $this->registrarAuditoriaOffline(
+                            $user,
+                            $rolAuditor,
+                            'SINCRONIZACION_OFFLINE',
+                            'RECHAZO_CONCILIACION_OFFLINE',
+                            [
+                                'id_examen'             => $idExamen,
+                                'id_estudiante'         => $estudiante->id,
+                                'codigo_sis'            => $codigoSis,
+                                'fecha_ingreso_offline' => $fechaIngreso->toIso8601String(),
+                                'motivo'                => $motivoRechazo,
+                            ]
+                        );
                         continue;
                     }
 
@@ -209,10 +237,25 @@ class AuxiliarOfflineController extends Controller
                         || \App\Models\Expulsion::where('id_examen', $idExamen)->where('id_estudiante', $estudiante->id)->exists()
                         || !\App\Services\AccesoExamen::enHorario($examen, \Carbon\CarbonImmutable::instance($fechaIngreso))
                         || $fechaIngreso->isFuture()) {
+                        $motivoRechazo = 'Ingreso no conciliable: inhabilitado, expulsado u horario inválido.';
                         $errores[] = [
                             'codigo_sis' => $codigoSis,
-                            'error'      => 'Ingreso no conciliable: inhabilitado, expulsado u horario inválido.'
+                            'error'      => $motivoRechazo,
                         ];
+                        $totalRechazosConciliacion++;
+                        $this->registrarAuditoriaOffline(
+                            $user,
+                            $rolAuditor,
+                            'SINCRONIZACION_OFFLINE',
+                            'RECHAZO_CONCILIACION_OFFLINE',
+                            [
+                                'id_examen'             => $idExamen,
+                                'id_estudiante'         => $estudiante->id,
+                                'codigo_sis'            => $codigoSis,
+                                'fecha_ingreso_offline' => $fechaIngreso->toIso8601String(),
+                                'motivo'                => $motivoRechazo,
+                            ]
+                        );
                         continue;
                     }
 
@@ -247,6 +290,24 @@ class AuxiliarOfflineController extends Controller
                                     'fecha_ingreso' => $fechaIngreso,
                                     'updated_at'    => now('America/La_Paz'),
                                 ]);
+
+                            $this->registrarAuditoriaOffline(
+                                $user,
+                                $rolAuditor,
+                                'SINCRONIZACION_OFFLINE',
+                                'OFFLINE_SYNC_R3_GANADOR',
+                                [
+                                    'id_examen'              => $idExamen,
+                                    'id_estudiante'          => $estudiante->id,
+                                    'codigo_sis'             => $codigoSis,
+                                    'fecha_ingreso_anterior' => $fechaPrevio->toIso8601String(),
+                                    'fecha_ingreso_offline'  => $fechaIngreso->toIso8601String(),
+                                    'resolucion'             => 'SUSTITUIDO_POR_OFFLINE_ANTERIOR',
+                                ]
+                            );
+
+                            $totalConflictosR3++;
+                            $totalPermitidos++;
                         } else {
                             $this->registrarIntentoDirecto(
                                 $idExamen,
@@ -258,10 +319,26 @@ class AuxiliarOfflineController extends Controller
                                 $fechaIngreso
                             );
 
+                            $this->registrarAuditoriaOffline(
+                                $user,
+                                $rolAuditor,
+                                'SINCRONIZACION_OFFLINE',
+                                'CONFLICTO_DUPLICADO_R3',
+                                [
+                                    'id_examen'             => $idExamen,
+                                    'id_estudiante'         => $estudiante->id,
+                                    'codigo_sis'            => $codigoSis,
+                                    'fecha_ingreso_previo'  => $fechaPrevio->toIso8601String(),
+                                    'fecha_ingreso_offline' => $fechaIngreso->toIso8601String(),
+                                    'resolucion'            => 'CONSERVADO_INGRESO_PREVIO',
+                                ]
+                            );
+
                             $errores[] = [
                                 'codigo_sis' => $codigoSis,
                                 'error'      => 'Conflicto (R3): Se conservó el primer ingreso y se marcó como conflicto para revisión.',
                             ];
+                            $totalConflictosR3++;
                         }
                     } else {
                         LogAsistencia::create([
@@ -281,6 +358,23 @@ class AuxiliarOfflineController extends Controller
                                 'fecha_ingreso' => $fechaIngreso,
                                 'updated_at'    => now('America/La_Paz'),
                             ]);
+
+                        $this->registrarAuditoriaOffline(
+                            $user,
+                            $rolAuditor,
+                            'SINCRONIZACION_OFFLINE',
+                            'ASISTENCIA_OFFLINE_SINCRONIZADA',
+                            [
+                                'id_examen'             => $idExamen,
+                                'id_estudiante'         => $estudiante->id,
+                                'codigo_sis'            => $codigoSis,
+                                'resultado'             => 'PERMITIDO',
+                                'fecha_ingreso_offline' => $fechaIngreso->toIso8601String(),
+                                'motivo'                => $item['motivo'] ?? 'Ingreso offline autorizado.',
+                            ]
+                        );
+
+                        $totalPermitidos++;
                     }
 
                     $procesados++;
@@ -322,9 +416,27 @@ class AuxiliarOfflineController extends Controller
                         $fechaIngreso
                     );
 
+                    $totalDenegados++;
                     $procesados++;
                 }
             }
+
+            $this->registrarAuditoriaOffline(
+                $user,
+                $rolAuditor,
+                'SINCRONIZACION_OFFLINE',
+                'SINCRONIZACION_OFFLINE_LOTE',
+                [
+                    'id_examen'                   => $idExamen,
+                    'total_enviados'              => count($request->asistencias),
+                    'total_procesados'            => $procesados,
+                    'total_permitidos'            => $totalPermitidos,
+                    'total_denegados'             => $totalDenegados,
+                    'total_conflictos_r3'         => $totalConflictosR3,
+                    'total_rechazos_conciliacion' => $totalRechazosConciliacion,
+                    'total_errores'               => count($errores),
+                ]
+            );
 
             DB::commit();
 
@@ -343,6 +455,48 @@ class AuxiliarOfflineController extends Controller
                 'message' => 'Error al procesar el lote de sincronización: ' . $e->getMessage(),
                 'error'   => $e->getMessage(),
             ], 500);
+        }
+    }
+
+    private function esAuxiliarAsignado(string $idExamen, string $idAuxiliar): bool
+    {
+        $tablaAuxiliar = DB::getSchemaBuilder()->hasTable('examen_auxiliares')
+            ? 'examen_auxiliares'
+            : 'examen_auxiliar';
+
+        return DB::table($tablaAuxiliar)
+            ->where('id_examen', $idExamen)
+            ->where('id_auxiliar', $idAuxiliar)
+            ->whereIn('estado', ['Activo', 'Aceptada'])
+            ->exists();
+    }
+
+    private function registrarAuditoriaOffline(
+        $user,
+        string $rolAuditor,
+        string $modulo,
+        string $accion,
+        array $detalles
+    ): void {
+        try {
+            $nombreCompleto = trim(($user->nombre ?? '') . ' ' . ($user->apellido_paterno ?? ''));
+            $emailUsuario = $user->email ?? $user->email_institucional ?? $user->ci ?? null;
+
+            LogAuditoria::create([
+                'user_type'         => get_class($user),
+                'user_id'           => $user->id,
+                'rol_en_el_momento' => $rolAuditor,
+                'usuario_nombre'    => $nombreCompleto !== '' ? $nombreCompleto : ($user->nombre ?? 'Usuario'),
+                'usuario_email'     => $emailUsuario,
+                'modulo'            => $modulo,
+                'accion'            => $accion,
+                'ip_origen'         => request()->ip() ?? '127.0.0.1',
+                'user_agent'        => request()->userAgent() ?? 'App',
+                'detalles'          => $detalles,
+                'created_at'        => now('America/La_Paz'),
+            ]);
+        } catch (\Exception $e) {
+            \Log::warning("Error log_auditoria en sincronización ({$accion}): " . $e->getMessage());
         }
     }
 
@@ -369,28 +523,18 @@ class AuxiliarOfflineController extends Controller
             'updated_at'               => now('America/La_Paz'),
         ]);
 
-        try {
-            LogAuditoria::create([
-                'user_type'         => get_class($user),
-                'user_id'           => $user->id,
-                'rol_en_el_momento' => $rolAuditor,
-                'usuario_nombre'    => trim("{$user->nombre} {$user->apellido_paterno}"),
-                'usuario_email'     => $user->email,
-                'modulo'            => 'INTENTOS_NO_AUTORIZADOS',
-                'accion'            => 'INTENTO_OFFLINE_SINCRONIZADO',
-                'ip_origen'         => request()->ip() ?? '127.0.0.1',
-                'user_agent'        => request()->userAgent() ?? 'App',
-                'detalles'          => [
-                    'intento_id'    => $idIntento,
-                    'id_examen'     => $idExamen,
-                    'id_estudiante' => $idEstudiante,
-                    'tipo_intento'  => $tipoIntento,
-                    'identificador' => $codigoSis,
-                ],
-                'created_at'        => now('America/La_Paz'),
-            ]);
-        } catch (\Exception $e) {
-            \Log::warning("Error log_auditoria en sincronización: " . $e->getMessage());
-        }
+        $this->registrarAuditoriaOffline(
+            $user,
+            $rolAuditor,
+            'INTENTOS_NO_AUTORIZADOS',
+            'INTENTO_OFFLINE_SINCRONIZADO',
+            [
+                'intento_id'    => $idIntento,
+                'id_examen'     => $idExamen,
+                'id_estudiante' => $idEstudiante,
+                'tipo_intento'  => $tipoIntento,
+                'identificador' => $codigoSis,
+            ]
+        );
     }
 }

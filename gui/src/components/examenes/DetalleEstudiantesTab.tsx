@@ -434,6 +434,13 @@ export function DetalleEstudiantesTab({ exam, canManage }: DetalleEstudiantesTab
                 `Aviso: Se superó la capacidad del aula (${exam.aula.capacidad} estudiantes).`
               )
             }
+            if (response.errores && response.errores.length > 0) {
+              await loadData()
+              return {
+                errores: response.errores,
+                message: response.message,
+              }
+            }
             setBulkModalOpen(false)
             await loadData()
           }}

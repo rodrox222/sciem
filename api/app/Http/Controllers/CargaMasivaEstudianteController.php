@@ -42,14 +42,41 @@ class CargaMasivaEstudianteController extends Controller
         }
 
         $archivo = $request->file('archivo');
+        $rutaCarga = $archivo->getRealPath();
+        $rutaTemporal = null;
+
         try {
-            $spreadsheet = IOFactory::load($archivo->getRealPath());
+            $ext = strtolower((string) $archivo->getClientOriginalExtension());
+            if (in_array($ext, ['csv', 'txt'], true)) {
+                $contenido = @file_get_contents($rutaCarga);
+                if ($contenido !== false) {
+                    if (str_starts_with($contenido, "\xEF\xBB\xBF")) {
+                        $contenido = substr($contenido, 3);
+                    }
+                    if (!mb_check_encoding($contenido, 'UTF-8')) {
+                        $contenido = mb_convert_encoding($contenido, 'UTF-8', 'Windows-1252');
+                    }
+                    $tmpBase = @tempnam(sys_get_temp_dir(), 'sciem_csv_');
+                    if ($tmpBase !== false) {
+                        $rutaTemporal = $tmpBase . '.csv';
+                        @rename($tmpBase, $rutaTemporal);
+                        file_put_contents($rutaTemporal, $contenido);
+                        $rutaCarga = $rutaTemporal;
+                    }
+                }
+            }
+
+            $spreadsheet = IOFactory::load($rutaCarga);
         } catch (\Throwable $e) {
             return response()->json([
                 'message'    => 'No se pudo leer el archivo. Asegúrese de que sea un archivo Excel o CSV válido.',
                 'error_type' => 'ARCHIVO_ILEGIBLE',
                 'detalle'    => $e->getMessage(),
             ], 422);
+        } finally {
+            if ($rutaTemporal && file_exists($rutaTemporal)) {
+                @unlink($rutaTemporal);
+            }
         }
 
         $estudiantesBdPorSis = Estudiante::pluck('id', 'codigo_sis')->toArray();
@@ -67,6 +94,7 @@ class CargaMasivaEstudianteController extends Controller
         $filasValidadas = [];
         $sisProcesados = [];
         $totalOmitidosPorDuplicado = 0;
+        $errores = [];
 
         foreach ($spreadsheet->getAllSheets() as $hoja) {
             $maxFila = $hoja->getHighestRow();
@@ -98,15 +126,18 @@ class CargaMasivaEstudianteController extends Controller
             $filasVaciasConsecutivas = 0;
 
             for ($fila = $filaCabecera + 1; $fila <= $maxFila; $fila++) {
+                $rawColNum    = trim((string) $hoja->getCell("{$colNumero}{$fila}")->getValue());
                 $rawSis       = trim((string) $hoja->getCell("{$colSis}{$fila}")->getValue());
                 $rawApellidos = trim((string) $hoja->getCell("{$colApellidos}{$fila}")->getValue());
                 $rawNombres   = trim((string) $hoja->getCell("{$colNombres}{$fila}")->getValue());
                 $rawEmail     = trim((string) $hoja->getCell("{$colEmail}{$fila}")->getValue());
 
-                if ($rawSis === '' && $rawApellidos === '' && $rawNombres === '') {
-                    $filasVaciasConsecutivas++;
-                    if ($filasVaciasConsecutivas >= 3) {
-                        break;
+                if ($rawSis === '' && $rawApellidos === '' && $rawNombres === '' && $rawEmail === '') {
+                    if ($rawColNum === '') {
+                        $filasVaciasConsecutivas++;
+                        if ($filasVaciasConsecutivas >= 3) {
+                            break;
+                        }
                     }
                     continue;
                 }
@@ -114,7 +145,38 @@ class CargaMasivaEstudianteController extends Controller
                 $filasVaciasConsecutivas = 0;
 
                 if (!preg_match('/^[0-9]{6,12}$/', $rawSis)) {
+                    $errores[] = [
+                        'fila'          => $fila,
+                        'tipo_error'    => 'SIS_INVALIDO',
+                        'identificador' => $rawSis !== '' ? $rawSis : trim("{$rawApellidos} {$rawNombres}"),
+                        'motivo'        => 'Código SIS faltante o inválido (debe tener entre 6 y 12 dígitos).',
+                    ];
                     continue;
+                }
+
+                if ($rawNombres === '' || $rawApellidos === '') {
+                    $errores[] = [
+                        'fila'          => $fila,
+                        'tipo_error'    => 'DATOS_INCOMPLETOS',
+                        'identificador' => $rawSis,
+                        'motivo'        => 'Faltan nombres o apellidos del estudiante.',
+                    ];
+                    continue;
+                }
+
+                if ($rawEmail !== '') {
+                    $emailValido = filter_var($rawEmail, FILTER_VALIDATE_EMAIL)
+                        && preg_match('/@(est\.umss\.edu|fcyt\.umss\.edu\.bo|gmail\.com)$/i', $rawEmail);
+
+                    if (!$emailValido) {
+                        $errores[] = [
+                            'fila'          => $fila,
+                            'tipo_error'    => 'EMAIL_INVALIDO',
+                            'identificador' => $rawSis,
+                            'motivo'        => "El correo '{$rawEmail}' no es válido o no pertenece a un dominio permitido (@est.umss.edu, @fcyt.umss.edu.bo, @gmail.com).",
+                        ];
+                        continue;
+                    }
                 }
 
                 if (isset($sisProcesados[$rawSis])) {
@@ -149,9 +211,13 @@ class CargaMasivaEstudianteController extends Controller
 
         if (count($filasValidadas) === 0) {
             return response()->json([
-                'message'    => 'No se encontraron nuevos registros para inscribir. Es posible que todos los alumnos del archivo ya estuvieran registrados o duplicados.',
-                'error_type' => 'SIN_REGISTROS_NUEVOS',
-                'omitidos'   => $totalOmitidosPorDuplicado
+                'message'       => count($errores) > 0
+                    ? 'No se pudo inscribir ningún estudiante porque todas las filas contienen errores o ya estaban registradas.'
+                    : 'No se encontraron nuevos registros para inscribir. Es posible que todos los alumnos del archivo ya estuvieran registrados o duplicados.',
+                'error_type'    => 'SIN_REGISTROS_NUEVOS',
+                'omitidos'      => $totalOmitidosPorDuplicado,
+                'total_errores' => count($errores),
+                'errores'       => $errores,
             ], 422);
         }
 
@@ -263,10 +329,14 @@ class CargaMasivaEstudianteController extends Controller
 
             return response()->json([
                 'success'          => true,
-                'message'          => 'Carga completada con éxito.',
+                'message'          => count($errores) > 0
+                    ? 'Carga completada con observaciones: algunos estudiantes no pudieron inscribirse.'
+                    : 'Carga completada con éxito.',
                 'examen_id'        => $idExamen,
                 'total_insertados' => count($filasValidadas),
                 'total_omitidos'   => $totalOmitidosPorDuplicado,
+                'total_errores'    => count($errores),
+                'errores'          => $errores,
             ], 201);
 
         } catch (\Throwable $e) {

@@ -159,6 +159,14 @@ export const estudiantesService = {
       message: string
       examen_id: string
       total_insertados: number
+      total_omitidos?: number
+      total_errores?: number
+      errores?: Array<{
+        fila: number
+        tipo_error: string
+        identificador: string
+        motivo: string
+      }>
     }>(
       `/examenes/${examId}/estudiantes/carga-masiva`,
       formData,
@@ -218,6 +226,12 @@ export const estudiantesService = {
   misExamenes() {
     return api.get<MisExamenesResponse>(
       '/estudiante/mis-examenes',
+    )
+  },
+
+  obtenerTokenQr(examenId: string) {
+    return api.get<TokenQrResponse>(
+      `/estudiante/examenes/${examenId}/qr-token`,
     )
   },
 

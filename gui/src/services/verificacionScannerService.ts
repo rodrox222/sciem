@@ -110,6 +110,10 @@ export async function procesarIngresoEscaneado(
         }
       );
 
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('sci-network-ok'));
+      }
+
       return {
         success: true,
         metodo: 'ONLINE',
@@ -119,12 +123,19 @@ export async function procesarIngresoEscaneado(
       };
     } catch (error: any) {
       if (error.response) {
+        if (typeof window !== 'undefined' && error.response.status < 500) {
+          window.dispatchEvent(new CustomEvent('sci-network-ok'));
+        }
         return {
           success: false,
           metodo: 'ONLINE',
           mensaje: error.response?.data?.message || 'Ingreso no autorizado.',
           detalles: error.response?.data,
         };
+      }
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('sci-network-error'));
       }
 
       // Si falla la red, resuelve offline

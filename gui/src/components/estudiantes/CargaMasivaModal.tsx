@@ -19,17 +19,20 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 
-interface CargaMasivaModalProps {
-  isOpen: boolean
-  onClose: () => void
-  onBulkUpload: (archivo: File) => Promise<void>
-}
-
-interface RowError {
+export interface RowError {
   fila: number
   tipo_error: string
   identificador: string
   motivo: string
+}
+
+interface CargaMasivaModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onBulkUpload: (archivo: File) => Promise<{
+    errores?: RowError[]
+    message?: string
+  } | void>
 }
 
 export function CargaMasivaModal({
@@ -39,6 +42,7 @@ export function CargaMasivaModal({
 }: CargaMasivaModalProps) {
   const [file, setFile] = useState<File | null>(null)
   const [error, setError] = useState('')
+  const [isPartialWarning, setIsPartialWarning] = useState(false)
   const [saving, setSaving] = useState(false)
   const [showErrorDialog, setShowErrorDialog] = useState(false)
   const [rowErrors, setRowErrors] = useState<RowError[]>([])
@@ -51,8 +55,19 @@ export function CargaMasivaModal({
 
     try {
       setError('')
+      setIsPartialWarning(false)
       setSaving(true)
-      await onBulkUpload(file)
+      const result = await onBulkUpload(file)
+      if (result?.errores && result.errores.length > 0) {
+        setIsPartialWarning(true)
+        setError(
+          result.message ||
+            'Algunos estudiantes no pudieron inscribirse por datos inválidos.'
+        )
+        setRowErrors(result.errores)
+        setShowErrorDialog(true)
+        return
+      }
       onClose()
     } catch (err) {
       if (err instanceof ApiError) {
@@ -225,8 +240,10 @@ export function CargaMasivaModal({
       >
         <AlertDialogContent className="max-w-lg">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-sci-red">
-              No se pudo completar la carga
+            <AlertDialogTitle className={isPartialWarning ? 'text-amber-600' : 'text-sci-red'}>
+              {isPartialWarning
+                ? 'Carga completada con observaciones'
+                : 'No se pudo completar la carga'}
             </AlertDialogTitle>
             <AlertDialogDescription>{error}</AlertDialogDescription>
           </AlertDialogHeader>
@@ -261,7 +278,12 @@ export function CargaMasivaModal({
 
           <AlertDialogFooter>
             <AlertDialogAction
-              onClick={() => setShowErrorDialog(false)}
+              onClick={() => {
+                setShowErrorDialog(false)
+                if (isPartialWarning) {
+                  onClose()
+                }
+              }}
               className="bg-sci-blue text-white hover:opacity-90"
             >
               Entendido
