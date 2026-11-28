@@ -43,7 +43,8 @@ class HabilitacionExamenController extends Controller
                 'nombre', 
                 'apellido_paterno', 
                 'apellido_materno', 
-                'email_institucional'
+                'email_institucional',
+                'foto_perfil_url'
             )
             ->withPivot('estado', 'motivo_estado', 'ajuste_manual', 'fecha_ajuste_manual', 'id_auxiliar')
             ->orderBy('estudiantes.apellido_paterno', 'asc')
@@ -67,6 +68,7 @@ class HabilitacionExamenController extends Controller
                 'ci_extension'        => $estudiante->ci_extension,
                 'nombre_completo'     => $nombreCompleto,
                 'email_institucional' => $estudiante->email_institucional,
+                'foto_perfil_url'     => $estudiante->foto_perfil_url,
                 'estado'              => $estudiante->pivot->estado,
                 'motivo_estado'       => $estudiante->pivot->motivo_estado,
                 'ajuste_manual'       => (bool) $estudiante->pivot->ajuste_manual,

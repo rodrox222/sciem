@@ -104,6 +104,8 @@ class DatabaseBackupService
                 continue;
             }
 
+            $sufijoInsert = $tabla === 'expulsion_vigencias' ? ' ON CONFLICT DO NOTHING;' : ';';
+
             $lote = [];
             while ($fila = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $valores = [];
@@ -113,13 +115,13 @@ class DatabaseBackupService
                 $lote[] = '(' . implode(', ', $valores) . ')';
 
                 if (count($lote) >= self::BATCH_SIZE) {
-                    $lineas[] = "INSERT INTO {$tablaSql} ({$colsSql}) VALUES\n" . implode(",\n", $lote) . ';';
+                    $lineas[] = "INSERT INTO {$tablaSql} ({$colsSql}) VALUES\n" . implode(",\n", $lote) . $sufijoInsert;
                     $lote = [];
                 }
             }
 
             if (!empty($lote)) {
-                $lineas[] = "INSERT INTO {$tablaSql} ({$colsSql}) VALUES\n" . implode(",\n", $lote) . ';';
+                $lineas[] = "INSERT INTO {$tablaSql} ({$colsSql}) VALUES\n" . implode(",\n", $lote) . $sufijoInsert;
             }
 
             // Sincronizar secuencias SERIAL/IDENTITY si la tabla tiene alguna
@@ -187,8 +189,16 @@ class DatabaseBackupService
         // Quitamos BEGIN/COMMIT del script para ejecutarlo de forma atómica dentro de DB::transaction
         $sqlEjecutable = preg_replace('/^\s*(BEGIN|COMMIT)\s*;\s*$/im', '', $sql) ?? $sql;
 
+        // Compatibilidad con respaldos previos: el trigger sciem_expulsion_vigencia_trigger ya inserta
+        // las filas de expulsion_vigencias al insertar expulsiones, evitando colisiones PK/Unique.
+        $sqlEjecutable = preg_replace(
+            '/(INSERT INTO "expulsion_vigencias"\b[^;]*?)(?<!ON CONFLICT DO NOTHING);/i',
+            '$1 ON CONFLICT DO NOTHING;',
+            $sqlEjecutable
+        ) ?? $sqlEjecutable;
+
         DB::transaction(function () use ($sqlEjecutable) {
-            DB::connection()->getPdo()->exec($sqlEjecutable);
+            DB::unprepared($sqlEjecutable);
         });
 
         return [

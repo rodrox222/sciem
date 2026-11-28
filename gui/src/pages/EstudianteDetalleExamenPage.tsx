@@ -75,6 +75,43 @@ export default function EstudianteDetalleExamenPage() {
   const canvasQrRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
 
+  const qrStorageKey = id ? `sciem_qr_${usuario?.id ?? 'est'}_${id}` : null
+
+  const leerQrLocalVigente = useCallback((): string | null => {
+    if (!qrStorageKey) return null
+    try {
+      const guardado = localStorage.getItem(qrStorageKey)
+      if (!guardado) return null
+      const partePayload = guardado.split('.')[0]
+      if (!partePayload) return guardado
+      const jsonStr = atob(partePayload.replace(/-/g, '+').replace(/_/g, '/'))
+      const parsed = JSON.parse(jsonStr) as { expira_at?: number }
+      if (parsed.expira_at && parsed.expira_at * 1000 <= Date.now()) {
+        localStorage.removeItem(qrStorageKey)
+        return null
+      }
+      return guardado
+    } catch {
+      return null
+    }
+  }, [qrStorageKey])
+
+  const guardarQrLocal = useCallback(
+    (token: string | null) => {
+      if (!qrStorageKey) return
+      try {
+        if (token) {
+          localStorage.setItem(qrStorageKey, token)
+        } else {
+          localStorage.removeItem(qrStorageKey)
+        }
+      } catch {
+        // Ignorar errores de almacenamiento local
+      }
+    },
+    [qrStorageKey],
+  )
+
   const cerrarCamara = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop())
     streamRef.current = null
@@ -279,6 +316,7 @@ export default function EstudianteDetalleExamenPage() {
       }
 
       setQrToken(token)
+      guardarQrLocal(token)
       setMensajeQr('QR generado correctamente.')
       setFotoVerificacion(null)
       cerrarCamara()
@@ -412,8 +450,15 @@ export default function EstudianteDetalleExamenPage() {
   }, [id])
 
   useEffect(() => {
+    const tokenLocal = leerQrLocalVigente()
+    if (tokenLocal && !qrToken) {
+      setQrToken(tokenLocal)
+    }
+  }, [leerQrLocalVigente, qrToken])
+
+  useEffect(() => {
     const estaHabilitado = (examen?.estado || '').toLowerCase() === 'habilitado'
-    if (pestana !== 'qr' || !estaHabilitado || !id || qrToken) {
+    if (!estaHabilitado || !id) {
       return
     }
 
@@ -434,9 +479,16 @@ export default function EstudianteDetalleExamenPage() {
 
         if (token) {
           setQrToken(token)
+          guardarQrLocal(token)
         }
-      } catch {
-        // Si aún no existe verificación previa (404), muestra el botón normal de cámara
+      } catch (err: unknown) {
+        if (cancelado) return
+        const status = (err as { response?: { status?: number } })?.response?.status
+        if (status === 403) {
+          setQrToken(null)
+          guardarQrLocal(null)
+        }
+        // Si aún no existe verificación previa (404), conserva el token local vigente si existe o muestra el botón de cámara
       } finally {
         if (!cancelado) setCargandoQrExistente(false)
       }
@@ -447,7 +499,7 @@ export default function EstudianteDetalleExamenPage() {
     return () => {
       cancelado = true
     }
-  }, [pestana, examen?.estado, id, qrToken])
+  }, [examen?.estado, id, guardarQrLocal])
 
   if (cargando) {
     return (

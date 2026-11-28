@@ -253,13 +253,19 @@ export function ResultadoValidacionDialog({
     }
 
     if (studentForReset.id && rawFotoReset && !/^https?:\/\//i.test(rawFotoReset)) {
-      void cargarAutenticada(`/estudiante/foto/${studentForReset.id}`, setFotoPerfilAuthUrl)
+      void cargarAutenticada(`/estudiante/foto/${studentForReset.id}`, (val) => {
+        if (val) setImgError(false)
+        setFotoPerfilAuthUrl(val)
+      })
     } else {
       setFotoPerfilAuthUrl(null)
     }
 
     if (rawVerifReset && rawVerifReset.startsWith('/api/')) {
-      void cargarAutenticada(rawVerifReset, setFotoVerifAuthUrl)
+      void cargarAutenticada(rawVerifReset, (val) => {
+        if (val) setImgVerificacionError(false)
+        setFotoVerifAuthUrl(val)
+      })
     } else {
       setFotoVerifAuthUrl(null)
     }
@@ -282,7 +288,9 @@ export function ResultadoValidacionDialog({
 
   // Obtener la URL compatible de fotoPerfilUrl o foto_url y la última foto tomada para el QR
   const rawFoto = student?.fotoPerfilUrl || (student as any)?.foto_url
-  const urlFotoEstudiante = fotoPerfilAuthUrl || formatearUrlFoto(rawFoto)
+  const usaFotoProtegidaPerfil = Boolean(student?.id && rawFoto && !/^https?:\/\//i.test(rawFoto))
+  const urlFotoEstudiante =
+    fotoPerfilAuthUrl || (!usaFotoProtegidaPerfil ? formatearUrlFoto(rawFoto) : null)
   const rawFotoVerificacion =
     student?.fotoVerificacionUrl || student?.foto_verificacion_url
   const urlFotoVerificacion =

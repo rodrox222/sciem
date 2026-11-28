@@ -58,10 +58,22 @@ class VerificacionController extends Controller
         }
         abort_unless($tieneAcceso, 403, 'Acceso denegado: no estás autorizado para escanear en esta evaluación.');
 
+        $firmaValidaToken = true;
         if (str_contains($trimmedQr, '.') && !str_starts_with($trimmedQr, '{')) {
-            try {
-                \App\Services\IdentificadorQr::leer($trimmedQr, $idExamen);
-            } catch (\Illuminate\Validation\ValidationException $e) {
+            $partesFirma = explode('.', $trimmedQr);
+            $payloadBase64 = $partesFirma[0] ?? '';
+            $firmaRecibida = $partesFirma[1] ?? '';
+            $jsonToken = count($partesFirma) === 2 ? base64_decode($payloadBase64, true) : false;
+
+            if (
+                count($partesFirma) !== 2 ||
+                $jsonToken === false ||
+                !hash_equals(hash_hmac('sha256', $payloadBase64, config('app.key')), $firmaRecibida)
+            ) {
+                $firmaValidaToken = false;
+            }
+
+            if (!$firmaValidaToken) {
                 $identificadorSeguro = substr(preg_replace('/[^a-zA-Z0-9_-]/', '', $trimmedQr), 0, 20);
                 if (empty($identificadorSeguro)) {
                     $identificadorSeguro = 'QR_INVALIDO';
@@ -245,6 +257,90 @@ class VerificacionController extends Controller
             ], 403);
         }
 
+        $esExamenDistinto = ($idExamenToken && $idExamenToken !== $examen->id);
+        $esMateriaDistinta = ($materiaQr && $examen->materia && strcasecmp(trim($materiaQr), trim($examen->materia->nombre)) !== 0);
+
+        if ($esExamenDistinto || $esMateriaDistinta) {
+            $this->registrarIntentoYAuditoria(
+                $request,
+                $examen->id,
+                $estudiante->id,
+                'EXAMEN_DISTINTO',
+                $rol,
+                $userId,
+                $estudiante->codigo_sis
+            );
+
+            $this->registrarLog(
+                $examen->id,
+                $estudiante->id,
+                $estudiante->codigo_sis,
+                'ERROR_DATOS_INVALIDOS',
+                'El estudiante presentó un QR generado para otro examen o materia.',
+                $qrData
+            );
+
+            return response()->json([
+                'success'    => false,
+                'resultado'  => 'RECHAZADO_EXAMEN_DISTINTO',
+                'message'    => 'El código QR presentado corresponde a otra evaluación o materia.',
+                'error_type' => 'EXAMEN_DISTINTO',
+                'estudiante' => [
+                    'id'                    => $estudiante->id,
+                    'nombre'                => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
+                    'sis'                   => $estudiante->codigo_sis,
+                    'ci'                    => $estudiante->ci,
+                    'foto_url'              => $estudiante->foto_perfil_url,
+                    'foto_verificacion_url' => $this->obtenerUrlFotoVerificacionQr($estudiante->id, $examen->id),
+                ],
+            ], 403);
+        }
+
+        if (!empty($expiraAt)) {
+            try {
+                $tokenExpirado = (is_numeric($expiraAt)
+                    ? Carbon::createFromTimestamp((int) $expiraAt, 'UTC')
+                    : Carbon::parse($expiraAt))->isPast();
+            } catch (\Throwable) {
+                $tokenExpirado = true;
+            }
+
+            if ($tokenExpirado) {
+                $this->registrarIntentoYAuditoria(
+                    $request,
+                    $examen->id,
+                    $estudiante->id,
+                    'QR_EXPIRADO',
+                    $rol,
+                    $userId,
+                    $estudiante->codigo_sis
+                );
+
+                $this->registrarLog(
+                    $examen->id,
+                    $estudiante->id,
+                    $estudiante->codigo_sis,
+                    'ERROR_DATOS_INVALIDOS',
+                    'El código QR presentado ha expirado.',
+                    $qrData
+                );
+
+                return response()->json([
+                    'success'    => false,
+                    'resultado'  => 'ERROR_DATOS_INVALIDOS',
+                    'message'    => 'El código QR presentado ha expirado.',
+                    'error_type' => 'QR_INVALIDO',
+                    'estudiante' => [
+                        'id'       => $estudiante->id,
+                        'nombre'   => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
+                        'sis'      => $estudiante->codigo_sis,
+                        'ci'       => $estudiante->ci,
+                        'foto_url' => $estudiante->foto_perfil_url,
+                    ],
+                ], 403);
+            }
+        }
+
         $ingresoPrevio = LogAsistencia::where('id_examen', $examen->id)
             ->where('id_estudiante', $estudiante->id)
             ->where('resultado', 'PERMITIDO')
@@ -290,6 +386,14 @@ class VerificacionController extends Controller
                 'error_type' => 'REINGRESO_DUPLICADO',
                 'detalles'   => [
                     'primer_ingreso' => $fechaPrimerIngreso,
+                ],
+                'estudiante' => [
+                    'id'                    => $estudiante->id,
+                    'nombre'                => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
+                    'sis'                   => $estudiante->codigo_sis,
+                    'ci'                    => $estudiante->ci,
+                    'foto_url'              => $estudiante->foto_perfil_url,
+                    'foto_verificacion_url' => $this->obtenerUrlFotoVerificacionQr($estudiante->id, $examen->id),
                 ],
             ], 409);
         }
@@ -360,37 +464,6 @@ class VerificacionController extends Controller
                     'nombre' => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
                     'sis'    => $estudiante->codigo_sis,
                 ]
-            ], 403);
-        }
-
-        $esExamenDistinto = ($idExamenToken && $idExamenToken !== $examen->id);
-        $esMateriaDistinta = ($materiaQr && $examen->materia && strcasecmp(trim($materiaQr), trim($examen->materia->nombre)) !== 0);
-
-        if ($esExamenDistinto || $esMateriaDistinta) {
-            $this->registrarIntentoYAuditoria(
-                $request,
-                $examen->id,
-                $estudiante->id,
-                'EXAMEN_DISTINTO',
-                $rol,
-                $userId,
-                $estudiante->codigo_sis
-            );
-
-            $this->registrarLog(
-                $examen->id,
-                $estudiante->id,
-                $estudiante->codigo_sis,
-                'ERROR_DATOS_INVALIDOS',
-                'El estudiante presentó un QR generado para otro examen o materia.',
-                $qrData
-            );
-
-            return response()->json([
-                'success'    => false,
-                'resultado'  => 'RECHAZADO_EXAMEN_DISTINTO',
-                'message'    => 'El código QR presentado corresponde a otra evaluación o materia.',
-                'error_type' => 'EXAMEN_DISTINTO',
             ], 403);
         }
 
