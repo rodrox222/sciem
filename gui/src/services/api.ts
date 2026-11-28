@@ -59,10 +59,16 @@ export async function apiRequest<T>(
       ...options,
       headers,
     });
+    if (typeof window !== 'undefined' && response.status < 500) {
+      window.dispatchEvent(new CustomEvent('sci-network-ok'));
+    }
   } catch {
     if (retries > 0 && method === 'GET') {
       await new Promise((resolve) => setTimeout(resolve, 300));
       return apiRequest<T>(path, options, retries - 1);
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sci-network-error'));
     }
     throw new ApiError(
       'No se pudo conectar con el servidor.',
