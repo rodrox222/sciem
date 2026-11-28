@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Cache;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BackupController;
 use App\Http\Controllers\ForgotPasswordController;
 use App\Http\Controllers\GestionController;
 use App\Http\Controllers\UserController;
@@ -42,6 +43,14 @@ Route::get('gestiones/activa', [GestionController::class, 'activa']);
 Route::get('health', fn () => response()->noContent());
 
 Route::get('examenes', [ExamenController::class, 'index']);
+Route::get('publico/metricas', function () {
+    \App\Services\EstadoExamen::sincronizar();
+
+    return response()->json([
+        'examenes_programados'  => \App\Models\Examen::where('estado', 'Programado')->count(),
+        'ambientes_habilitados' => \App\Models\Aula::where('estado', 'Disponible')->count(),
+    ]);
+});
 
 Route::pattern('idExamen', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}');
 Route::pattern('expulsionId', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}');
@@ -101,6 +110,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- ADMINISTRACIÓN Y AUDITORÍA ---
     Route::middleware('role:admin,administrador')->group(function () {
         Route::get('dashboard/stats', function () {
+            \App\Services\EstadoExamen::sincronizar();
+
             $totalUsuarios = \App\Models\Admin::count() 
                            + \App\Models\Docente::count() 
                            + \App\Models\Auxiliar::count();
@@ -122,6 +133,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('users/{id}/materias', [UserController::class, 'syncMateriasDocente']);
         Route::post('users/{id}/materias/{idMateria}', [UserController::class, 'vincularMateriaDocente']);
         Route::delete('users/{id}/materias/{idMateria}', [UserController::class, 'desvincularMateriaDocente']);
+
+        // Respaldos (Backups) y Restauración de Base de Datos
+        Route::get('admin/backups', [BackupController::class, 'index']);
+        Route::post('admin/backups', [BackupController::class, 'store']);
+        Route::get('admin/backups/{archivo}/descargar', [BackupController::class, 'download']);
+        Route::post('admin/backups/{archivo}/restaurar', [BackupController::class, 'restore']);
+        Route::delete('admin/backups/{archivo}', [BackupController::class, 'destroy']);
 
         // Módulo de Auditoría y Reversión Compensatoria
         Route::get('auditoria', [AuditoriaController::class, 'index']);
@@ -282,6 +300,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::match(['post', 'patch'], '/completar-datos', [EstudianteController::class, 'completarDatos']);
         Route::post('/foto', [EstudianteController::class, 'subirFoto']);
         Route::get('/mis-examenes', [EstudianteController::class, 'misExamenes']);
+        Route::get('/examenes/{idExamen}/qr-token', [EstudianteController::class, 'obtenerTokenQrExistente']);
         Route::post('/examenes/{idExamen}/qr-token', [EstudianteController::class, 'generarTokenQr']);
         Route::put('/cambiar-password', [EstudianteController::class, 'cambiarPassword']);
     });

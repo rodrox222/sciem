@@ -131,6 +131,8 @@ export function UsuarioFormModal({
 
     if (!formulario.ci.trim()) {
       nuevosErrores.ci = 'El CI es obligatorio.'
+    } else if (!/^\d{5,12}$/.test(formulario.ci.trim())) {
+      nuevosErrores.ci = 'El CI debe contener solo números (entre 5 y 12 dígitos).'
     }
 
     const EMAIL_PERMITIDO_REGEX = /^[a-zA-Z0-9._%+-]+@(fcyt\.umss\.edu\.bo|est\.umss\.edu|gmail\.com)$/i
@@ -317,8 +319,10 @@ export function UsuarioFormModal({
                   </Label>
                   <Input
                     type="text"
+                    inputMode="numeric"
+                    maxLength={12}
                     value={formulario.ci}
-                    onChange={(e) => actualizarCampo('ci', e.target.value)}
+                    onChange={(e) => actualizarCampo('ci', e.target.value.replace(/\D/g, ''))}
                     placeholder="Ej. 1234567"
                     className={errores.ci ? 'border-sci-red' : ''}
                   />

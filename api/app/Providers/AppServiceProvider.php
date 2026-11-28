@@ -36,5 +36,15 @@ class AppServiceProvider extends ServiceProvider
                 'dompdf.options.font_cache' => $tmpFontsDir,
             ]);
         }
+
+        if (!$this->app->runningInConsole()) {
+            $this->app->terminating(function () {
+                try {
+                    app(\App\Services\DatabaseBackupService::class)->asegurarBackupDiario();
+                } catch (\Throwable) {
+                    // No interrumpir la petición si falla el respaldo automático
+                }
+            });
+        }
     }
 }

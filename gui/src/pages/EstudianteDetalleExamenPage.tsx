@@ -68,6 +68,7 @@ export default function EstudianteDetalleExamenPage() {
   const [errorQr, setErrorQr] = useState('')
   const [mensajeQr, setMensajeQr] = useState('')
   const [qrToken, setQrToken] = useState<string | null>(null)
+  const [cargandoQrExistente, setCargandoQrExistente] = useState(false)
   const [fotoVerificacion, setFotoVerificacion] = useState<File | null>(null)
 
   const videoQrRef = useRef<HTMLVideoElement>(null)
@@ -410,6 +411,44 @@ export default function EstudianteDetalleExamenPage() {
     }
   }, [id])
 
+  useEffect(() => {
+    const estaHabilitado = (examen?.estado || '').toLowerCase() === 'habilitado'
+    if (pestana !== 'qr' || !estaHabilitado || !id || qrToken) {
+      return
+    }
+
+    let cancelado = false
+
+    const cargarQrExistente = async () => {
+      try {
+        setCargandoQrExistente(true)
+        const respuesta = await estudiantesService.obtenerTokenQr(id)
+        if (cancelado) return
+
+        const datos = respuesta as unknown as {
+          qr_token?: string
+          data?: { qr_token?: string; data?: { qr_token?: string } }
+        }
+        const token =
+          datos.data?.data?.qr_token ?? datos.data?.qr_token ?? datos.qr_token
+
+        if (token) {
+          setQrToken(token)
+        }
+      } catch {
+        // Si aún no existe verificación previa (404), muestra el botón normal de cámara
+      } finally {
+        if (!cancelado) setCargandoQrExistente(false)
+      }
+    }
+
+    void cargarQrExistente()
+
+    return () => {
+      cancelado = true
+    }
+  }, [pestana, examen?.estado, id, qrToken])
+
   if (cargando) {
     return (
       <div className="flex min-h-64 items-center justify-center gap-2 p-6 text-muted-foreground">
@@ -623,7 +662,13 @@ export default function EstudianteDetalleExamenPage() {
               </p>
             ) : (
               <>
-                {!camaraAbierta && !fotoVerificacion && !qrToken && (
+                {cargandoQrExistente && !qrToken && (
+                  <p className="text-sm text-muted-foreground">
+                    Verificando código QR generado...
+                  </p>
+                )}
+
+                {!cargandoQrExistente && !camaraAbierta && !fotoVerificacion && !qrToken && (
                   <Button onClick={() => void abrirCamaraQr()}>
                     <QrCode className="mr-2 h-4 w-4" />
                     Abrir cámara y solicitar QR

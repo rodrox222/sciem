@@ -11,6 +11,7 @@ interface NavItem {
   name: string;
   href: string;
   isRoleToggle?: boolean;
+  targetRole?: 'estudiante' | 'auxiliar';
 }
 
 const NAV_ITEMS_BY_ROLE: Record<string, NavItem[]> = {
@@ -39,6 +40,7 @@ const NAV_ITEMS_BY_ROLE: Record<string, NavItem[]> = {
   auxiliar: [
     { name: 'Inicio', href: '/' },
     { name: 'Mi Panel', href: '/dashboard' },
+    { name: 'Exámenes', href: '/examenes' },
     { name: 'Noticias', href: '/noticias' },
   ],
   estudiante: [
@@ -110,18 +112,19 @@ export const Header: React.FC = () => {
     ? [{ name: 'Primer acceso', href: '/primer-acceso' }]
     : (NAV_ITEMS_BY_ROLE[normalizedRole] || NAV_ITEMS_BY_ROLE.docente);
 
-  // Si el usuario es dual (estudiante/auxiliar), agregamos el tab de conmutación al lado de Noticias
-  const navItems: NavItem[] = [...baseNavItems];
-  if (!bloqueadoPrimerAcceso && esUsuarioDual && (normalizedRole === 'estudiante' || normalizedRole === 'auxiliar')) {
-    const etiquetaTab = normalizedRole === 'estudiante' ? 'Auxiliar' : 'Estudiante';
-    navItems.push({
-      name: etiquetaTab,
-      href: '/dashboard',
-      isRoleToggle: true,
-    });
-  }
+  // Si el usuario es dual (estudiante/auxiliar), mostramos pestañas separadas para sus exámenes como alumno y como auxiliar
+  const navItems: NavItem[] =
+    !bloqueadoPrimerAcceso && esUsuarioDual && (normalizedRole === 'estudiante' || normalizedRole === 'auxiliar')
+      ? [
+          { name: 'Inicio', href: '/' },
+          { name: 'Exámenes (Alumno)', href: '/dashboard', targetRole: 'estudiante' },
+          { name: 'Exámenes (Auxiliar)', href: '/examenes', targetRole: 'auxiliar' },
+          { name: 'Noticias', href: '/noticias' },
+          { name: 'Perfil', href: '/perfil', targetRole: 'estudiante' },
+        ]
+      : [...baseNavItems];
 
-  const alternarRol = (rolDestino: string) => {
+  const alternarRol = (rolDestino: string, rutaDestino = '/dashboard') => {
     localStorage.setItem('user_role', rolDestino);
 
     try {
@@ -135,7 +138,7 @@ export const Header: React.FC = () => {
 
     setActiveRole(rolDestino);
     window.dispatchEvent(new CustomEvent('rolCambiado', { detail: rolDestino }));
-    navigate('/dashboard');
+    navigate(rutaDestino);
     setMobileOpen(false);
   };
 
@@ -143,6 +146,10 @@ export const Header: React.FC = () => {
     if (item.isRoleToggle) {
       const rolDestino = normalizedRole === 'estudiante' ? 'auxiliar' : 'estudiante';
       alternarRol(rolDestino);
+      return;
+    }
+    if (item.targetRole && item.targetRole !== normalizedRole) {
+      alternarRol(item.targetRole, item.href);
       return;
     }
     if (item.href === '#') return;
@@ -249,9 +256,15 @@ export const Header: React.FC = () => {
               // El tab toggle nunca está "activo" como ruta fija, funciona como disparador de cambio
               const active =
                 !item.isRoleToggle &&
-                (item.href === '/' || item.href === '/dashboard'
-                  ? location.pathname === item.href
-                  : location.pathname === item.href || location.pathname.startsWith(`${item.href}/`));
+                (item.targetRole === 'estudiante' && item.href === '/dashboard'
+                  ? normalizedRole === 'estudiante' &&
+                    (location.pathname === '/dashboard' || location.pathname.startsWith('/estudiante/'))
+                  : item.targetRole === 'auxiliar' && item.href === '/examenes'
+                    ? normalizedRole === 'auxiliar' &&
+                      (location.pathname === '/examenes' || location.pathname.startsWith('/examenes/'))
+                    : item.href === '/' || item.href === '/dashboard'
+                      ? location.pathname === item.href
+                      : location.pathname === item.href || location.pathname.startsWith(`${item.href}/`));
 
               return (
                 <button
