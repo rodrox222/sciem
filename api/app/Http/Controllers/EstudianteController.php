@@ -504,6 +504,13 @@ class EstudianteController extends Controller
         
         $rutaAlmacenada = $archivo->storeAs('fotos_estudiantes', $nombreArchivo, 'public');
 
+        if (!$rutaAlmacenada) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No se pudo guardar la fotografía en el servidor. Verifica los permisos de escritura en storage/app/public.',
+            ], 500);
+        }
+
         $estudiante->foto_perfil_url = '/storage/' . $rutaAlmacenada;
 
         $accesoCompleto = (!empty($estudiante->ci) && !empty($estudiante->foto_perfil_url));
@@ -577,6 +584,46 @@ class EstudianteController extends Controller
         }
 
         return response()->file(Storage::disk('public')->path($relPath));
+    }
+
+    public function verFotoVerificacion(Request $request, string $idExamen, string $idEstudiante): BinaryFileResponse|JsonResponse
+    {
+        $usuario = $request->user();
+
+        if (!$usuario) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No autenticado.',
+            ], 401);
+        }
+
+        $esEstudiante = ($usuario instanceof Estudiante)
+            || strtolower($usuario->rol ?? '') === 'estudiante'
+            || class_basename($usuario) === 'Estudiante';
+
+        if ($esEstudiante && strtolower(trim((string) $usuario->id)) !== strtolower(trim($idEstudiante))) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Acceso denegado.',
+            ], 403);
+        }
+
+        $prefijo = "fotos_verificacion_qr/qr_token_{$idEstudiante}_{$idExamen}_";
+        $coincidencias = array_values(array_filter(
+            Storage::disk('public')->files('fotos_verificacion_qr'),
+            fn (string $archivo) => str_starts_with($archivo, $prefijo)
+        ));
+
+        if (empty($coincidencias)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Fotografía de verificación no encontrada.',
+            ], 404);
+        }
+
+        rsort($coincidencias);
+
+        return response()->file(Storage::disk('public')->path($coincidencias[0]));
     }
 
     public function misExamenes(Request $request): JsonResponse
@@ -759,6 +806,14 @@ class EstudianteController extends Controller
             'qr_token_' . $estudiante->id . '_' . $idExamen . '_' . time() . '.' . $archivoCaptura->getClientOriginalExtension(),
             'public'
         );
+
+        if (!$rutaCaptura) {
+            return response()->json([
+                'success'    => false,
+                'message'    => 'No se pudo guardar la fotografía de verificación en el servidor. Verifica los permisos de escritura en storage/app/public.',
+                'error_type' => 'ERROR_ALMACENAMIENTO',
+            ], 500);
+        }
 
         $rutaFotoPerfil = Storage::disk('public')->path($rutaRelativaPerfil);
         $rutaFotoCapturada = Storage::disk('public')->path($rutaCaptura);

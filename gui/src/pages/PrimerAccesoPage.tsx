@@ -115,7 +115,11 @@ export default function PrimerAccesoPage() {
       return
     }
 
+    contexto.save()
+    contexto.translate(canvas.width, 0)
+    contexto.scale(-1, 1)
     contexto.drawImage(video, 0, 0, canvas.width, canvas.height)
+    contexto.restore()
 
     canvas.toBlob(
       (blob) => {
