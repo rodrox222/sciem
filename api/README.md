@@ -1,66 +1,83 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# SCIEM — Backend API (`api/` / `sci_api`)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Backend REST del **Sistema de Control de Ingreso de Exámenes Masivos (SCI)** construido con **Laravel 11** (PHP `^8.2`), **Laravel Sanctum** y **PostgreSQL**.
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## 1. Archivos y directorios importantes para subir por primera vez
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+Si vas a comprimir el proyecto en un `.zip` para subirlo por primera vez mediante **net2ftp** / FTP a la carpeta `sci_api/` del servidor:
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+### Carpetas que SÍ debes incluir
+* `app/` — Controladores, modelos, middleware, servicios, comandos Artisan y traits.
+* `bootstrap/` — Arranque de Laravel (asegurar permisos de escritura en `bootstrap/cache/`).
+* `config/` — Archivos de configuración de Laravel.
+* `database/` — Migraciones y seeders.
+* `public/` — Punto de entrada HTTP (`index.php`, `.htaccess`, `robots.txt`).
+* `resources/` — Vistas Blade (actas/reportes PDF, plantillas).
+* `routes/` — Definición de rutas (`api.php`, `web.php`, `console.php`).
+* `storage/` — Almacenamiento de archivos, caché, sesiones y logs (asegurar permisos de escritura en `storage/` y que exista `storage/app/public/`).
+* `vendor/` — **Incluirla en el `.zip` si el hosting compartido no permite ejecutar Composer**. Si el servidor tiene SSH + Composer, puedes omitir `vendor/` y ejecutar `composer install --no-dev --optimize-autoloader`.
 
-## Learning Laravel
+### Archivos de la raíz que SÍ debes incluir
+* `artisan`
+* `composer.json`
+* `composer.lock`
+* `.env` — Configurado con las variables de producción del servidor (base de datos, `APP_URL`, `APP_KEY`, `FRONTEND_URL`, correo, etc.). Puedes partir de `.env.example`.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+### Qué NO es necesario subir al servidor
+* `tests/`, `scripts/`
+* `node_modules/`
+* `Dockerfile`, `Dockerfile.sprint3-qa`, `.dockerignore`
+* `phpunit.xml`, `phpunit.sprint3.xml`
+* `vite.config.js`, `package.json`
+* `.env.local`, `.env.hibrido`, `.env.nube`, `database.zip`
+* `.gitattributes`, `.gitignore`
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+---
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## 2. ¿Dónde colocar el `dist/` compilado de `gui/`?
 
-## Laravel Sponsors
+De acuerdo con [routes/web.php](routes/web.php), Laravel busca automáticamente el `index.html` del frontend compilado en cualquiera de estas ubicaciones:
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+1. **`sci_api/public/`** (cuando el Document Root del servidor apunta directamente a `sci_api/public`).
+2. **`public_html/`** al mismo nivel que `sci_api/` (estructura típica de hosting compartido / net2ftp, por ejemplo: `/htdocs` o `/public_html` junto a `/sci_api`).
 
-### Premium Partners
+### Qué copiar de `gui/dist/`
+Copia **todo el contenido interno** de `gui/dist/` (no la carpeta `dist` como tal, sino su contenido):
+* `index.html`
+* `assets/`
+* `apk/sci.apk`
+* Cualquier otro archivo estático generado en `gui/dist/`
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+> **Precaución si lo colocas dentro de `sci_api/public/`:**
+> **No borres** `index.php`, `.htaccess`, `robots.txt` ni el acceso simbólico/carpeta `storage/` al subir o actualizar el frontend. Si deseas limpiar builds anteriores, borra únicamente los archivos viejos dentro de `public/assets/` antes de subir el nuevo `.zip`.
 
-## Contributing
+---
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## 3. Verificaciones recomendadas en el servidor (primera instalación)
 
-## Code of Conduct
+Si el servidor cuenta con consola / SSH o panel de tareas programadas:
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+1. **Enlace público para fotos de estudiantes:**
+   ```bash
+   php artisan storage:link
+   ```
+   *(Si el hosting compartido no permite enlaces simbólicos, asegúrate de que `public/storage` apunte o sincronice con `storage/app/public`.)*
 
-## Security Vulnerabilities
+2. **Ejecutar migraciones y seeders iniciales:**
+   ```bash
+   php artisan migrate --force
+   php artisan db:seed --force
+   ```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+3. **Limpiar / regenerar cachés tras subir cambios en rutas o configuración:**
+   ```bash
+   php artisan optimize:clear
+   ```
 
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+4. **Programador de tareas (Cron) para limpieza de fotos QR (24 h post-examen):**
+   ```bash
+   * * * * * cd /ruta/a/sci_api && php artisan schedule:run >> /dev/null 2>&1
+   ```
+   *(O ejecutar periódicamente `php artisan fotos:limpiar-verificaciones`.)*

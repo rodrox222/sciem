@@ -19,6 +19,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { apiUrl } from '@/services/apiUrl'
 import type { Examen } from '@/services/examenes.service'
 
 export type CodigoRechazoValidacion =
@@ -101,9 +102,11 @@ function formatearUrlFoto(foto?: string | null): string | null {
     return foto
   }
 
-  // Si es relativa (/storage/...), le anteponemos el origen del backend
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
-  const backendOrigin = apiUrl.replace(/\/api\/?$/, '')
+  // Si es relativa (/storage/...), le anteponemos el origen configurado o el origen actual
+  const configuredApiUrl = import.meta.env.VITE_API_URL?.trim() || ''
+  const backendOrigin = configuredApiUrl
+    ? configuredApiUrl.replace(/\/api\/?$/, '')
+    : window.location.origin
   const rutaLimpia = foto.startsWith('/') ? foto : `/${foto}`
 
   return `${backendOrigin}${rutaLimpia}`
@@ -208,13 +211,63 @@ export function ResultadoValidacionDialog({
 }: ResultadoValidacionDialogProps) {
   const [imgError, setImgError] = useState(false)
   const [imgVerificacionError, setImgVerificacionError] = useState(false)
+  const [fotoPerfilAuthUrl, setFotoPerfilAuthUrl] = useState<string | null>(null)
+  const [fotoVerifAuthUrl, setFotoVerifAuthUrl] = useState<string | null>(null)
 
   const studentForReset = resultado && resultado.estado !== 'pendiente' ? resultado.estudiante : undefined
-  const resetFotoKey = `${open}-${studentForReset?.fotoPerfilUrl ?? ''}-${studentForReset?.foto_url ?? ''}-${studentForReset?.fotoVerificacionUrl ?? ''}-${studentForReset?.foto_verificacion_url ?? ''}`
+  const rawFotoReset = studentForReset?.fotoPerfilUrl || (studentForReset as any)?.foto_url || ''
+  const rawVerifReset = studentForReset?.fotoVerificacionUrl || studentForReset?.foto_verificacion_url || ''
+  const resetFotoKey = `${open}-${studentForReset?.id ?? ''}-${rawFotoReset}-${rawVerifReset}`
 
   useEffect(() => {
     setImgError(false)
     setImgVerificacionError(false)
+
+    if (!open || !studentForReset) {
+      setFotoPerfilAuthUrl(null)
+      setFotoVerifAuthUrl(null)
+      return
+    }
+
+    let cancelled = false
+    const objectUrls: string[] = []
+    const token = localStorage.getItem('auth_token') || localStorage.getItem('token') || ''
+
+    const cargarAutenticada = async (
+      endpointPath: string,
+      setter: (val: string | null) => void,
+    ) => {
+      try {
+        const res = await fetch(apiUrl(endpointPath), {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
+        if (!res.ok) throw new Error('Error al cargar foto')
+        const blob = await res.blob()
+        if (cancelled) return
+        const objectUrl = URL.createObjectURL(blob)
+        objectUrls.push(objectUrl)
+        setter(objectUrl)
+      } catch {
+        if (!cancelled) setter(null)
+      }
+    }
+
+    if (studentForReset.id && rawFotoReset && !/^https?:\/\//i.test(rawFotoReset)) {
+      void cargarAutenticada(`/estudiante/foto/${studentForReset.id}`, setFotoPerfilAuthUrl)
+    } else {
+      setFotoPerfilAuthUrl(null)
+    }
+
+    if (rawVerifReset && rawVerifReset.startsWith('/api/')) {
+      void cargarAutenticada(rawVerifReset, setFotoVerifAuthUrl)
+    } else {
+      setFotoVerifAuthUrl(null)
+    }
+
+    return () => {
+      cancelled = true
+      objectUrls.forEach((u) => URL.revokeObjectURL(u))
+    }
   }, [resetFotoKey])
 
   if (!resultado) return null
@@ -229,10 +282,14 @@ export function ResultadoValidacionDialog({
 
   // Obtener la URL compatible de fotoPerfilUrl o foto_url y la última foto tomada para el QR
   const rawFoto = student?.fotoPerfilUrl || (student as any)?.foto_url
-  const urlFotoEstudiante = formatearUrlFoto(rawFoto)
+  const urlFotoEstudiante = fotoPerfilAuthUrl || formatearUrlFoto(rawFoto)
   const rawFotoVerificacion =
     student?.fotoVerificacionUrl || student?.foto_verificacion_url
-  const urlFotoVerificacion = formatearUrlFoto(rawFotoVerificacion)
+  const urlFotoVerificacion =
+    fotoVerifAuthUrl ||
+    (rawFotoVerificacion && !rawFotoVerificacion.startsWith('/api/')
+      ? formatearUrlFoto(rawFotoVerificacion)
+      : null)
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>

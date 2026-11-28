@@ -300,6 +300,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware('role:admin,administrador,docente,auxiliar,estudiante')->group(function () {
         Route::get('estudiante/foto/{idEstudiante}', [EstudianteController::class, 'verFoto']);
+        Route::get('estudiante/foto-verificacion/{idExamen}/{idEstudiante}', [EstudianteController::class, 'verFotoVerificacion']);
     });
 
     // MODO OFFLINE
