@@ -375,6 +375,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
         setValidationResult({
           estado: 'autorizado',
           estudiante: {
+            id: stOnline.id || stRoster?.id,
             nombreCompleto:
               stOnline.nombre_completo || stOnline.nombre || stRoster?.nombre_completo,
             codigoSis: stOnline.codigo_sis || stOnline.sis || stRoster?.codigo_sis,

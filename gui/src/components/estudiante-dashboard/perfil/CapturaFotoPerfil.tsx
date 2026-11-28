@@ -74,13 +74,13 @@ export default function CapturaFotoPerfil({
             </p>
           </div>
 
-          <div className="relative w-full max-w-md overflow-hidden rounded-xl border bg-black">
+          <div className="relative aspect-square w-full max-w-sm overflow-hidden rounded-xl border bg-black">
             <video
               ref={videoRef}
               autoPlay
               playsInline
               muted
-              className="h-auto min-h-[240px] max-h-[65dvh] w-full rounded-xl border bg-black object-cover sm:max-w-md"
+              className="h-full w-full -scale-x-100 object-cover"
             />
 
             <svg

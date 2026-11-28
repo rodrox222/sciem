@@ -437,6 +437,7 @@ class VerificacionController extends Controller
                     'motivo_inhabilitacion' => $motivoInhabilitacion,
                 ],
                 'estudiante' => [
+                    'id'                    => $estudiante->id,
                     'nombre'                => trim("{$estudiante->nombre} {$estudiante->apellido_paterno} {$estudiante->apellido_materno}"),
                     'sis'                   => $estudiante->codigo_sis,
                     'ci'                    => $estudiante->ci,
@@ -862,8 +863,6 @@ class VerificacionController extends Controller
             return null;
         }
 
-        rsort($coincidencias);
-
-        return '/storage/' . $coincidencias[0];
+        return "/api/estudiante/foto-verificacion/{$idExamen}/{$idEstudiante}";
     }
 }
