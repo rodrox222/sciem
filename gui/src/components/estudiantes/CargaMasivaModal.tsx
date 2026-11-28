@@ -58,7 +58,7 @@ export function CargaMasivaModal({
       setIsPartialWarning(false)
       setSaving(true)
       const result = await onBulkUpload(file)
-      if (result?.errores && result.errores.length > 0) {
+      if (result && typeof result === 'object' && result.errores && result.errores.length > 0) {
         setIsPartialWarning(true)
         setError(
           result.message ||

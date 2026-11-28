@@ -9,6 +9,7 @@ import {
   Search,
   ShieldCheck,
   UserCheck,
+  UserRound,
   Users,
   VideoOff,
 } from 'lucide-react'
@@ -21,6 +22,7 @@ import {
   type ResultadoValidacionAcceso,
 } from '@/components/examenes/ResultadoValidacionDialog'
 import { api, ApiError } from '@/services/api'
+import { apiUrl } from '@/services/apiUrl'
 import {
   estudiantesService,
   type EstudianteInscritoExamen,
@@ -231,6 +233,63 @@ const mapOfflineResultToDialog = (resOffline: {
   }
 }
 
+function AvatarCandidatoManual({
+  id,
+  nombre,
+  hasFoto,
+}: {
+  id: string
+  nombre: string
+  hasFoto: boolean
+}) {
+  const [src, setSrc] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!hasFoto) {
+      setSrc(null)
+      return
+    }
+
+    let cancelled = false
+    let objectUrl: string | null = null
+    const token = localStorage.getItem('auth_token') || localStorage.getItem('token') || ''
+
+    fetch(apiUrl(`/estudiante/foto/${id}`), {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((res) => (res.ok ? res.blob() : Promise.reject(new Error('No foto'))))
+      .then((blob) => {
+        if (cancelled) return
+        objectUrl = URL.createObjectURL(blob)
+        setSrc(objectUrl)
+      })
+      .catch(() => {
+        if (!cancelled) setSrc(null)
+      })
+
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [id, hasFoto])
+
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={nombre}
+        className="h-11 w-11 shrink-0 rounded-xl border border-border object-cover shadow-xs"
+      />
+    )
+  }
+
+  return (
+    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-border bg-sci-cyan/10 text-sci-cyan">
+      <UserRound className="h-5 w-5" aria-hidden="true" />
+    </div>
+  )
+}
+
 export function DetalleEscanerTab({ exam }: { exam: Examen }) {
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
@@ -425,6 +484,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
       setValidationResult({
         estado: 'autorizado',
         estudiante: {
+          id: student.id,
           nombreCompleto: student.nombre_completo,
           codigoSis: student.codigo_sis,
           ci: student.ci ?? undefined,
@@ -641,17 +701,27 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
               </div>
 
               {searchQuery.trim() !== '' && (
-                <div className="max-h-48 overflow-y-auto divide-y divide-border rounded-xl border border-border bg-muted/20">
+                <div className="max-h-60 overflow-y-auto divide-y divide-border rounded-xl border border-border bg-muted/20">
                   {filteredCandidates.map((cand) => (
                     <div
                       key={cand.id}
-                      className="flex items-center justify-between p-3 text-xs hover:bg-muted/40 transition-colors"
+                      className="flex items-center justify-between gap-3 p-3 text-xs hover:bg-muted/40 transition-colors"
                     >
-                      <div>
-                        <p className="font-bold text-sci-navy">{cand.nombre_completo}</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          SIS: {cand.codigo_sis} · CI: {cand.ci ?? 'Sin CI'}
-                        </p>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <AvatarCandidatoManual
+                          id={cand.id}
+                          nombre={cand.nombre_completo}
+                          hasFoto={Boolean(cand.foto_perfil_url)}
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate font-bold text-sci-navy">{cand.nombre_completo}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            SIS: {cand.codigo_sis} · CI:{' '}
+                            {cand.ci
+                              ? `${cand.ci}${cand.ci_extension ? `-${cand.ci_extension}` : ''}`
+                              : 'Sin CI'}
+                          </p>
+                        </div>
                       </div>
 
                       <Button
@@ -659,7 +729,7 @@ export function DetalleEscanerTab({ exam }: { exam: Examen }) {
                         size="sm"
                         disabled={manualLoading}
                         onClick={() => void handleIngresoManual(cand)}
-                        className="cursor-pointer bg-sci-blue text-[11px] font-semibold text-white hover:opacity-90 h-8"
+                        className="shrink-0 cursor-pointer bg-sci-blue text-[11px] font-semibold text-white hover:opacity-90 h-8"
                       >
                         Dar Ingreso
                       </Button>

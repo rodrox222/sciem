@@ -39,18 +39,6 @@ Route::get('noticias', [NoticiaController::class, 'index']);
 Route::get('gestiones', [GestionController::class, 'index']);
 Route::get('gestiones/activa', [GestionController::class, 'activa']);
 
-Route::get('/descargar-apk', function () {
-    $path = storage_path('apk/sci.apk');
-
-    if (!file_exists($path)) {
-        return response()->json(['message' => 'El archivo APK no está disponible.'], 404);
-    }
-
-    return response()->download($path, 'SCI_Control_Ingreso.apk', [
-        'Content-Type' => 'application/vnd.android.package-archive',
-    ]);
-});
-
 // Comprobación ligera de conectividad para el temporizador de sesión.
 Route::get('health', fn () => response()->noContent());
 

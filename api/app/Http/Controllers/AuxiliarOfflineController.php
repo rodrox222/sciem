@@ -491,9 +491,9 @@ class AuxiliarOfflineController extends Controller
                 'modulo'            => $modulo,
                 'accion'            => $accion,
                 'ip_origen'         => request()->ip() ?? '127.0.0.1',
-                'user_agent'        => request()->userAgent() ?? 'App',
+                'user_agent'        => substr((string) (request()->userAgent() ?? 'App'), 0, 255),
                 'detalles'          => $detalles,
-                'created_at'        => now('America/La_Paz'),
+                'created_at'        => now(),
             ]);
         } catch (\Exception $e) {
             \Log::warning("Error log_auditoria en sincronización ({$accion}): " . $e->getMessage());
